@@ -189,6 +189,7 @@
 				ASRC /* Sources */,
 				AFWK /* Frameworks */,
 				ARES /* Resources */,
+				ABUMP /* Bump build number */,
 			);
 			buildRules = (
 			);
@@ -249,6 +250,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		ABUMP /* Bump build number */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bump build number";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "BUILD_NUMBER=$(git -C \"$SRCROOT/..\" rev-list HEAD --count)\nplutil -replace CFBundleVersion -string \"$BUILD_NUMBER\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		ASRC /* Sources */ = {
