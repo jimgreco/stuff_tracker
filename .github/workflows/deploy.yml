@@ -1,0 +1,31 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Transfer backend to EC2
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
+            --exclude '.git' \
+            --exclude '.DS_Store' \
+            --exclude 'node_modules' \
+            --exclude '.env' \
+            backend/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/stuff_tracker/backend/
+
+      - name: Rebuild stuff container
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "cd ~/deploy && docker-compose up -d --build stuff && docker system prune -f"

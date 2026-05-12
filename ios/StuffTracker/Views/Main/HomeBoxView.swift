@@ -97,7 +97,7 @@ private struct LocationDropZone: View {
             .frame(maxWidth: .infinity)
             .frame(height: isTargeted ? 4 : 2)
             .padding(.horizontal, 8)
-            .padding(.vertical, 8)
+            .padding(.vertical, 5)
             .contentShape(Rectangle())
             .dropDestination(for: DraggedLocation.self) { items, _ in
                 guard let dragged = items.first else { return false }
