@@ -22,7 +22,7 @@ final class APIClient {
     #if DEBUG
     private let baseURL = "http://192.168.4.45:3002"
     #else
-    private let baseURL = "https://stuff-tracker.jim-greco.com/api"
+    private let baseURL = "https://stuff-tracker.jim-greco.com"
     #endif
 
     private var token: String? {
