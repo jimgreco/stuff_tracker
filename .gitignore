@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Environment
+.env
+!.env.example
+
+# TypeScript build
+dist/
+
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+
+# Claude
+.claude/settings.local.json

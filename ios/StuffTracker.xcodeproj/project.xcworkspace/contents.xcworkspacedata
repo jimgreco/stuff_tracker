@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "self:">
+   </FileRef>
+   <FileRef
+      location = "group:AccountView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:LocalModels.swift">
+   </FileRef>
+   <FileRef
+      location = "group:LocalDataManager.swift">
+   </FileRef>
+   <FileRef
+      location = "group:SyncManager.swift">
+   </FileRef>
+   <FileRef
+      location = "group:SYNC_IMPLEMENTATION.md">
+   </FileRef>
+   <FileRef
+      location = "group:TestsLocalDataManagerTests.swift">
+   </FileRef>
+   <FileRef
+      location = "group:TestsSyncManagerTests.swift">
+   </FileRef>
+   <FileRef
+      location = "group:TestsHomeStoreIntegrationTests.swift">
+   </FileRef>
+   <FileRef
+      location = "group:TestsModelConversionTests.swift">
+   </FileRef>
+   <FileRef
+      location = "group:TestsErrorHandlingTests.swift">
+   </FileRef>
+   <FileRef
+      location = "group:TEST_COVERAGE.md">
+   </FileRef>
+   <FileRef
+      location = "group:TestsAPIIntegrationTests.swift">
+   </FileRef>
+</Workspace>

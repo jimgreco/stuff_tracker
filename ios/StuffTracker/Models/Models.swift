@@ -1,0 +1,128 @@
+import Foundation
+import SwiftUI
+
+// MARK: - User
+
+struct User: Codable, Identifiable {
+    let id: String
+    let email: String
+    let name: String
+    let avatarUrl: String?
+}
+
+// MARK: - Home
+
+struct Home: Codable, Identifiable {
+    let id: String
+    var name: String
+    let ownerId: String
+    var role: String // "owner" | "admin" | "editor" | "viewer"
+    var icon: String?
+}
+
+// MARK: - Location (room or container)
+
+struct Location: Codable, Identifiable, Hashable {
+    let id: String
+    let homeId: String
+    var parentId: String?
+    var name: String
+    var type: LocationType
+    var sortOrder: Int
+    var icon: String?
+
+    enum LocationType: String, Codable {
+        case floor
+        case room
+        case container
+    }
+}
+
+// MARK: - Item
+
+struct Item: Codable, Identifiable {
+    let id: String
+    let homeId: String
+    var locationId: String?
+    var name: String
+    var icon: String?
+    var notes: String?
+    var quantity: Int
+    var tags: [String]
+    var photoUrl: String?
+    var purchaseDate: String?
+    var sortOrder: Int
+    let createdBy: String
+    var needsSync: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id, homeId, locationId, name, icon, notes, quantity, tags, photoUrl, purchaseDate, sortOrder, createdBy
+    }
+
+    init(id: String, homeId: String, locationId: String? = nil, name: String, icon: String? = nil,
+         notes: String? = nil, quantity: Int = 1, tags: [String] = [], photoUrl: String? = nil,
+         purchaseDate: String? = nil, sortOrder: Int = 0, createdBy: String = "", needsSync: Bool = false) {
+        self.id = id; self.homeId = homeId; self.locationId = locationId; self.name = name
+        self.icon = icon; self.notes = notes; self.quantity = quantity; self.tags = tags
+        self.photoUrl = photoUrl; self.purchaseDate = purchaseDate; self.sortOrder = sortOrder
+        self.createdBy = createdBy; self.needsSync = needsSync
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        homeId = try c.decode(String.self, forKey: .homeId)
+        locationId = try c.decodeIfPresent(String.self, forKey: .locationId)
+        name = try c.decode(String.self, forKey: .name)
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+        notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        quantity = try c.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        photoUrl = try c.decodeIfPresent(String.self, forKey: .photoUrl)
+        purchaseDate = try c.decodeIfPresent(String.self, forKey: .purchaseDate)
+        sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
+        createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy) ?? ""
+        needsSync = false
+    }
+}
+
+// MARK: - HomeDetail (full tree response)
+
+struct HomeDetail: Codable {
+    let id: String
+    var name: String
+    let ownerId: String
+    let role: String
+    var icon: String?
+    var locations: [Location]
+    var items: [Item]
+}
+
+// MARK: - Member
+
+struct Member: Codable, Identifiable {
+    let id: String
+    let email: String
+    let name: String
+    let avatarUrl: String?
+    var role: String
+}
+
+// MARK: - Convenience tree helpers
+
+extension HomeDetail {
+    /// Top-level locations (floors and rooms with no parent)
+    var topLevelLocations: [Location] {
+        locations.filter { $0.parentId == nil }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    func children(of locationId: String) -> [Location] {
+        locations.filter { $0.parentId == locationId }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    func items(in locationId: String?) -> [Item] {
+        items.filter { $0.locationId == locationId }.sorted { $0.sortOrder < $1.sortOrder }
+    }
+}
+
+
