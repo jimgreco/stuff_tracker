@@ -253,7 +253,7 @@ private struct LocationTreeLevel: View {
                     Spacer()
                     if selectedId == parentId {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
             }
@@ -274,7 +274,7 @@ private struct LocationTreeLevel: View {
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(.accentColor)
+                                            .foregroundStyle(Color.accentColor)
                                     }
                                 }
                             }
@@ -287,7 +287,7 @@ private struct LocationTreeLevel: View {
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(.accentColor)
+                                            .foregroundStyle(Color.accentColor)
                                     }
                                 }
                             }
