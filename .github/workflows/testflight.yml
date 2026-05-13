@@ -18,8 +18,10 @@ jobs:
         with:
           fetch-depth: 0  # build phase uses `git rev-list HEAD --count` for build number
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
 
       - name: Import signing assets
         env:
