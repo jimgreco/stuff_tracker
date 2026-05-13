@@ -66,9 +66,17 @@ jobs:
       - name: Set up App Store Connect API key
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           set -euo pipefail
+          echo "KEY_ID length: ${#KEY_ID}"
+          echo "ISSUER_ID length: ${#ISSUER_ID}"
+          echo "API_KEY length: ${#API_KEY}"
+          if [ -z "$KEY_ID" ] || [ -z "$ISSUER_ID" ] || [ -z "$API_KEY" ]; then
+            echo "Missing App Store Connect API secret"
+            exit 1
+          fi
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
           echo "API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_ENV"
