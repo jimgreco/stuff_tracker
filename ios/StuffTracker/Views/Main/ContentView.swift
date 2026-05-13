@@ -297,27 +297,23 @@ struct DragTrashZone: View {
     @State private var isTargeted = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
+            Image(systemName: isTargeted ? "trash.fill" : "trash")
+                .font(isTargeted ? .title2 : .caption)
+                .foregroundStyle(isTargeted ? .white : .secondary)
             if isTargeted {
-                VStack(spacing: 4) {
-                    Image(systemName: "trash.fill")
-                        .font(.title2)
-                    Text("Drop to Delete")
-                        .font(.caption.bold())
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 70)
-                .background(Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 4)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                Text("Drop to Delete")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: isTargeted ? 78 : 24)
-        .contentShape(Rectangle())
+        .frame(height: isTargeted ? 70 : 32)
+        .background(isTargeted ? Color.red : Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: isTargeted ? 16 : 10))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .animation(.easeInOut(duration: 0.2), value: isTargeted)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             for home in homeStore.homeDetails {
@@ -327,9 +323,7 @@ struct DragTrashZone: View {
                 }
             }
             return false
-        } isTargeted: { targeted in
-            withAnimation(.easeInOut(duration: 0.2)) { isTargeted = targeted }
-        }
+        } isTargeted: { isTargeted = $0 }
     }
 }
 
