@@ -16,11 +16,7 @@ struct AccountView: View {
     }
 
     private var appBuildText: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
-        let build = info?["CFBundleVersion"] as? String ?? "Unknown"
-        let gitHash = info?["GitCommitHash"] as? String ?? "Unknown"
-        return "Version \(version) (\(build)) - \(gitHash)"
+        AccountBuildInfoPresentation.text(info: Bundle.main.infoDictionary)
     }
 
     var body: some View {
@@ -307,6 +303,15 @@ struct AccountView: View {
             if nsError.code == ASAuthorizationError.canceled.rawValue { return }
             authStore.errorMessage = error.localizedDescription
         }
+    }
+}
+
+enum AccountBuildInfoPresentation {
+    static func text(info: [String: Any]?) -> String {
+        let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = info?["CFBundleVersion"] as? String ?? "Unknown"
+        let gitHash = info?["GitCommitHash"] as? String ?? "Unknown"
+        return "Version \(version) (\(build)) - \(gitHash)"
     }
 }
 

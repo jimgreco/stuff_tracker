@@ -112,17 +112,14 @@ struct ItemEditView: View {
 
 // MARK: - Tree-based location picker
 
-struct LocationTreePicker: View {
-    @Binding var selectedId: String?
-    let home: HomeDetail?
-    @State private var showPicker = false
-
-    private var selectedLabel: String {
+enum LocationTreePresentation {
+    static func selectedLabel(home: HomeDetail?, selectedId: String?) -> String {
         guard let home else { return "None" }
         guard let locId = selectedId,
               let loc = home.locations.first(where: { $0.id == locId }) else {
             return home.name
         }
+
         var parts = [loc.name]
         var current = loc
         while let parentId = current.parentId,
@@ -131,6 +128,42 @@ struct LocationTreePicker: View {
             current = parent
         }
         return parts.joined(separator: " › ")
+    }
+
+    static func initialNavigationPath(home: HomeDetail, selectedId: String?) -> [String] {
+        guard let locId = selectedId else { return [] }
+
+        var ancestors: [String] = []
+        var currentId: String? = locId
+        while let id = currentId,
+              let loc = home.locations.first(where: { $0.id == id }) {
+            ancestors.insert(id, at: 0)
+            currentId = loc.parentId
+        }
+
+        if !ancestors.isEmpty {
+            ancestors.removeLast()
+        }
+        return ancestors
+    }
+
+    static func icon(for loc: Location) -> String {
+        if let icon = loc.icon { return icon }
+        switch loc.type {
+        case .floor: return "building.2"
+        case .room: return "door.left.hand.closed"
+        case .container: return "square.stack.3d.up"
+        }
+    }
+}
+
+struct LocationTreePicker: View {
+    @Binding var selectedId: String?
+    let home: HomeDetail?
+    @State private var showPicker = false
+
+    private var selectedLabel: String {
+        LocationTreePresentation.selectedLabel(home: home, selectedId: selectedId)
     }
 
     var body: some View {
@@ -192,21 +225,7 @@ private struct LocationTreeSheet: View {
             }
         }
         .onAppear {
-            // Build path from root to the current location's parent
-            guard let locId = selectedId else { return }
-            var ancestors: [String] = []
-            var currentId: String? = locId
-            while let id = currentId,
-                  let loc = home.locations.first(where: { $0.id == id }) {
-                ancestors.insert(id, at: 0)
-                currentId = loc.parentId
-            }
-            // Navigate to the parent of the selected location (so selected is visible)
-            if !ancestors.isEmpty {
-                // Remove the last element since we want to show the level containing the selection
-                ancestors.removeLast()
-            }
-            path = ancestors
+            path = LocationTreePresentation.initialNavigationPath(home: home, selectedId: selectedId)
         }
     }
 }
@@ -228,15 +247,6 @@ private struct LocationTreeLevel: View {
             return loc.name
         }
         return home.name
-    }
-
-    private func icon(for loc: Location) -> String {
-        if let icon = loc.icon { return icon }
-        switch loc.type {
-        case .floor: return "building.2"
-        case .room: return "door.left.hand.closed"
-        case .container: return "square.stack.3d.up"
-        }
     }
 
     var body: some View {
@@ -271,7 +281,7 @@ private struct LocationTreeLevel: View {
                                 dismiss()
                             } label: {
                                 HStack {
-                                    Label(loc.name, systemImage: icon(for: loc))
+                                    Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")
@@ -284,7 +294,7 @@ private struct LocationTreeLevel: View {
                             // Has children - navigate deeper
                             NavigationLink(value: loc.id) {
                                 HStack {
-                                    Label(loc.name, systemImage: icon(for: loc))
+                                    Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")

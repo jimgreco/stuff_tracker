@@ -33,6 +33,9 @@
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
 		T002 /* APIEncodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T102 /* APIEncodingTests.swift */; };
+		T003 /* ModelBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T103 /* ModelBehaviorTests.swift */; };
+		T004 /* LocationTreePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T104 /* LocationTreePresentationTests.swift */; };
+		T005 /* AccountBuildInfoPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T105 /* AccountBuildInfoPresentationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +76,9 @@
 		B37719F92FADFB7C004BBAEC /* StuffTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StuffTracker.entitlements; sourceTree = "<group>"; };
 		T101 /* SyncUploadPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlannerTests.swift; sourceTree = "<group>"; };
 		T102 /* APIEncodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEncodingTests.swift; sourceTree = "<group>"; };
+		T103 /* ModelBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelBehaviorTests.swift; sourceTree = "<group>"; };
+		T104 /* LocationTreePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTreePresentationTests.swift; sourceTree = "<group>"; };
+		T105 /* AccountBuildInfoPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountBuildInfoPresentationTests.swift; sourceTree = "<group>"; };
 		TAPP /* StuffTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StuffTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -203,6 +209,9 @@
 			children = (
 				T101 /* SyncUploadPlannerTests.swift */,
 				T102 /* APIEncodingTests.swift */,
+				T103 /* ModelBehaviorTests.swift */,
+				T104 /* LocationTreePresentationTests.swift */,
+				T105 /* AccountBuildInfoPresentationTests.swift */,
 			);
 			path = StuffTrackerTests;
 			sourceTree = "<group>";
@@ -379,6 +388,9 @@
 			files = (
 				T001 /* SyncUploadPlannerTests.swift in Sources */,
 				T002 /* APIEncodingTests.swift in Sources */,
+				T003 /* ModelBehaviorTests.swift in Sources */,
+				T004 /* LocationTreePresentationTests.swift in Sources */,
+				T005 /* AccountBuildInfoPresentationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

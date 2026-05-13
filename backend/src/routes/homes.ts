@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
-import { z } from 'zod';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit, canAdmin } from '../lib/access';
+import { HomeNameSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
 
 const router = Router();
 router.use(requireAuth);
@@ -23,10 +23,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 // ── Create home ────────────────────────────────────────────────────────────────
-const CreateHomeSchema = z.object({ name: z.string().min(1).max(100) });
-
 router.post('/', async (req: AuthRequest, res: Response) => {
-  const { name } = CreateHomeSchema.parse(req.body);
+  const { name } = HomeNameSchema.parse(req.body);
   const { rows } = await pool.query(
     `INSERT INTO homes (name, owner_id) VALUES ($1, $2)
      RETURNING id, name, owner_id, created_at`,
@@ -65,7 +63,7 @@ router.patch('/:homeId', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
 
-  const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+  const { name } = HomeNameSchema.parse(req.body);
   const { rows } = await pool.query(
     'UPDATE homes SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name',
     [name, homeId]
@@ -99,11 +97,6 @@ router.get('/:homeId/members', async (req: AuthRequest, res: Response) => {
   res.json(rows);
 });
 
-const InviteSchema = z.object({
-  email: z.string().email(),
-  role: z.enum(['admin', 'editor', 'viewer']),
-});
-
 router.post('/:homeId/members', async (req: AuthRequest, res: Response) => {
   const { homeId } = req.params;
   const role = await getHomeRole(homeId, req.user!.userId);
@@ -130,7 +123,7 @@ router.patch('/:homeId/members/:userId', async (req: AuthRequest, res: Response)
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
 
-  const { role: newRole } = z.object({ role: z.enum(['admin', 'editor', 'viewer']) }).parse(req.body);
+  const { role: newRole } = UpdateMemberRoleSchema.parse(req.body);
   await pool.query(
     'UPDATE home_members SET role = $1 WHERE home_id = $2 AND user_id = $3',
     [newRole, homeId, userId]
