@@ -10,7 +10,7 @@ router.use(requireAuth);
 const LocationSchema = z.object({
   name: z.string().min(1).max(200),
   parent_id: z.string().uuid().nullable().optional(),
-  type: z.enum(['room', 'container']),
+  type: z.enum(['floor', 'room', 'container']),
   sort_order: z.number().int().optional(),
 });
 
