@@ -27,6 +27,7 @@
 		A018 /* SyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A118 /* SyncManager.swift */; };
 		A019 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A119 /* AccountView.swift */; };
 		A020 /* TrashBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A120 /* TrashBinView.swift */; };
+		A021 /* PendingChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A121 /* PendingChangesView.swift */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
@@ -52,6 +53,7 @@
 		A118 /* SyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncManager.swift; sourceTree = "<group>"; };
 		A119 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		A120 /* TrashBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrashBinView.swift; sourceTree = "<group>"; };
+		A121 /* PendingChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingChangesView.swift; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B37719F92FADFB7C004BBAEC /* StuffTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StuffTracker.entitlements; sourceTree = "<group>"; };
@@ -102,6 +104,7 @@
 				A110 /* ItemEditView.swift */,
 				A111 /* SearchBar.swift */,
 				A120 /* TrashBinView.swift */,
+				A121 /* PendingChangesView.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -297,6 +300,7 @@
 				A018 /* SyncManager.swift in Sources */,
 				A019 /* AccountView.swift in Sources */,
 				A020 /* TrashBinView.swift in Sources */,
+				A021 /* PendingChangesView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
