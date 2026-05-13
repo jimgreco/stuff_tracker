@@ -78,8 +78,12 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s' "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-          echo "API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_ENV"
+          KEY_FILE="$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+          printf '%s' "$API_KEY" > "$KEY_FILE"
+          echo "key file first line: $(head -n 1 "$KEY_FILE")"
+          echo "key file last line: $(tail -n 1 "$KEY_FILE")"
+          echo "key file line count: $(wc -l < "$KEY_FILE")"
+          echo "API_KEY_PATH=$KEY_FILE" >> "$GITHUB_ENV"
 
       - name: Archive
         working-directory: ios
