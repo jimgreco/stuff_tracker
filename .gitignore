@@ -22,4 +22,4 @@ ios/StuffTracker.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xc
 *.ipa
 
 # Claude
-.claude/settings.local.json
+.claude
