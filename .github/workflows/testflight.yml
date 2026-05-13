@@ -61,17 +61,23 @@ jobs:
 
           # Install the provisioning profile where Xcode looks for it
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "$PROFILE" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision"
+          printf '%s' "$PROFILE" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision"
 
-          # Extract profile UUID and name for the export options plist
-          PROFILE_PLIST=$(security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision")
-          PROFILE_UUID=$(echo "$PROFILE_PLIST" | plutil -extract UUID raw -o - -)
-          PROFILE_NAME=$(echo "$PROFILE_PLIST" | plutil -extract Name raw -o - -)
-          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+      - name: Set up App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          echo "API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_ENV"
 
       - name: Archive
         working-directory: ios
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           set -euo pipefail
           xcodebuild \
@@ -80,13 +86,16 @@ jobs:
             -configuration Release \
             -archivePath "$RUNNER_TEMP/StuffTracker.xcarchive" \
             -destination 'generic/platform=iOS' \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            DEVELOPMENT_TEAM=V6JPQCD336 \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
             archive
 
       - name: Export IPA
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
@@ -95,29 +104,26 @@ jobs:
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
             <key>teamID</key><string>V6JPQCD336</string>
-            <key>signingStyle</key><string>manual</string>
+            <key>signingStyle</key><string>automatic</string>
             <key>stripSwiftSymbols</key><true/>
             <key>uploadSymbols</key><true/>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.jimgreco.stufftracker</key><string>${PROFILE_NAME}</string>
-            </dict>
           </dict></plist>
           EOF
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/StuffTracker.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export"
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
 
       - name: Upload to TestFlight
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.appstoreconnect/private_keys
-          echo "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
           xcrun altool --upload-app \
             --type ios \
             --file "$RUNNER_TEMP/export/StuffTracker.ipa" \
