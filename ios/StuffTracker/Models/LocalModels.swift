@@ -10,7 +10,7 @@ final class LocalHome {
     var ownerId: String?
     var role: String
     var icon: String?
-    var sortOrder: Int
+    var sortOrder: Int = 0
     var needsSync: Bool
     var isDeleted: Bool
     var createdAt: Date
