@@ -50,6 +50,28 @@ final class APIClient {
         return e
     }()
 
+    private struct ErrorResponse: Decodable {
+        let error: String?
+        let message: String?
+    }
+
+    static func errorMessage(from data: Data, fallback: String = "Unknown error") -> String {
+        if let decoded = try? JSONDecoder().decode(ErrorResponse.self, from: data),
+           let message = decoded.error ?? decoded.message,
+           !message.isEmpty {
+            return message
+        }
+
+        if let text = String(data: data, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        return fallback
+    }
+
     // MARK: - Core request
 
     func request<T: Decodable>(
@@ -75,7 +97,7 @@ final class APIClient {
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            let msg = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] ?? "Unknown error"
+            let msg = Self.errorMessage(from: data)
             throw APIError.httpError(status, msg)
         }
 
@@ -93,10 +115,18 @@ final class APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         if let body { req.httpBody = try encoder.encode(body) }
-        let (_, response) = try await URLSession.shared.data(for: req)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.networkError(error)
+        }
+
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if !(200..<300).contains(status) {
-            throw APIError.httpError(status, "Request failed")
+            let msg = Self.errorMessage(from: data, fallback: "Request failed")
+            throw APIError.httpError(status, msg)
         }
     }
 

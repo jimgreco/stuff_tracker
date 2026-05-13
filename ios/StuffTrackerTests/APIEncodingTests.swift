@@ -2,6 +2,22 @@ import XCTest
 @testable import StuffTracker
 
 final class APIEncodingTests: XCTestCase {
+    func testAPIErrorMessageDecodesBackendErrorPayload() throws {
+        let data = try XCTUnwrap(#"{"error":"Admin access required"}"#.data(using: .utf8))
+
+        XCTAssertEqual(
+            APIClient.errorMessage(from: data, fallback: "Request failed"),
+            "Admin access required"
+        )
+    }
+
+    func testAPIErrorMessageFallsBackForEmptyPayload() {
+        XCTAssertEqual(
+            APIClient.errorMessage(from: Data(), fallback: "Request failed"),
+            "Request failed"
+        )
+    }
+
     func testItemBodyEncodesNilLocationAsExplicitNull() throws {
         let body = APIClient.ItemBody(
             name: "Couch 5",

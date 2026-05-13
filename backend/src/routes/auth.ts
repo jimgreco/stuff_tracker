@@ -103,7 +103,8 @@ async function upsertUser(params: {
   name: string;
   avatarUrl?: string;
 }) {
-  const { googleId, appleId, email, name, avatarUrl } = params;
+  const { googleId, appleId, name, avatarUrl } = params;
+  const email = params.email.trim().toLowerCase();
   const { rows } = await pool.query(
     `INSERT INTO users (email, name, avatar_url, google_id, apple_id)
      VALUES ($1, $2, $3, $4, $5)

@@ -97,12 +97,17 @@ struct SharingView: View {
 
     private func invite() async {
         errorMessage = nil
+        let email = inviteEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !email.isEmpty else { return }
+
         do {
             for homeId in ownedHomeIds {
-                try await APIClient.shared.inviteMember(homeId: homeId, email: inviteEmail, role: inviteRole)
+                try await APIClient.shared.inviteMember(homeId: homeId, email: email, role: inviteRole)
             }
             inviteEmail = ""
             await loadMembers()
+        } catch APIError.httpError(_, let message) {
+            errorMessage = message
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -205,11 +210,19 @@ struct InviteSheet: View {
     let onInvite: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    private var canInvite: Bool {
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Email") {
-                    TextField("user@example.com", text: $email)
+                    TextField(
+                        "Email",
+                        text: $email,
+                        prompt: Text("user@example.com").foregroundStyle(.secondary)
+                    )
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                 }
@@ -243,7 +256,7 @@ struct InviteSheet: View {
                         onInvite()
                         dismiss()
                     }
-                    .disabled(email.isEmpty)
+                    .disabled(!canInvite)
                 }
             }
         }

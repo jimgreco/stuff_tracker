@@ -23,6 +23,10 @@ test('member invite schemas accept supported roles and valid emails only', () =>
     InviteSchema.parse({ email: 'person@example.com', role: 'editor' }),
     { email: 'person@example.com', role: 'editor' }
   );
+  assert.deepEqual(
+    InviteSchema.parse({ email: ' Person@Example.com ', role: 'viewer' }),
+    { email: 'person@example.com', role: 'viewer' }
+  );
   assert.deepEqual(UpdateMemberRoleSchema.parse({ role: 'viewer' }), { role: 'viewer' });
 
   assert.throws(() => MemberRoleSchema.parse('owner'));

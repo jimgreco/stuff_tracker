@@ -103,10 +103,19 @@ router.post('/:homeId/members', async (req: AuthRequest, res: Response) => {
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
 
   const { email, role: newRole } = InviteSchema.parse(req.body);
-  const userRes = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-  if (!userRes.rows[0]) {
-    res.status(404).json({ error: 'No user with that email has signed in yet' }); return;
-  }
+  const userRes = await pool.query(
+    `WITH invitee AS (
+       INSERT INTO users (email, name)
+       VALUES ($1, $1)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING id
+     )
+     SELECT id FROM invitee
+     UNION ALL
+     SELECT id FROM users WHERE email = $1
+     LIMIT 1`,
+    [email]
+  );
 
   const inviteeId = userRes.rows[0].id;
   await pool.query(

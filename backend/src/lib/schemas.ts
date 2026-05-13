@@ -26,7 +26,7 @@ export const HomeNameSchema = z.object({
 export const MemberRoleSchema = z.enum(['admin', 'editor', 'viewer']);
 
 export const InviteSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   role: MemberRoleSchema,
 });
 
