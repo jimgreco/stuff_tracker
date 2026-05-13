@@ -188,6 +188,7 @@ private struct LocationTreeSheet: View {
                     dismiss: dismiss
                 )
                 .navigationTitle(loc?.name ?? "")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
         .onAppear {
