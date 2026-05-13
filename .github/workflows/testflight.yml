@@ -63,7 +63,17 @@ jobs:
 
           # Install the provisioning profile where Xcode looks for it
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          printf '%s' "$PROFILE" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision"
+          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision"
+          printf '%s' "$PROFILE" | base64 -d > "$PROFILE_PATH"
+
+          # Diagnostics: show the profile's identity, bundle ID, type and expiry
+          PROFILE_PLIST=$(security cms -D -i "$PROFILE_PATH")
+          echo "--- Provisioning profile ---"
+          echo "Name:    $(echo "$PROFILE_PLIST" | plutil -extract Name raw -o - -)"
+          echo "AppID:   $(echo "$PROFILE_PLIST" | plutil -extract Entitlements.application-identifier raw -o - -)"
+          echo "Team:    $(echo "$PROFILE_PLIST" | plutil -extract TeamIdentifier.0 raw -o - -)"
+          echo "Expires: $(echo "$PROFILE_PLIST" | plutil -extract ExpirationDate raw -o - -)"
+          echo "Type:    $(echo "$PROFILE_PLIST" | plutil -extract ProvisionsAllDevices raw -o - - 2>/dev/null || echo 'app-store or ad-hoc')"
 
       - name: Set up App Store Connect API key
         env:
