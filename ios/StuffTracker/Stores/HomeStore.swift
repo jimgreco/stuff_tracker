@@ -67,7 +67,10 @@ final class HomeStore: ObservableObject {
     // MARK: - Homes
 
     func createHome(name: String) {
+        let maxSort = local.fetchHomes().map(\.sortOrder).max() ?? -1
         let localHome = local.createHome(name: name)
+        localHome.sortOrder = maxSort + 1
+        local.save()
         homes.append(localHome.toHome())
         homeDetails.append(localHome.toHomeDetail())
         enqueueSyncIfNeeded()
@@ -99,6 +102,26 @@ final class HomeStore: ObservableObject {
             local.updateHome(localHome)
         }
         enqueueSyncIfNeeded()
+    }
+
+    func reorderHome(_ homeId: String, toIndex destination: Int) {
+        var ordered = homeDetails.sorted { a, b in
+            let aSort = local.fetchHome(id: a.id)?.sortOrder ?? 0
+            let bSort = local.fetchHome(id: b.id)?.sortOrder ?? 0
+            return aSort < bSort
+        }
+        guard let fromIndex = ordered.firstIndex(where: { $0.id == homeId }) else { return }
+        let moved = ordered.remove(at: fromIndex)
+        let clampedIndex = min(max(destination, 0), ordered.count)
+        ordered.insert(moved, at: clampedIndex)
+
+        for (i, home) in ordered.enumerated() {
+            if let localHome = local.fetchHome(id: home.id) {
+                localHome.sortOrder = i
+                local.save()
+            }
+        }
+        homeDetails = ordered
     }
 
     func deleteHome(_ id: String) {

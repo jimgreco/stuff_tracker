@@ -10,6 +10,7 @@ final class LocalHome {
     var ownerId: String?
     var role: String
     var icon: String?
+    var sortOrder: Int
     var needsSync: Bool
     var isDeleted: Bool
     var createdAt: Date
@@ -26,6 +27,7 @@ final class LocalHome {
          ownerId: String? = nil,
          role: String = "owner",
          icon: String? = nil,
+         sortOrder: Int = 0,
          needsSync: Bool = true,
          isDeleted: Bool = false) {
         self.id = id
@@ -33,6 +35,7 @@ final class LocalHome {
         self.ownerId = ownerId
         self.role = role
         self.icon = icon
+        self.sortOrder = sortOrder
         self.needsSync = needsSync
         self.isDeleted = isDeleted
         self.createdAt = Date()

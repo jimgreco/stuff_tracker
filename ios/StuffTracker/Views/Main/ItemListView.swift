@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 extension UTType {
     static let draggedItem = UTType(exportedAs: "com.stufftracker.draggeditem", conformingTo: .data)
     static let draggedLocation = UTType(exportedAs: "com.stufftracker.draggedlocation", conformingTo: .data)
+    static let draggedHome = UTType(exportedAs: "com.stufftracker.draggedhome", conformingTo: .data)
 }
 
 // MARK: - Transferable for drag-and-drop
@@ -26,6 +27,14 @@ struct DraggedLocation: Transferable, Codable {
 
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .draggedLocation)
+    }
+}
+
+struct DraggedHome: Transferable, Codable {
+    let id: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .draggedHome)
     }
 }
 

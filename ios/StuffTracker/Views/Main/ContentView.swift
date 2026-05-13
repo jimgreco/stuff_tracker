@@ -69,8 +69,14 @@ struct ContentView: View {
                     } else {
                         ScrollView {
                             VStack(spacing: 16) {
-                                ForEach(filtered, id: \.id) { home in
+                                if searchText.isEmpty {
+                                    HomeDropZone(insertionIndex: 0, homeStore: homeStore)
+                                }
+                                ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
                                     HomeBoxView(home: home, homeStore: homeStore)
+                                    if searchText.isEmpty {
+                                        HomeDropZone(insertionIndex: index + 1, homeStore: homeStore)
+                                    }
                                 }
 
                                 if searchText.isEmpty {
@@ -114,6 +120,9 @@ struct ContentView: View {
                         }
                     }
                 }
+            }
+            .overlay(alignment: .bottom) {
+                DragTrashZone(homeStore: homeStore)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -278,6 +287,43 @@ struct EmptyHomePrompt: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Drag trash zone
+
+struct DragTrashZone: View {
+    @ObservedObject var homeStore: HomeStore
+    @State private var isTargeted = false
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: isTargeted ? "trash.fill" : "trash")
+                .font(.title2)
+            Text("Delete")
+                .font(.caption.bold())
+        }
+        .foregroundStyle(isTargeted ? .white : .red)
+        .frame(maxWidth: .infinity)
+        .frame(height: 70)
+        .background(isTargeted ? Color.red : Color.red.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.red.opacity(0.4), lineWidth: 1)
+        )
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+        .dropDestination(for: DraggedItem.self) { items, _ in
+            guard let dragged = items.first else { return false }
+            for home in homeStore.homeDetails {
+                if home.items.contains(where: { $0.id == dragged.id }) {
+                    Task { await homeStore.deleteItem(homeId: home.id, itemId: dragged.id) }
+                    return true
+                }
+            }
+            return false
+        } isTargeted: { isTargeted = $0 }
     }
 }
 

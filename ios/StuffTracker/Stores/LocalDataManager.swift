@@ -41,7 +41,7 @@ final class LocalDataManager {
         
         let descriptor = FetchDescriptor<LocalHome>(
             predicate: #Predicate { !$0.isDeleted },
-            sortBy: [SortDescriptor(\.name)]
+            sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
         )
         
         return (try? context.fetch(descriptor)) ?? []

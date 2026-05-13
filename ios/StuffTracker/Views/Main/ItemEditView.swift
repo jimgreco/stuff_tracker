@@ -9,9 +9,6 @@ struct ItemEditView: View {
     @State private var name: String
     @State private var notes: String
     @State private var quantity: Int
-    @State private var tags: String          // comma-separated
-    @State private var purchaseDate: Date?
-    @State private var hasPurchaseDate: Bool
     @State private var selectedLocationId: String?
     @State private var isSaving = false
     @State private var selectedIcon: String
@@ -24,12 +21,8 @@ struct ItemEditView: View {
         _name = State(initialValue: item.name)
         _notes = State(initialValue: item.notes ?? "")
         _quantity = State(initialValue: item.quantity)
-        _tags = State(initialValue: item.tags.joined(separator: ", "))
         _selectedLocationId = State(initialValue: item.locationId)
         _selectedIcon = State(initialValue: item.icon ?? "")
-        let pd = item.purchaseDate.flatMap { ISO8601DateFormatter().date(from: $0) }
-        _purchaseDate = State(initialValue: pd)
-        _hasPurchaseDate = State(initialValue: pd != nil)
     }
 
     private var home: HomeDetail? {
@@ -66,22 +59,10 @@ struct ItemEditView: View {
                 }
 
                 Section("Location") {
-                    LocationPicker(
+                    LocationTreePicker(
                         selectedId: $selectedLocationId,
                         home: home
                     )
-                }
-
-                Section("Optional") {
-                    TextField("Tags (comma-separated)", text: $tags)
-
-                    Toggle("Purchase date", isOn: $hasPurchaseDate)
-                    if hasPurchaseDate {
-                        DatePicker("Date", selection: Binding(
-                            get: { purchaseDate ?? Date() },
-                            set: { purchaseDate = $0 }
-                        ), displayedComponents: .date)
-                    }
                 }
 
                 Section {
@@ -112,17 +93,15 @@ struct ItemEditView: View {
 
     private func save() {
         isSaving = true
-        let parsedTags = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let dateStr = hasPurchaseDate ? purchaseDate.map { ISO8601DateFormatter().string(from: $0) } : nil
         let body = APIClient.ItemBody(
             name: name,
             locationId: selectedLocationId,
             icon: selectedIcon.isEmpty ? nil : selectedIcon,
             notes: notes.isEmpty ? nil : notes,
             quantity: quantity,
-            tags: parsedTags,
+            tags: item.tags,
             photoUrl: item.photoUrl,
-            purchaseDate: dateStr ?? nil
+            purchaseDate: item.purchaseDate
         )
         Task {
             await homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)
@@ -131,33 +110,191 @@ struct ItemEditView: View {
     }
 }
 
-// MARK: - Location picker
+// MARK: - Tree-based location picker
 
-struct LocationPicker: View {
+struct LocationTreePicker: View {
     @Binding var selectedId: String?
     let home: HomeDetail?
+    @State private var showPicker = false
 
-    var body: some View {
-        Picker("Location", selection: $selectedId) {
-            Text("Home (no specific location)").tag(String?.none)
-            if let home {
-                ForEach(home.locations.sorted { $0.sortOrder < $1.sortOrder }) { loc in
-                    Text(locationLabel(loc, in: home.locations))
-                        .tag(Optional(loc.id))
-                }
-            }
+    private var selectedLabel: String {
+        guard let home else { return "None" }
+        guard let locId = selectedId,
+              let loc = home.locations.first(where: { $0.id == locId }) else {
+            return home.name
         }
-        .pickerStyle(.navigationLink)
-    }
-
-    private func locationLabel(_ loc: Location, in locations: [Location]) -> String {
         var parts = [loc.name]
         var current = loc
         while let parentId = current.parentId,
-              let parent = locations.first(where: { $0.id == parentId }) {
+              let parent = home.locations.first(where: { $0.id == parentId }) {
             parts.insert(parent.name, at: 0)
             current = parent
         }
         return parts.joined(separator: " › ")
+    }
+
+    var body: some View {
+        Button {
+            showPicker = true
+        } label: {
+            HStack {
+                Text("Location")
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(selectedLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .sheet(isPresented: $showPicker) {
+            if let home {
+                LocationTreeSheet(
+                    home: home,
+                    selectedId: $selectedId,
+                    dismiss: { showPicker = false }
+                )
+            }
+        }
+    }
+}
+
+private struct LocationTreeSheet: View {
+    let home: HomeDetail
+    @Binding var selectedId: String?
+    let dismiss: () -> Void
+    @State private var path: [String] = []
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            LocationTreeLevel(
+                home: home,
+                parentId: nil,
+                selectedId: $selectedId,
+                dismiss: dismiss
+            )
+            .navigationTitle("Select Location")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .navigationDestination(for: String.self) { locId in
+                let loc = home.locations.first(where: { $0.id == locId })
+                LocationTreeLevel(
+                    home: home,
+                    parentId: locId,
+                    selectedId: $selectedId,
+                    dismiss: dismiss
+                )
+                .navigationTitle(loc?.name ?? "")
+            }
+        }
+        .onAppear {
+            // Build path from root to the current location's parent
+            guard let locId = selectedId else { return }
+            var ancestors: [String] = []
+            var currentId: String? = locId
+            while let id = currentId,
+                  let loc = home.locations.first(where: { $0.id == id }) {
+                ancestors.insert(id, at: 0)
+                currentId = loc.parentId
+            }
+            // Navigate to the parent of the selected location (so selected is visible)
+            if !ancestors.isEmpty {
+                // Remove the last element since we want to show the level containing the selection
+                ancestors.removeLast()
+            }
+            path = ancestors
+        }
+    }
+}
+
+private struct LocationTreeLevel: View {
+    let home: HomeDetail
+    let parentId: String?
+    @Binding var selectedId: String?
+    let dismiss: () -> Void
+
+    private var children: [Location] {
+        home.locations
+            .filter { $0.parentId == parentId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    private var currentName: String {
+        if let parentId, let loc = home.locations.first(where: { $0.id == parentId }) {
+            return loc.name
+        }
+        return home.name
+    }
+
+    private func icon(for loc: Location) -> String {
+        if let icon = loc.icon { return icon }
+        switch loc.type {
+        case .floor: return "building.2"
+        case .room: return "door.left.hand.closed"
+        case .container: return "square.stack.3d.up"
+        }
+    }
+
+    var body: some View {
+        List {
+            // Option to select current level
+            Button {
+                selectedId = parentId
+                dismiss()
+            } label: {
+                HStack {
+                    Label(
+                        parentId == nil ? "\(home.name) (top level)" : "Place here",
+                        systemImage: parentId == nil ? (home.icon ?? "house.fill") : "checkmark.circle"
+                    )
+                    Spacer()
+                    if selectedId == parentId {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.accentColor)
+                    }
+                }
+            }
+            .foregroundStyle(.primary)
+
+            if !children.isEmpty {
+                Section {
+                    ForEach(children) { loc in
+                        let locChildren = home.locations.filter { $0.parentId == loc.id }
+                        if locChildren.isEmpty {
+                            // Leaf node - just select
+                            Button {
+                                selectedId = loc.id
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Label(loc.name, systemImage: icon(for: loc))
+                                    Spacer()
+                                    if selectedId == loc.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.accentColor)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                        } else {
+                            // Has children - navigate deeper
+                            NavigationLink(value: loc.id) {
+                                HStack {
+                                    Label(loc.name, systemImage: icon(for: loc))
+                                    Spacer()
+                                    if selectedId == loc.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.accentColor)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

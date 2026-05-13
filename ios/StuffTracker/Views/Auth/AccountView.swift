@@ -11,6 +11,10 @@ struct AccountView: View {
     @State private var serverHasData = false
     @State private var wasAuthenticated = false
 
+    private var ownedHomes: [HomeDetail] {
+        homeStore.homeDetails.filter { $0.role == "owner" || $0.role == "admin" }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -117,11 +121,15 @@ struct AccountView: View {
             }
 
             if syncManager.pendingSyncCount > 0 {
-                HStack {
-                    Text("Pending Changes")
-                    Spacer()
-                    Text("\(syncManager.pendingSyncCount)")
-                        .foregroundStyle(.secondary)
+                NavigationLink {
+                    PendingChangesView(homeStore: homeStore)
+                } label: {
+                    HStack {
+                        Text("Pending Changes")
+                        Spacer()
+                        Text("\(syncManager.pendingSyncCount)")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -145,6 +153,25 @@ struct AccountView: View {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+        }
+
+        Section("Sharing") {
+            ForEach(ownedHomes, id: \.id) { home in
+                NavigationLink {
+                    SharingView(homeId: home.id, userRole: home.role)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: home.icon ?? "house.fill")
+                            .foregroundStyle(.secondary)
+                        Text(home.name)
+                    }
+                }
+            }
+            if ownedHomes.isEmpty {
+                Text("No homes to share")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
             }
         }
 

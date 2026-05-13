@@ -82,6 +82,28 @@ private func descendantCount(of locationId: String, in home: HomeDetail) -> (loc
     return (totalLocs, totalItems)
 }
 
+// MARK: - Drop zone between homes for reorder
+
+struct HomeDropZone: View {
+    let insertionIndex: Int
+    @ObservedObject var homeStore: HomeStore
+    @State private var isTargeted = false
+
+    var body: some View {
+        Rectangle()
+            .fill(isTargeted ? Color.accentColor : Color.clear)
+            .frame(maxWidth: .infinity)
+            .frame(height: isTargeted ? 4 : 2)
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+            .dropDestination(for: DraggedHome.self) { items, _ in
+                guard let dragged = items.first else { return false }
+                homeStore.reorderHome(dragged.id, toIndex: insertionIndex)
+                return true
+            } isTargeted: { isTargeted = $0 }
+    }
+}
+
 // MARK: - Drop zone between locations for reorder/re-parent
 
 private struct LocationDropZone: View {
@@ -204,6 +226,7 @@ struct HomeBoxView: View {
                 ) { newName in
                     Task { await homeStore.renameHome(home.id, name: newName) }
                 }
+                .draggable(DraggedHome(id: home.id))
                 Spacer()
                 if !isRenaming {
                     Menu {
