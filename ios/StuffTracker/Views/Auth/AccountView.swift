@@ -148,30 +148,25 @@ struct AccountView: View {
             .disabled(syncManager.isSyncing)
         }
 
+        Section("Sharing") {
+            if ownedHomes.isEmpty {
+                Text("No homes to share")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+            } else {
+                NavigationLink {
+                    SharingView(homes: ownedHomes)
+                } label: {
+                    Label("Manage Sharing", systemImage: "person.2")
+                }
+            }
+        }
+
         if let error = syncManager.syncError {
             Section("Error") {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
-            }
-        }
-
-        Section("Sharing") {
-            ForEach(ownedHomes, id: \.id) { home in
-                NavigationLink {
-                    SharingView(homeId: home.id, userRole: home.role)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: home.icon ?? "house.fill")
-                            .foregroundStyle(.secondary)
-                        Text(home.name)
-                    }
-                }
-            }
-            if ownedHomes.isEmpty {
-                Text("No homes to share")
-                    .foregroundStyle(.secondary)
-                    .font(.subheadline)
             }
         }
 
