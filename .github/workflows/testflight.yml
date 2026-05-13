@@ -40,8 +40,22 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/[\"]//g')
           security default-keychain -s "$KEYCHAIN"
 
+          # Decode the .p12 (printf avoids echo interpreting backslashes)
+          printf '%s' "$CERT_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
+
+          # Diagnostics: file size and password length (length only, no value)
+          echo "p12 size: $(stat -f%z "$RUNNER_TEMP/cert.p12") bytes"
+          echo "password length: ${#CERT_PWD}"
+
+          # Verify the .p12 with openssl using the same password (same check that passes locally)
+          if openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -noout -passin pass:"$CERT_PWD"; then
+            echo "openssl pkcs12 verification: OK"
+          else
+            echo "openssl pkcs12 verification: FAILED — secret password/file mismatch"
+            exit 1
+          fi
+
           # Import the distribution certificate
-          echo "$CERT_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PWD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PWD" "$KEYCHAIN"
 
