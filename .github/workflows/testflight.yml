@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # build phase uses `git rev-list HEAD --count` for build number
 
