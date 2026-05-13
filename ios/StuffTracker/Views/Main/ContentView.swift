@@ -297,22 +297,27 @@ struct DragTrashZone: View {
     @State private var isTargeted = false
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             if isTargeted {
-                Image(systemName: "trash.fill")
-                    .font(.title2)
-                Text("Drop to Delete")
-                    .font(.caption.bold())
+                VStack(spacing: 4) {
+                    Image(systemName: "trash.fill")
+                        .font(.title2)
+                    Text("Drop to Delete")
+                        .font(.caption.bold())
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 70)
+                .background(Color.red)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .foregroundStyle(.white)
-        .frame(maxWidth: isTargeted ? .infinity : nil)
-        .frame(height: isTargeted ? 70 : 0)
-        .background(Color.red)
-        .clipShape(RoundedRectangle(cornerRadius: isTargeted ? 16 : 0))
-        .padding(.horizontal, isTargeted ? 16 : 0)
-        .padding(.bottom, isTargeted ? 8 : 0)
-        .opacity(isTargeted ? 1 : 0)
+        .frame(maxWidth: .infinity)
+        .frame(height: isTargeted ? 78 : 24)
+        .contentShape(Rectangle())
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             for home in homeStore.homeDetails {
