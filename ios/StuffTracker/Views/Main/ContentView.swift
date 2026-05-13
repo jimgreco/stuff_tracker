@@ -298,22 +298,21 @@ struct DragTrashZone: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Image(systemName: isTargeted ? "trash.fill" : "trash")
-                .font(.title2)
-            Text("Delete")
-                .font(.caption.bold())
+            if isTargeted {
+                Image(systemName: "trash.fill")
+                    .font(.title2)
+                Text("Delete")
+                    .font(.caption.bold())
+            }
         }
-        .foregroundStyle(isTargeted ? .white : .red)
+        .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
-        .frame(height: 70)
-        .background(isTargeted ? Color.red : Color.red.opacity(0.15))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.red.opacity(0.4), lineWidth: 1)
-        )
-        .padding(.horizontal)
-        .padding(.bottom, 8)
+        .frame(height: isTargeted ? 70 : 20)
+        .background(isTargeted ? Color.red : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: isTargeted ? 16 : 0))
+        .padding(.horizontal, isTargeted ? 16 : 0)
+        .padding(.bottom, isTargeted ? 8 : 0)
+        .allowsHitTesting(false)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             for home in homeStore.homeDetails {
@@ -324,6 +323,7 @@ struct DragTrashZone: View {
             }
             return false
         } isTargeted: { isTargeted = $0 }
+        .animation(.easeInOut(duration: 0.2), value: isTargeted)
     }
 }
 
