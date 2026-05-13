@@ -3,15 +3,15 @@ import SwiftUI
 // MARK: - Design tokens
 
 private extension Color {
-    static let homeBox      = Color(.systemBackground)
-    static let floorBox     = Color(.secondarySystemBackground)
-    static let roomBox      = Color(.secondarySystemBackground)
-    static let containerBox = Color(.tertiarySystemBackground)
+    static let homeBox      = Color(.secondarySystemGroupedBackground)
+    static let floorBox     = Color(.tertiarySystemGroupedBackground)
+    static let roomBox      = Color(.tertiarySystemGroupedBackground)
+    static let containerBox = Color(.systemBackground).opacity(0.72)
 
-    static let homeBorder      = Color.accentColor.opacity(0.6)
-    static let floorBorder     = Color(.separator)
-    static let roomBorder      = Color(.separator)
-    static let containerBorder = Color(.separator).opacity(0.5)
+    static let homeBorder      = Color(.separator).opacity(0.28)
+    static let floorBorder     = Color(.separator).opacity(0.24)
+    static let roomBorder      = Color(.separator).opacity(0.22)
+    static let containerBorder = Color(.separator).opacity(0.18)
 }
 
 // MARK: - Pill-shaped add button
@@ -26,14 +26,37 @@ private struct AddPillButton: View {
             Label(label, systemImage: "plus")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(tint.opacity(0.15), in: Capsule())
-                .overlay(
-                    Capsule().stroke(tint.opacity(0.35), lineWidth: 0.5)
-                )
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
         }
-        .buttonStyle(.plain)
+        .addPillSurface(tint: tint)
+    }
+}
+
+private struct AddPillSurfaceModifier: ViewModifier {
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .buttonStyle(.plain)
+                .background(tint.opacity(0.08), in: Capsule())
+                .glassEffect(.regular.tint(tint.opacity(0.16)).interactive(), in: Capsule())
+                .overlay(Capsule().stroke(tint.opacity(0.24), lineWidth: 0.5))
+        } else {
+            content
+                .buttonStyle(.plain)
+                .background(tint.opacity(0.15), in: Capsule())
+                .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 0.5))
+        }
+    }
+}
+
+private extension View {
+    func addPillSurface(tint: Color) -> some View {
+        modifier(AddPillSurfaceModifier(tint: tint))
     }
 }
 
@@ -324,8 +347,9 @@ struct HomeBoxView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(isDropTargeted ? Color.accentColor : Color.homeBorder, lineWidth: isDropTargeted ? 2 : 1)
+                .stroke(isDropTargeted ? Color.accentColor : Color.homeBorder, lineWidth: isDropTargeted ? 2 : 0.75)
         )
+        .shadow(color: Color.black.opacity(0.045), radius: 14, y: 4)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: nil) }
@@ -470,7 +494,7 @@ struct FloorBoxView: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: floor.id) }
@@ -610,7 +634,7 @@ struct RoomBoxView: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: room.id) }

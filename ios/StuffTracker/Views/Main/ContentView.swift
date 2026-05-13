@@ -26,31 +26,6 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // ── Search bar ───────────────────────────────────────────────
-                SearchBar(text: $searchText)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-
-                // ── Breadcrumb bar ───────────────────────────────────────────
-                if breadcrumbPath.count > 1 {
-                    HStack(spacing: 4) {
-                        ForEach(Array(breadcrumbPath.enumerated()), id: \.offset) { index, segment in
-                            if index > 0 {
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(segment)
-                                .font(.caption)
-                                .foregroundStyle(index == breadcrumbPath.count - 1 ? .primary : .secondary)
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 6)
-                    .background(Color(.systemBackground))
-                }
-
                 if homeStore.isLoading && homeStore.homeDetails.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,27 +86,28 @@ struct ContentView: View {
                         }
                         .coordinateSpace(name: "scroll")
                         .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
-                            // Find the topmost box whose top is at or above the scroll top
-                            let threshold: CGFloat = 80
-                            let candidate = anchors
-                                .filter { $0.minY <= threshold }
-                                .max(by: { $0.minY < $1.minY })
-                            breadcrumbPath = candidate?.path ?? []
+                            updateBreadcrumbPath(from: anchors)
                         }
                     }
                 }
+            }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .overlay(alignment: .top) {
+                BreadcrumbBar(path: breadcrumbPath)
             }
             .overlay(alignment: .bottom) {
                 DragTrashZone(homeStore: homeStore)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
             }
+            .navigationTitle("Stuff Tracker")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search stuff..."
+            )
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Stuff Tracker")
-                        .font(.headline)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showAccountSheet = true
@@ -165,6 +141,23 @@ struct ContentView: View {
                 Text(homeStore.errorMessage ?? "")
             }
             .task { await homeStore.loadHomes() }
+        }
+    }
+
+    private func updateBreadcrumbPath(from anchors: [BreadcrumbAnchor]) {
+        let threshold: CGFloat = 48
+        let candidate = anchors
+            .filter { $0.minY <= threshold }
+            .max(by: { $0.minY < $1.minY })
+        let candidatePath = candidate?.path ?? []
+        let nextPath = candidatePath.count > 1 ? candidatePath : []
+
+        guard nextPath != breadcrumbPath else { return }
+
+        DispatchQueue.main.async {
+            if breadcrumbPath != nextPath {
+                breadcrumbPath = nextPath
+            }
         }
     }
 
@@ -249,6 +242,37 @@ struct ContentView: View {
     }
 }
 
+private struct BreadcrumbBar: View {
+    let path: [String]
+
+    var body: some View {
+        if path.count > 1 {
+            HStack(spacing: 4) {
+                ForEach(Array(path.enumerated()), id: \.offset) { index, segment in
+                    if index > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(segment)
+                        .font(.caption)
+                        .foregroundStyle(index == path.count - 1 ? .primary : .secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(.thinMaterial)
+            .overlay(Divider(), alignment: .bottom)
+            .allowsHitTesting(false)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.16), value: path)
+        }
+    }
+}
+
 // MARK: - Empty state
 
 struct EmptyHomePrompt: View {
@@ -318,9 +342,7 @@ struct DragTrashZone: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 70)
-                .background(Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
+                .trashDropSurface()
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 Color.clear
@@ -355,5 +377,29 @@ struct DragTrashZone: View {
             }
             return true
         } isTargeted: { homeTargeted = $0 }
+    }
+}
+
+private struct TrashDropSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(Color.red.opacity(0.38), in: shape)
+                .glassEffect(.regular.tint(.red).interactive(), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+                .shadow(color: Color.red.opacity(0.24), radius: 14, y: 6)
+        } else {
+            content
+                .background(Color.red, in: shape)
+                .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
+        }
+    }
+}
+
+private extension View {
+    func trashDropSurface() -> some View {
+        modifier(TrashDropSurfaceModifier())
     }
 }

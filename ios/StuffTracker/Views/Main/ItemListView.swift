@@ -90,18 +90,120 @@ struct ItemChipsView: View {
                 ItemChip(item: item, homeStore: homeStore, homeId: homeId)
                     .dropDestination(for: DraggedItem.self) { dropped, _ in
                         guard let dragged = dropped.first, dragged.id != item.id else { return false }
-                        homeStore.reorderItem(homeId: homeId, itemId: dragged.id, toIndex: index)
-                        return true
+                        return dropItem(dragged, at: index)
+                    }
+                    .overlay(alignment: .leading) {
+                        ItemInsertionDropZone(edge: .leading, insertionIndex: index) { dragged, insertionIndex in
+                            dropItem(dragged, at: insertionIndex)
+                        }
+                    }
+                    .overlay(alignment: .trailing) {
+                        ItemInsertionDropZone(edge: .trailing, insertionIndex: index + 1) { dragged, insertionIndex in
+                            dropItem(dragged, at: insertionIndex)
+                        }
                     }
             }
         }
+    }
+
+    private func dropItem(_ dragged: DraggedItem, at insertionIndex: Int) -> Bool {
+        guard !homeId.isEmpty else { return false }
+
+        let destination = adjustedDestination(for: dragged, insertionIndex: insertionIndex)
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            if items.contains(where: { $0.id == dragged.id }) {
+                homeStore.reorderItem(homeId: homeId, itemId: dragged.id, toIndex: destination)
+            } else {
+                homeStore.moveItem(homeId: homeId, itemId: dragged.id, toLocation: locationId)
+                homeStore.reorderItem(homeId: homeId, itemId: dragged.id, toIndex: insertionIndex)
+            }
+        }
+
+        return true
+    }
+
+    private func adjustedDestination(for dragged: DraggedItem, insertionIndex: Int) -> Int {
+        guard let sourceIndex = items.firstIndex(where: { $0.id == dragged.id }) else {
+            return insertionIndex
+        }
+
+        return sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex
+    }
+}
+
+private enum ItemInsertionEdge {
+    case leading
+    case trailing
+}
+
+private struct ItemInsertionDropZone: View {
+    let edge: ItemInsertionEdge
+    let insertionIndex: Int
+    let onDrop: (DraggedItem, Int) -> Bool
+
+    @State private var isTargeted = false
+
+    private let hitWidth: CGFloat = 34
+    private let hitHeight: CGFloat = 42
+    private let insideOverlap: CGFloat = 6
+    private let lineOutset: CGFloat = 3
+
+    private var alignment: Alignment {
+        edge == .leading ? .trailing : .leading
+    }
+
+    private var paddingEdge: Edge.Set {
+        edge == .leading ? .trailing : .leading
+    }
+
+    private var xOffset: CGFloat {
+        edge == .leading ? -(hitWidth - insideOverlap) : hitWidth - insideOverlap
+    }
+
+    var body: some View {
+        ZStack(alignment: alignment) {
+            Color.clear
+
+            ZStack {
+                Capsule()
+                    .fill(Color.accentColor.opacity(isTargeted ? 0.16 : 0))
+                    .frame(width: 12, height: 32)
+
+                Capsule()
+                    .fill(Color.accentColor.opacity(isTargeted ? 1 : 0))
+                    .frame(width: 3, height: 28)
+            }
+            .padding(paddingEdge, insideOverlap + lineOutset)
+        }
+        .frame(width: hitWidth, height: hitHeight)
+        .contentShape(Rectangle())
+        .offset(x: xOffset)
+        .dropDestination(for: DraggedItem.self) { dropped, _ in
+            guard let dragged = dropped.first else { return false }
+            return onDrop(dragged, insertionIndex)
+        } isTargeted: { targeted in
+            isTargeted = targeted
+        }
+        .animation(.easeInOut(duration: 0.12), value: isTargeted)
     }
 }
 
 // MARK: - Flow layout
 
 struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
+    var horizontalSpacing: CGFloat = 6
+    var verticalSpacing: CGFloat = 6
+
+    init(spacing: CGFloat = 6) {
+        horizontalSpacing = spacing
+        verticalSpacing = spacing
+    }
+
+    init(horizontalSpacing: CGFloat, verticalSpacing: CGFloat) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let result = arrange(proposal: proposal, subviews: subviews)
@@ -137,14 +239,14 @@ struct FlowLayout: Layout {
             let size = subview.sizeThatFits(.unspecified)
             if x + size.width > maxWidth && x > 0 {
                 x = 0
-                y += rowHeight + spacing
+                y += rowHeight + verticalSpacing
                 rowHeight = 0
             }
             positions.append(CGPoint(x: x, y: y))
             sizes.append(size)
             rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            maxX = max(maxX, x - spacing)
+            x += size.width + horizontalSpacing
+            maxX = max(maxX, x - horizontalSpacing)
         }
 
         return ArrangeResult(
@@ -186,20 +288,45 @@ struct ItemChip: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(
-                    showUnsyncedOutline ? Color.orange : Color(.separator).opacity(0.4),
-                    style: showUnsyncedOutline ? StrokeStyle(lineWidth: 1.5, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5)
-                )
-        )
+        .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline)
         .contentShape(Rectangle())
         .onTapGesture { showEdit = true }
         .draggable(DraggedItem(id: item.id, name: item.name))
         .sheet(isPresented: $showEdit) {
             ItemEditView(item: item, homeStore: homeStore, homeId: homeId)
         }
+    }
+}
+
+private struct ItemChipSurfaceModifier: ViewModifier {
+    let showUnsyncedOutline: Bool
+
+    private var strokeStyle: StrokeStyle {
+        showUnsyncedOutline ? StrokeStyle(lineWidth: 1.5, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5)
+    }
+
+    private var strokeColor: Color {
+        showUnsyncedOutline ? .orange : Color(.separator).opacity(0.28)
+    }
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(.thinMaterial, in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(strokeColor, style: strokeStyle))
+        } else {
+            content
+                .background(Color(.systemBackground), in: shape)
+                .overlay(shape.stroke(strokeColor, style: strokeStyle))
+        }
+    }
+}
+
+private extension View {
+    func itemChipSurface(showUnsyncedOutline: Bool) -> some View {
+        modifier(ItemChipSurfaceModifier(showUnsyncedOutline: showUnsyncedOutline))
     }
 }
