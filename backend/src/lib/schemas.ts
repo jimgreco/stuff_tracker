@@ -18,3 +18,18 @@ export const ItemSchema = z.object({
   photo_url: z.string().url().nullable().optional(),
   purchase_date: z.string().nullable().optional(),
 });
+
+export const HomeNameSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+export const MemberRoleSchema = z.enum(['admin', 'editor', 'viewer']);
+
+export const InviteSchema = z.object({
+  email: z.string().email(),
+  role: MemberRoleSchema,
+});
+
+export const UpdateMemberRoleSchema = z.object({
+  role: MemberRoleSchema,
+});

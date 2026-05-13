@@ -117,9 +117,9 @@ private struct LocationDropZone: View {
         Rectangle()
             .fill(isTargeted ? Color.accentColor : Color.clear)
             .frame(maxWidth: .infinity)
-            .frame(height: isTargeted ? 4 : 2)
+            .frame(height: isTargeted ? 4 : 1)
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, isTargeted ? 4 : 2)
             .contentShape(Rectangle())
             .dropDestination(for: DraggedLocation.self) { items, _ in
                 guard let dragged = items.first else { return false }
@@ -311,9 +311,7 @@ struct HomeBoxView: View {
                 AddPillButton(label: "Add room", tint: .addRoom) { isAddingRoom = true }
                 AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
             }
-            .padding(.horizontal, 14).padding(.top, 6)
-
-            Spacer(minLength: 8)
+            .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 10)
         }
         .background(
             GeometryReader { geo in
@@ -458,9 +456,7 @@ struct FloorBoxView: View {
                 AddPillButton(label: "Add room", tint: .addRoom) { isAddingRoom = true }
                 AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
             }
-            .padding(.horizontal, 12).padding(.top, 6)
-
-            Spacer(minLength: 6)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
         }
         .background(
             GeometryReader { geo in
@@ -600,9 +596,7 @@ struct RoomBoxView: View {
                 AddPillButton(label: "Add container", tint: .addContainer) { isAddingContainer = true }
                 AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
             }
-            .padding(.horizontal, 12).padding(.top, 6)
-
-            Spacer(minLength: 6)
+            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
         }
         .background(
             GeometryReader { geo in
@@ -730,9 +724,7 @@ struct ContainerBoxView: View {
                 AddPillButton(label: "Add container", tint: .addContainer) { isAddingChild = true }
                 AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
             }
-            .padding(.horizontal, 10).padding(.top, 4)
-
-            Spacer(minLength: 4)
+            .padding(.horizontal, 10).padding(.top, 4).padding(.bottom, 6)
         }
         .background(
             GeometryReader { geo in
