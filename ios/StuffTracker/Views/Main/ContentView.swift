@@ -105,6 +105,8 @@ struct ContentView: View {
                                     .padding(.bottom, 8)
 
                                     TrashBinView(homeStore: homeStore)
+
+                                    DragTrashZone(homeStore: homeStore)
                                 }
                             }
                             .padding()
@@ -120,9 +122,6 @@ struct ContentView: View {
                         }
                     }
                 }
-            }
-            .overlay(alignment: .bottom) {
-                DragTrashZone(homeStore: homeStore)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -298,21 +297,20 @@ struct DragTrashZone: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            if isTargeted {
-                Image(systemName: "trash.fill")
-                    .font(.title2)
-                Text("Delete")
-                    .font(.caption.bold())
-            }
+            Image(systemName: isTargeted ? "trash.fill" : "trash")
+                .font(.title2)
+            Text("Delete")
+                .font(.caption.bold())
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(isTargeted ? .white : .red)
         .frame(maxWidth: .infinity)
-        .frame(height: isTargeted ? 70 : 20)
-        .background(isTargeted ? Color.red : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: isTargeted ? 16 : 0))
-        .padding(.horizontal, isTargeted ? 16 : 0)
-        .padding(.bottom, isTargeted ? 8 : 0)
-        .allowsHitTesting(false)
+        .frame(height: 60)
+        .background(isTargeted ? Color.red : Color.red.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isTargeted ? Color.red : Color.red.opacity(0.3), lineWidth: isTargeted ? 2 : 1)
+        )
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             for home in homeStore.homeDetails {
@@ -323,7 +321,6 @@ struct DragTrashZone: View {
             }
             return false
         } isTargeted: { isTargeted = $0 }
-        .animation(.easeInOut(duration: 0.2), value: isTargeted)
     }
 }
 
