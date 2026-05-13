@@ -1,0 +1,116 @@
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/testflight.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # build phase uses `git rev-list HEAD --count` for build number
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Import signing assets
+        env:
+          CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          CERT_PWD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          KC_PWD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+
+          # Create a temporary keychain
+          security create-keychain -p "$KC_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PWD" "$KEYCHAIN"
+
+          # Make it the default and search-list keychain
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/[\"]//g')
+          security default-keychain -s "$KEYCHAIN"
+
+          # Import the distribution certificate
+          echo "$CERT_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PWD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PWD" "$KEYCHAIN"
+
+          # Install the provisioning profile where Xcode looks for it
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PROFILE" | base64 -d > "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision"
+
+          # Extract profile UUID and name for the export options plist
+          PROFILE_PLIST=$(security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/dist.mobileprovision")
+          PROFILE_UUID=$(echo "$PROFILE_PLIST" | plutil -extract UUID raw -o - -)
+          PROFILE_NAME=$(echo "$PROFILE_PLIST" | plutil -extract Name raw -o - -)
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+
+      - name: Archive
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project StuffTracker.xcodeproj \
+            -scheme StuffTracker \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/StuffTracker.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            DEVELOPMENT_TEAM=V6JPQCD336 \
+            archive
+
+      - name: Export IPA
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>V6JPQCD336</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.jimgreco.stufftracker</key><string>${PROFILE_NAME}</string>
+            </dict>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/StuffTracker.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Upload to TestFlight
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/StuffTracker.ipa" \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain" || true

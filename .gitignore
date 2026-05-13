@@ -15,6 +15,7 @@ dist/
 build/
 DerivedData/
 xcuserdata/
+ios/StuffTracker.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
 *.xcuserstate
 *.moved-aside
 *.hmap
