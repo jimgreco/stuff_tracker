@@ -322,8 +322,8 @@ struct DragTrashZone: View {
                 }
             }
             return false
-        } isTargeted: {
-            withAnimation(.easeInOut(duration: 0.2)) { isTargeted = $0 }
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.2)) { isTargeted = targeted }
         }
     }
 }
