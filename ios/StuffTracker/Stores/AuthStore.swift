@@ -20,6 +20,7 @@ final class AuthStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
+            errorMessage = nil
             let resp = try await APIClient.shared.signInWithGoogle(idToken: idToken)
             APIClient.shared.setToken(resp.token)
             currentUser = resp.user
@@ -27,6 +28,21 @@ final class AuthStore: ObservableObject {
             errorMessage = error.localizedDescription
         }
     }
+
+    #if DEBUG
+    func signInForLocalDevelopment() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            errorMessage = nil
+            let resp = try await APIClient.shared.signInForLocalDevelopment()
+            APIClient.shared.setToken(resp.token)
+            currentUser = resp.user
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+    #endif
 
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async {
         guard let tokenData = credential.identityToken,
@@ -37,6 +53,7 @@ final class AuthStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
+            errorMessage = nil
             let resp = try await APIClient.shared.signInWithApple(
                 identityToken: identityToken,
                 fullName: credential.fullName

@@ -1,21 +1,11 @@
 import { Router, Response } from 'express';
-import { z } from 'zod';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
+import { ItemSchema } from '../lib/schemas';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
-
-const ItemSchema = z.object({
-  name: z.string().min(1).max(200),
-  location_id: z.string().uuid().nullable().optional(),
-  notes: z.string().max(2000).nullable().optional(),
-  quantity: z.number().int().min(1).optional(),
-  tags: z.array(z.string()).optional(),
-  photo_url: z.string().url().nullable().optional(),
-  purchase_date: z.string().nullable().optional(), // ISO date string
-});
 
 // ── Create item ────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
@@ -24,6 +14,17 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
   const { name, location_id, notes, quantity, tags, photo_url, purchase_date } = ItemSchema.parse(req.body);
+  if (location_id) {
+    const location = await pool.query(
+      'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
+      [location_id, homeId]
+    );
+    if (!location.rows[0]) {
+      res.status(400).json({ error: 'Location not found' });
+      return;
+    }
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO items (home_id, location_id, name, notes, quantity, tags, photo_url, purchase_date, created_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -50,6 +51,17 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
   const updates = ItemSchema.partial().parse(req.body);
+  if (updates.location_id) {
+    const location = await pool.query(
+      'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
+      [updates.location_id, homeId]
+    );
+    if (!location.rows[0]) {
+      res.status(400).json({ error: 'Location not found' });
+      return;
+    }
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;

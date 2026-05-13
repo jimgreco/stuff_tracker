@@ -41,6 +41,11 @@ struct LoginView: View {
                     .signInWithAppleButtonStyle(.whiteOutline)
                     .frame(height: 50)
                     .cornerRadius(10)
+
+                    #if DEBUG
+                    LocalDevSignInButton()
+                        .environmentObject(authStore)
+                    #endif
                 }
                 .padding(.horizontal, 32)
 
@@ -96,6 +101,42 @@ struct LoginView: View {
     }
 }
 
+#if DEBUG
+struct LocalDevSignInButton: View {
+    @EnvironmentObject var authStore: AuthStore
+    var onSignedIn: (() -> Void)?
+
+    var body: some View {
+        Button {
+            Task {
+                await authStore.signInForLocalDevelopment()
+                if authStore.isAuthenticated {
+                    onSignedIn?()
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "hammer.circle.fill")
+                    .font(.title3)
+                Text("Dev Sign In")
+                    .font(.body.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Color(.secondarySystemBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(.separator), lineWidth: 1)
+            )
+            .cornerRadius(10)
+        }
+        .foregroundStyle(.primary)
+        .disabled(authStore.isLoading)
+        .buttonStyle(.plain)
+    }
+}
+#endif
+
 // MARK: - Google Sign-In Button
 
 struct GoogleSignInButton: View {
@@ -122,6 +163,7 @@ struct GoogleSignInButton: View {
             .cornerRadius(10)
         }
         .foregroundStyle(.primary)
+        .buttonStyle(.plain)
     }
 
     private func signInWithGoogle() {

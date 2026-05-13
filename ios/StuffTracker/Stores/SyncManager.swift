@@ -1,5 +1,25 @@
 import SwiftUI
 
+private enum SyncUploadError: LocalizedError {
+    case missingParent(locationName: String)
+    case missingItemLocation(itemName: String)
+    case cyclicLocation(locationName: String)
+    case itemUploadFailed(itemName: String, message: String, context: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingParent(let locationName):
+            return "Location '\(locationName)' references a parent that no longer exists."
+        case .missingItemLocation(let itemName):
+            return "Item '\(itemName)' references a location that no longer exists."
+        case .cyclicLocation(let locationName):
+            return "Location '\(locationName)' has a circular parent relationship."
+        case .itemUploadFailed(let itemName, let message, let context):
+            return "Failed to sync item '\(itemName)': \(message) \(context)"
+        }
+    }
+}
+
 @MainActor
 final class SyncManager: ObservableObject {
     static let shared = SyncManager()
@@ -17,7 +37,7 @@ final class SyncManager: ObservableObject {
         updatePendingSyncCount()
     }
 
-    // MARK: - Full sync (pull server → local, then push local → server)
+    // MARK: - Full sync (push local → server, then pull server → local)
 
     func performFullSync() async {
         guard api.hasToken, !isSyncInFlight else { return }
@@ -25,11 +45,11 @@ final class SyncManager: ObservableObject {
         isSyncing = true
         syncError = nil
 
-        // 1. Pull from server
-        await pullFromServer()
-
-        // 2. Push pending local changes
+        // Push pending local changes before pulling so server data cannot clobber unsynced local edits.
         await pushPendingChanges()
+
+        // Pull server data after local changes have either synced or remained marked pending.
+        await pullFromServer()
 
         lastSyncDate = Date()
         isSyncing = false
@@ -80,10 +100,14 @@ final class SyncManager: ObservableObject {
             await pushHome(home)
         }
 
-        // Push locations that need sync
-        let pendingLocations = local.fetchPendingLocations()
-        for loc in pendingLocations {
-            await pushLocation(loc)
+        // Push locations after their parents have server IDs
+        let pendingLocationHomeIds = Set(local.fetchPendingLocations().map(\.homeId))
+        for homeId in pendingLocationHomeIds {
+            do {
+                try await pushPendingLocations(homeId: homeId)
+            } catch {
+                syncError = "Failed to sync locations: \(error.localizedDescription)"
+            }
         }
 
         // Push items that need sync
@@ -126,30 +150,7 @@ final class SyncManager: ObservableObject {
     private func pushLocation(_ loc: LocalLocation) async {
         guard !loc.isDeleted else { return }
         do {
-            // Try update first
-            do {
-                let _: Location = try await api.updateLocation(
-                    homeId: loc.homeId,
-                    locationId: loc.id,
-                    name: loc.name,
-                    parentId: loc.parentId,
-                    sortOrder: loc.sortOrder
-                )
-            } catch APIError.httpError(404, _) {
-                // Doesn't exist, create
-                let created = try await api.createLocation(
-                    homeId: loc.homeId,
-                    name: loc.name,
-                    parentId: loc.parentId,
-                    type: loc.type,
-                    sortOrder: loc.sortOrder
-                )
-                if created.id != loc.id {
-                    local.remapLocationId(from: loc.id, to: created.id)
-                }
-            }
-            loc.needsSync = false
-            local.save()
+            try await upsertLocation(loc)
         } catch {
             syncError = "Failed to sync location '\(loc.name)': \(error.localizedDescription)"
         }
@@ -157,29 +158,10 @@ final class SyncManager: ObservableObject {
 
     private func pushItem(_ item: LocalItem) async {
         guard !item.isDeleted else { return }
-        let body = APIClient.ItemBody(
-            name: item.name,
-            locationId: item.locationId,
-            icon: item.icon,
-            notes: item.notes,
-            quantity: item.quantity,
-            tags: item.tags,
-            photoUrl: item.photoUrl,
-            purchaseDate: item.purchaseDate
-        )
         do {
-            do {
-                let _: Item = try await api.updateItem(homeId: item.homeId, itemId: item.id, body: body)
-            } catch APIError.httpError(404, _) {
-                let created = try await api.createItem(homeId: item.homeId, body: body)
-                if created.id != item.id {
-                    local.remapItemId(from: item.id, to: created.id)
-                }
-            }
-            item.needsSync = false
-            local.save()
+            try await upsertItem(item)
         } catch {
-            syncError = "Failed to sync item '\(item.name)': \(error.localizedDescription)"
+            syncError = "Failed to sync item '\(item.name)': \(error.localizedDescription) \(itemSyncContext(item))"
         }
     }
 
@@ -220,50 +202,9 @@ final class SyncManager: ObservableObject {
         let homes = local.fetchHomes()
         for home in homes {
             do {
-                let created = try await api.createHome(name: home.name)
-                let oldId = home.id
-
-                if created.id != oldId {
-                    local.remapHomeId(from: oldId, to: created.id)
-                }
-
-                // Push locations
-                let locs = local.fetchLocations(homeId: created.id)
-                for loc in locs {
-                    let createdLoc = try await api.createLocation(
-                        homeId: created.id,
-                        name: loc.name,
-                        parentId: loc.parentId,
-                        type: loc.type,
-                        sortOrder: loc.sortOrder
-                    )
-                    if createdLoc.id != loc.id {
-                        local.remapLocationId(from: loc.id, to: createdLoc.id)
-                    }
-                    loc.needsSync = false
-                }
-
-                // Push items
-                let items = local.fetchItems(homeId: created.id)
-                for item in items {
-                    let body = APIClient.ItemBody(
-                        name: item.name,
-                        locationId: item.locationId,
-                        icon: item.icon,
-                        notes: item.notes,
-                        quantity: item.quantity,
-                        tags: item.tags,
-                        photoUrl: item.photoUrl,
-                        purchaseDate: item.purchaseDate
-                    )
-                    let createdItem = try await api.createItem(homeId: created.id, body: body)
-                    if createdItem.id != item.id {
-                        local.remapItemId(from: item.id, to: createdItem.id)
-                    }
-                    item.needsSync = false
-                }
-
-                home.needsSync = false
+                let uploadedHome = try await ensureHomeUploaded(home)
+                try await pushPendingLocations(homeId: uploadedHome.id)
+                try await pushPendingItems(homeId: uploadedHome.id)
             } catch {
                 syncError = "Upload failed: \(error.localizedDescription)"
             }
@@ -308,6 +249,259 @@ final class SyncManager: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func ensureHomeUploaded(_ home: LocalHome) async throws -> Home {
+        do {
+            let detail = try await api.getHome(home.id)
+            if home.needsSync {
+                let updated: Home = try await api.updateHome(home.id, name: home.name)
+                home.needsSync = false
+                local.save()
+                return updated
+            }
+            return Home(
+                id: detail.id,
+                name: detail.name,
+                ownerId: detail.ownerId,
+                role: detail.role,
+                icon: detail.icon
+            )
+        } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
+            let created = try await api.createHome(name: home.name)
+            let oldId = home.id
+            if created.id != oldId {
+                local.remapHomeId(from: oldId, to: created.id)
+            }
+            home.ownerId = created.ownerId
+            home.role = created.role
+            home.needsSync = false
+            local.save()
+            return created
+        }
+    }
+
+    private func pushPendingLocations(homeId: String) async throws {
+        let locations = local.fetchLocations(homeId: homeId)
+        let orderedLocationIds = try SyncUploadPlanner.orderedPendingLocationIds(
+            locations.map {
+                PendingSyncLocation(
+                    id: $0.id,
+                    parentId: $0.parentId,
+                    name: $0.name,
+                    needsSync: $0.needsSync,
+                    isDeleted: $0.isDeleted
+                )
+            }
+        )
+
+        for locationId in orderedLocationIds {
+            guard let location = local.fetchLocation(id: locationId), !location.isDeleted else {
+                continue
+            }
+            try await upsertLocation(location)
+        }
+    }
+
+    private func upsertLocation(_ loc: LocalLocation) async throws {
+        if let parentId = loc.parentId {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+                throw SyncUploadError.missingParent(locationName: loc.name)
+            }
+            try await ensureLocationUploaded(parent, visiting: [loc.id])
+        }
+
+        do {
+            let updated = try await api.updateLocation(
+                homeId: loc.homeId,
+                locationId: loc.id,
+                name: loc.name,
+                parentId: loc.parentId,
+                sortOrder: loc.sortOrder
+            )
+            loc.update(from: updated)
+            local.save()
+        } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
+            let oldId = loc.id
+            let created = try await api.createLocation(
+                homeId: loc.homeId,
+                name: loc.name,
+                parentId: loc.parentId,
+                type: loc.type,
+                sortOrder: loc.sortOrder
+            )
+            if created.id != oldId {
+                local.remapLocationId(from: oldId, to: created.id)
+            }
+            let uploaded = local.fetchLocation(id: created.id) ?? loc
+            uploaded.update(from: created)
+            local.save()
+        }
+    }
+
+    private func ensureLocationUploaded(_ loc: LocalLocation, visiting: Set<String> = []) async throws {
+        if visiting.contains(loc.id) {
+            throw SyncUploadError.cyclicLocation(locationName: loc.name)
+        }
+
+        var nextVisiting = visiting
+        nextVisiting.insert(loc.id)
+
+        if let parentId = loc.parentId {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+                throw SyncUploadError.missingParent(locationName: loc.name)
+            }
+            try await ensureLocationUploaded(parent, visiting: nextVisiting)
+        }
+
+        try await upsertLocation(loc)
+    }
+
+    private func pushPendingItems(homeId: String) async throws {
+        let items = local.fetchItems(homeId: homeId).filter { $0.needsSync && !$0.isDeleted }
+
+        for item in items {
+            do {
+                try await upsertItem(item)
+            } catch {
+                throw SyncUploadError.itemUploadFailed(
+                    itemName: item.name,
+                    message: error.localizedDescription,
+                    context: itemSyncContext(item)
+                )
+            }
+        }
+    }
+
+    private func upsertItem(_ item: LocalItem) async throws {
+        try await ensureItemHomeUploaded(item)
+        try await ensureItemLocationUploaded(item)
+        let latest = refreshedItem(item)
+
+        do {
+            try await saveItemToServer(latest)
+        } catch APIError.httpError(400, let message) where message == "Location not found" {
+            try await ensureItemLocationUploaded(latest)
+            let repaired = refreshedItem(latest)
+            do {
+                try await saveItemToServer(repaired)
+            } catch APIError.httpError(400, let retryMessage) where retryMessage == "Location not found" {
+                repaired.locationId = nil
+                repaired.needsSync = true
+                local.save()
+                try await saveItemToServer(repaired)
+            }
+        }
+    }
+
+    private func saveItemToServer(_ item: LocalItem) async throws {
+        do {
+            let updated = try await api.updateItem(homeId: item.homeId, itemId: item.id, body: itemBody(item))
+            item.update(from: updated)
+            local.save()
+        } catch APIError.httpError(404, _) {
+            let oldId = item.id
+            let created = try await api.createItem(homeId: item.homeId, body: itemBody(item))
+            if created.id != oldId {
+                local.remapItemId(from: oldId, to: created.id)
+            }
+            let uploaded = local.fetchItem(id: created.id) ?? item
+            uploaded.update(from: created)
+            local.save()
+        }
+    }
+
+    private func ensureItemHomeUploaded(_ item: LocalItem) async throws {
+        guard let home = local.fetchHome(id: item.homeId) else { return }
+        let uploadedHome = try await ensureHomeUploaded(home)
+        if item.homeId != uploadedHome.id {
+            item.homeId = uploadedHome.id
+            local.save()
+        }
+    }
+
+    private func ensureItemLocationUploaded(_ item: LocalItem) async throws {
+        let currentItem = refreshedItem(item)
+        guard let locationId = currentItem.locationId else { return }
+        guard let location = local.fetchLocation(id: locationId), !location.isDeleted else {
+            throw SyncUploadError.missingItemLocation(itemName: currentItem.name)
+        }
+
+        try alignLocationChain(location, toHomeId: currentItem.homeId)
+        try await ensureLocationUploaded(location)
+
+        let repairedItem = refreshedItem(currentItem)
+        guard let syncedLocationId = repairedItem.locationId else { return }
+        if try await serverHasLocation(homeId: repairedItem.homeId, locationId: syncedLocationId) {
+            return
+        }
+
+        if let repairedLocation = local.fetchLocation(id: syncedLocationId), !repairedLocation.isDeleted {
+            repairedLocation.needsSync = true
+            try await ensureLocationUploaded(repairedLocation)
+        }
+
+        let finalItem = refreshedItem(repairedItem)
+        if !(try await serverHasLocation(homeId: finalItem.homeId, locationId: finalItem.locationId ?? syncedLocationId)) {
+            finalItem.locationId = nil
+            finalItem.needsSync = true
+            local.save()
+        }
+    }
+
+    private func itemBody(_ item: LocalItem) -> APIClient.ItemBody {
+        APIClient.ItemBody(
+            name: item.name,
+            locationId: item.locationId,
+            icon: item.icon,
+            notes: item.notes,
+            quantity: item.quantity,
+            tags: item.tags,
+            photoUrl: item.photoUrl,
+            purchaseDate: item.purchaseDate
+        )
+    }
+
+    private func alignLocationChain(
+        _ location: LocalLocation,
+        toHomeId homeId: String,
+        visiting: Set<String> = []
+    ) throws {
+        if visiting.contains(location.id) {
+            throw SyncUploadError.cyclicLocation(locationName: location.name)
+        }
+
+        var nextVisiting = visiting
+        nextVisiting.insert(location.id)
+
+        if let parentId = location.parentId {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+                throw SyncUploadError.missingParent(locationName: location.name)
+            }
+            try alignLocationChain(parent, toHomeId: homeId, visiting: nextVisiting)
+        }
+
+        if location.homeId != homeId {
+            location.homeId = homeId
+            location.home = local.fetchHome(id: homeId)
+            location.needsSync = true
+            local.save()
+        }
+    }
+
+    private func serverHasLocation(homeId: String, locationId: String) async throws -> Bool {
+        let detail = try await api.getHome(homeId)
+        return detail.locations.contains { $0.id == locationId }
+    }
+
+    private func refreshedItem(_ item: LocalItem) -> LocalItem {
+        local.fetchItem(id: item.id) ?? item
+    }
+
+    private func itemSyncContext(_ item: LocalItem) -> String {
+        let latest = refreshedItem(item)
+        let locHome = latest.locationId.flatMap { local.fetchLocation(id: $0)?.homeId } ?? "none"
+        return "[homeId=\(latest.homeId), locationId=\(latest.locationId ?? "nil"), locationHomeId=\(locHome)]"
+    }
 
     func updatePendingSyncCount() {
         let homes = local.fetchHomes().filter { $0.needsSync }

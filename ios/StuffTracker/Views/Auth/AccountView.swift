@@ -15,6 +15,14 @@ struct AccountView: View {
         homeStore.homeDetails.filter { $0.role == "owner" || $0.role == "admin" }
     }
 
+    private var appBuildText: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let build = info?["CFBundleVersion"] as? String ?? "Unknown"
+        let gitHash = info?["GitCommitHash"] as? String ?? "Unknown"
+        return "Version \(version) (\(build)) - \(gitHash)"
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -23,6 +31,8 @@ struct AccountView: View {
                 } else {
                     unauthenticatedSection
                 }
+
+                appBuildSection
             }
             .navigationTitle("Account")
             .navigationBarTitleDisplayMode(.inline)
@@ -57,6 +67,17 @@ struct AccountView: View {
                 }
             }
         }
+    }
+
+    private var appBuildSection: some View {
+        Section {
+            Text(appBuildText)
+                .font(.footnote.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .textSelection(.enabled)
+        }
+        .listRowBackground(Color.clear)
     }
 
     // MARK: - Authenticated
@@ -215,6 +236,11 @@ struct AccountView: View {
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
                     .cornerRadius(10)
+
+                    #if DEBUG
+                    LocalDevSignInButton(onSignedIn: handlePostSignIn)
+                        .environmentObject(authStore)
+                    #endif
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 20)
@@ -310,6 +336,7 @@ struct GoogleSignInButtonCompact: View {
             .cornerRadius(10)
         }
         .foregroundStyle(.primary)
+        .buttonStyle(.plain)
     }
 
     private func signInWithGoogle() {

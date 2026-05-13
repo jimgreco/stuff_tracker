@@ -8,6 +8,24 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// ── Local dev sign-in (DEBUG/testing only) ────────────────────────────────────
+router.post('/dev', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const email = typeof req.body?.email === 'string' && req.body.email.trim()
+    ? req.body.email.trim().toLowerCase()
+    : 'dev@stufftracker.local';
+  const name = typeof req.body?.name === 'string' && req.body.name.trim()
+    ? req.body.name.trim()
+    : 'Local Dev';
+
+  const user = await upsertUser({ email, name });
+  res.json({ token: signToken({ userId: user.id, email: user.email }), user });
+});
+
 // ── Google Sign-In (iOS sends the ID token directly) ──────────────────────────
 router.post('/google', async (req: Request, res: Response) => {
   const { idToken } = req.body;

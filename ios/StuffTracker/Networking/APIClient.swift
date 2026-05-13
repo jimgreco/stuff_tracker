@@ -20,7 +20,11 @@ final class APIClient {
     static let shared = APIClient()
 
     #if DEBUG
+    #if targetEnvironment(simulator)
+    private let baseURL = "http://localhost:3002"
+    #else
     private let baseURL = "http://192.168.4.45:3002"
+    #endif
     #else
     private let baseURL = "https://stuff-tracker.jim-greco.com"
     #endif
@@ -102,6 +106,20 @@ final class APIClient {
         try await request("POST", path: "/auth/google", body: ["idToken": idToken])
     }
 
+    #if DEBUG
+    func signInForLocalDevelopment(
+        email: String = "dev@stufftracker.local",
+        name: String = "Local Dev"
+    ) async throws -> AuthResponse {
+        struct Body: Encodable {
+            let email: String
+            let name: String
+        }
+
+        return try await request("POST", path: "/auth/dev", body: Body(email: email, name: name))
+    }
+    #endif
+
     func signInWithApple(identityToken: String, fullName: PersonNameComponents?) async throws -> AuthResponse {
         struct Body: Encodable {
             let identityToken: String
@@ -166,6 +184,18 @@ final class APIClient {
         let parentId: String?
         let type: String
         let sortOrder: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case name, parentId, type, sortOrder
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(name, forKey: .name)
+            try container.encode(parentId, forKey: .parentId)
+            try container.encode(type, forKey: .type)
+            try container.encodeIfPresent(sortOrder, forKey: .sortOrder)
+        }
     }
 
     func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0) async throws -> Location {
@@ -173,10 +203,26 @@ final class APIClient {
                           body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder))
     }
 
+    struct UpdateLocationBody: Encodable {
+        let name: String?
+        let parentId: String?
+        let sortOrder: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case name, parentId, sortOrder
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(name, forKey: .name)
+            try container.encode(parentId, forKey: .parentId)
+            try container.encodeIfPresent(sortOrder, forKey: .sortOrder)
+        }
+    }
+
     func updateLocation(homeId: String, locationId: String, name: String? = nil, parentId: String? = nil, sortOrder: Int? = nil) async throws -> Location {
-        struct Body: Encodable { let name: String?; let parentId: String?; let sortOrder: Int? }
         return try await request("PATCH", path: "/homes/\(homeId)/locations/\(locationId)",
-                                 body: Body(name: name, parentId: parentId, sortOrder: sortOrder))
+                                 body: UpdateLocationBody(name: name, parentId: parentId, sortOrder: sortOrder))
     }
 
     func deleteLocation(homeId: String, locationId: String) async throws {
@@ -194,6 +240,22 @@ final class APIClient {
         let tags: [String]?
         let photoUrl: String?
         let purchaseDate: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name, locationId, icon, notes, quantity, tags, photoUrl, purchaseDate
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(name, forKey: .name)
+            try container.encode(locationId, forKey: .locationId)
+            try container.encodeIfPresent(icon, forKey: .icon)
+            try container.encode(notes, forKey: .notes)
+            try container.encodeIfPresent(quantity, forKey: .quantity)
+            try container.encodeIfPresent(tags, forKey: .tags)
+            try container.encode(photoUrl, forKey: .photoUrl)
+            try container.encodeIfPresent(purchaseDate, forKey: .purchaseDate)
+        }
     }
 
     func createItem(homeId: String, body: ItemBody) async throws -> Item {

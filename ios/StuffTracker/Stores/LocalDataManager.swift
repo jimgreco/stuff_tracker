@@ -389,6 +389,10 @@ final class LocalDataManager {
     func mergeFromServer(homes: [Home]) {
         for home in homes {
             if let existingHome = fetchHome(id: home.id) {
+                guard ServerMergePolicy.shouldApplyServerRecord(
+                    needsSync: existingHome.needsSync,
+                    isDeleted: existingHome.isDeleted
+                ) else { continue }
                 existingHome.update(from: home)
             } else {
                 // Don't re-insert if it was locally deleted
@@ -410,16 +414,21 @@ final class LocalDataManager {
         guard let home = fetchHome(id: homeDetail.id) else { return }
 
         // Update home
-        home.name = homeDetail.name
-        home.ownerId = homeDetail.ownerId
-        home.role = homeDetail.role
-        home.needsSync = false
+        if ServerMergePolicy.shouldApplyServerRecord(needsSync: home.needsSync, isDeleted: home.isDeleted) {
+            home.name = homeDetail.name
+            home.ownerId = homeDetail.ownerId
+            home.role = homeDetail.role
+            home.needsSync = false
+        }
 
         // Merge locations
         for location in homeDetail.locations {
             if let existing = home.locations.first(where: { $0.id == location.id }) {
                 // Don't update locally-deleted locations
-                if existing.isDeleted { continue }
+                guard ServerMergePolicy.shouldApplyServerRecord(
+                    needsSync: existing.needsSync,
+                    isDeleted: existing.isDeleted
+                ) else { continue }
                 existing.update(from: location)
             } else {
                 // Don't re-insert if locally deleted
@@ -442,7 +451,10 @@ final class LocalDataManager {
         for item in homeDetail.items {
             if let existing = home.items.first(where: { $0.id == item.id }) {
                 // Don't update locally-deleted items
-                if existing.isDeleted { continue }
+                guard ServerMergePolicy.shouldApplyServerRecord(
+                    needsSync: existing.needsSync,
+                    isDeleted: existing.isDeleted
+                ) else { continue }
                 existing.update(from: item)
             } else {
                 // Don't re-insert if locally deleted

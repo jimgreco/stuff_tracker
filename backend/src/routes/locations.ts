@@ -1,18 +1,11 @@
 import { Router, Response } from 'express';
-import { z } from 'zod';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
+import { LocationSchema } from '../lib/schemas';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
-
-const LocationSchema = z.object({
-  name: z.string().min(1).max(200),
-  parent_id: z.string().uuid().nullable().optional(),
-  type: z.enum(['floor', 'room', 'container']),
-  sort_order: z.number().int().optional(),
-});
 
 // ── Create location ────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
@@ -21,6 +14,17 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
   const { name, parent_id, type, sort_order } = LocationSchema.parse(req.body);
+  if (parent_id) {
+    const parent = await pool.query(
+      'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
+      [parent_id, homeId]
+    );
+    if (!parent.rows[0]) {
+      res.status(400).json({ error: 'Parent location not found' });
+      return;
+    }
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO locations (home_id, parent_id, name, type, sort_order)
      VALUES ($1, $2, $3, $4, $5)
@@ -37,6 +41,22 @@ router.patch('/:locationId', async (req: AuthRequest, res: Response) => {
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
   const updates = LocationSchema.partial().parse(req.body);
+  if (updates.parent_id) {
+    if (updates.parent_id === locationId) {
+      res.status(400).json({ error: 'Location cannot be its own parent' });
+      return;
+    }
+
+    const parent = await pool.query(
+      'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
+      [updates.parent_id, homeId]
+    );
+    if (!parent.rows[0]) {
+      res.status(400).json({ error: 'Parent location not found' });
+      return;
+    }
+  }
+
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;

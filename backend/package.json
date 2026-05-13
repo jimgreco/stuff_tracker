@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:migrate": "node -r tsx/cjs src/db/migrate.ts"
+    "db:migrate": "node -r tsx/cjs src/db/migrate.ts",
+    "test": "node --require tsx/cjs --test test/**/*.test.ts"
   },
   "dependencies": {
     "express": "^4.18.2",
