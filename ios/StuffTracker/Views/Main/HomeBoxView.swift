@@ -14,59 +14,6 @@ private extension Color {
     static let containerBorder = Color(.separator).opacity(0.18)
 }
 
-// MARK: - Pill-shaped add button
-
-private struct AddPillButton: View {
-    let label: String
-    let tint: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(label, systemImage: "plus")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 6)
-        }
-        .addPillSurface(tint: tint)
-    }
-}
-
-private struct AddPillSurfaceModifier: ViewModifier {
-    let tint: Color
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .buttonStyle(.plain)
-                .background(tint.opacity(0.08), in: Capsule())
-                .glassEffect(.regular.tint(tint.opacity(0.16)).interactive(), in: Capsule())
-                .overlay(Capsule().stroke(tint.opacity(0.24), lineWidth: 0.5))
-        } else {
-            content
-                .buttonStyle(.plain)
-                .background(tint.opacity(0.15), in: Capsule())
-                .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 0.5))
-        }
-    }
-}
-
-private extension View {
-    func addPillSurface(tint: Color) -> some View {
-        modifier(AddPillSurfaceModifier(tint: tint))
-    }
-}
-
-private extension Color {
-    static let addFloor     = Color.blue
-    static let addRoom      = Color.purple
-    static let addContainer = Color.orange
-    static let addItem      = Color.green
-}
-
 // MARK: - Default icons
 
 private func defaultIcon(for type: Location.LocationType, name: String) -> String {
@@ -260,6 +207,13 @@ struct HomeBoxView: View {
                             Label("Change Icon", systemImage: "star.square")
                         }
                         Divider()
+                        Button { newName = ""; isAddingFloor = true } label: {
+                            Label("Add Floor", systemImage: "plus")
+                        }
+                        Button { newName = ""; isAddingRoom = true } label: {
+                            Label("Add Room", systemImage: "plus")
+                        }
+                        Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
                             else { Task { await homeStore.deleteHome(home.id) } }
@@ -269,6 +223,7 @@ struct HomeBoxView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.caption.bold())
+                            .foregroundStyle(.secondary)
                             .padding(6)
                     }
                 }
@@ -297,10 +252,11 @@ struct HomeBoxView: View {
 
             // Items after containers
             let homeItems = home.items(in: nil)
-            if !homeItems.isEmpty {
-                ItemChipsView(items: homeItems, homeStore: homeStore, homeId: home.id, locationId: nil)
-                    .padding(.horizontal, 14)
+            ItemChipsView(items: homeItems, homeStore: homeStore, homeId: home.id, locationId: nil) {
+                newItemName = ""
+                isAddingItem = true
             }
+            .padding(.horizontal, 14)
 
             // Inline add fields
             if isAddingFloor {
@@ -327,15 +283,8 @@ struct HomeBoxView: View {
                 } onCancel: { newItemName = ""; isAddingItem = false }
                 .padding(.horizontal, 14).padding(.top, 8)
             }
-
-            // + Add buttons at bottom
-            HStack(spacing: 8) {
-                AddPillButton(label: "Add floor", tint: .addFloor) { isAddingFloor = true }
-                AddPillButton(label: "Add room", tint: .addRoom) { isAddingRoom = true }
-                AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
-            }
-            .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 10)
         }
+        .padding(.bottom, 10)
         .background(
             GeometryReader { geo in
                 Color.homeBox
@@ -417,6 +366,8 @@ struct FloorBoxView: View {
                         Button { renameName = floor.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
                         Divider()
+                        Button { newName = ""; isAddingRoom = true } label: { Label("Add Room", systemImage: "plus") }
+                        Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: floor.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
                         Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: floor.id) } label: { Label("Order rooms by name", systemImage: "arrow.up.arrow.down") }
                         Divider()
@@ -424,7 +375,7 @@ struct FloorBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: floor.id) } }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
@@ -455,10 +406,11 @@ struct FloorBoxView: View {
 
             // Items after containers
             let floorItems = home.items(in: floor.id)
-            if !floorItems.isEmpty {
-                ItemChipsView(items: floorItems, homeStore: homeStore, homeId: home.id, locationId: floor.id)
-                    .padding(.horizontal, 12)
+            ItemChipsView(items: floorItems, homeStore: homeStore, homeId: home.id, locationId: floor.id) {
+                newItemName = ""
+                isAddingItem = true
             }
+            .padding(.horizontal, 12)
 
             if isAddingRoom {
                 InlineAddField(placeholder: "Room name", text: $newName) {
@@ -474,14 +426,8 @@ struct FloorBoxView: View {
                 } onCancel: { newItemName = ""; isAddingItem = false }
                 .padding(.horizontal, 12).padding(.top, 6)
             }
-
-            // + Add buttons at bottom
-            HStack(spacing: 8) {
-                AddPillButton(label: "Add room", tint: .addRoom) { isAddingRoom = true }
-                AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
-            }
-            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
         }
+        .padding(.bottom, 8)
         .background(
             GeometryReader { geo in
                 Color.floorBox
@@ -562,6 +508,8 @@ struct RoomBoxView: View {
                         Button { renameName = room.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
                         Divider()
+                        Button { newName = ""; isAddingContainer = true } label: { Label("Add Container", systemImage: "plus") }
+                        Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: room.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
                         Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: room.id) } label: { Label("Order containers by name", systemImage: "arrow.up.arrow.down") }
                         Divider()
@@ -569,7 +517,7 @@ struct RoomBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: room.id) } }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 6)
@@ -595,10 +543,11 @@ struct RoomBoxView: View {
 
             // Items after containers
             let roomItems = home.items(in: room.id)
-            if !roomItems.isEmpty {
-                ItemChipsView(items: roomItems, homeStore: homeStore, homeId: home.id, locationId: room.id)
-                    .padding(.horizontal, 12)
+            ItemChipsView(items: roomItems, homeStore: homeStore, homeId: home.id, locationId: room.id) {
+                newItemName = ""
+                isAddingItem = true
             }
+            .padding(.horizontal, 12)
 
             if isAddingContainer {
                 InlineAddField(placeholder: "Container name", text: $newName) {
@@ -614,14 +563,8 @@ struct RoomBoxView: View {
                 } onCancel: { newItemName = ""; isAddingItem = false }
                 .padding(.horizontal, 12).padding(.top, 6)
             }
-
-            // + Add buttons at bottom
-            HStack(spacing: 8) {
-                AddPillButton(label: "Add container", tint: .addContainer) { isAddingContainer = true }
-                AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
-            }
-            .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 8)
         }
+        .padding(.bottom, 8)
         .background(
             GeometryReader { geo in
                 Color.roomBox
@@ -701,6 +644,8 @@ struct ContainerBoxView: View {
                         Button { renameName = container.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
                         Divider()
+                        Button { newName = ""; isAddingChild = true } label: { Label("Add Container", systemImage: "plus") }
+                        Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: container.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
                         Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: container.id) } label: { Label("Order containers by name", systemImage: "arrow.up.arrow.down") }
                         Divider()
@@ -708,7 +653,7 @@ struct ContainerBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: container.id) } }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption).foregroundStyle(.secondary).padding(6) }
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 4)
@@ -723,10 +668,11 @@ struct ContainerBoxView: View {
 
             // Items after containers
             let containerItems = home.items(in: container.id)
-            if !containerItems.isEmpty {
-                ItemChipsView(items: containerItems, homeStore: homeStore, homeId: home.id, locationId: container.id)
-                    .padding(.horizontal, 10)
+            ItemChipsView(items: containerItems, homeStore: homeStore, homeId: home.id, locationId: container.id) {
+                newItemName = ""
+                isAddingItem = true
             }
+            .padding(.horizontal, 10)
 
             if isAddingChild {
                 InlineAddField(placeholder: "Container name", text: $newName) {
@@ -742,14 +688,8 @@ struct ContainerBoxView: View {
                 } onCancel: { newItemName = ""; isAddingItem = false }
                 .padding(.horizontal, 10).padding(.top, 4)
             }
-
-            // + Add buttons at bottom
-            HStack(spacing: 8) {
-                AddPillButton(label: "Add container", tint: .addContainer) { isAddingChild = true }
-                AddPillButton(label: "Add item", tint: .addItem) { isAddingItem = true }
-            }
-            .padding(.horizontal, 10).padding(.top, 4).padding(.bottom, 6)
         }
+        .padding(.bottom, 6)
         .background(
             GeometryReader { geo in
                 Color.containerBox

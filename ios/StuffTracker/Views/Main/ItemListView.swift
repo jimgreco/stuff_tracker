@@ -38,44 +38,6 @@ struct DraggedHome: Transferable, Codable {
     }
 }
 
-// MARK: - Add-location action
-
-struct AddLocationAction: Identifiable {
-    let id = UUID()
-    let label: String
-    let action: () -> Void
-}
-
-// MARK: - Action buttons row (+ Add floor, + Add room, + Add item, etc.)
-
-struct ActionButtonsRow: View {
-    var addLocationActions: [AddLocationAction] = []
-    var onAddItem: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ForEach(addLocationActions) { a in
-                Button {
-                    a.action()
-                } label: {
-                    Label(a.label, systemImage: "plus")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Button {
-                onAddItem()
-            } label: {
-                Label("Add item", systemImage: "plus")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}
-
 // MARK: - Flowing item chips
 
 struct ItemChipsView: View {
@@ -83,6 +45,7 @@ struct ItemChipsView: View {
     @ObservedObject var homeStore: HomeStore
     var homeId: String = ""
     let locationId: String?
+    var onAddItem: (() -> Void)? = nil
 
     var body: some View {
         FlowLayout(spacing: 6) {
@@ -102,6 +65,10 @@ struct ItemChipsView: View {
                             dropItem(dragged, at: insertionIndex)
                         }
                     }
+            }
+
+            if let onAddItem {
+                AddItemChip(action: onAddItem)
             }
         }
     }
@@ -129,6 +96,54 @@ struct ItemChipsView: View {
         }
 
         return sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex
+    }
+}
+
+private struct AddItemChip: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor.opacity(0.72))
+
+                Text("Add item")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .addItemChipSurface()
+        .contentShape(Rectangle())
+        .accessibilityLabel("Add item")
+    }
+}
+
+private struct AddItemChipSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(Color.accentColor.opacity(0.045), in: shape)
+                .overlay(shape.stroke(Color.accentColor.opacity(0.14), lineWidth: 0.5))
+        } else {
+            content
+                .background(Color.accentColor.opacity(0.06), in: shape)
+                .overlay(shape.stroke(Color.accentColor.opacity(0.16), lineWidth: 0.5))
+        }
+    }
+}
+
+private extension View {
+    func addItemChipSurface() -> some View {
+        modifier(AddItemChipSurfaceModifier())
     }
 }
 
@@ -274,10 +289,10 @@ struct ItemChip: View {
         HStack(spacing: 4) {
             Image(systemName: item.icon ?? "circle.fill")
                 .font(.caption2)
-                .foregroundStyle(item.icon != nil ? .primary : Color.accentColor.opacity(0.4))
+                .foregroundStyle(item.icon != nil ? .primary : Color.accentColor.opacity(0.28))
 
             Text(item.name)
-                .font(.callout)
+                .font(.subheadline)
                 .lineLimit(1)
 
             if item.quantity > 1 {
@@ -286,8 +301,8 @@ struct ItemChip: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
         .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline)
         .contentShape(Rectangle())
         .onTapGesture { showEdit = true }
@@ -306,7 +321,7 @@ private struct ItemChipSurfaceModifier: ViewModifier {
     }
 
     private var strokeColor: Color {
-        showUnsyncedOutline ? .orange : Color(.separator).opacity(0.28)
+        showUnsyncedOutline ? .orange : Color(.separator).opacity(0.18)
     }
 
     func body(content: Content) -> some View {
@@ -314,12 +329,11 @@ private struct ItemChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(.thinMaterial, in: shape)
-                .glassEffect(.regular.interactive(), in: shape)
+                .background(Color(.systemBackground).opacity(0.52), in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         } else {
             content
-                .background(Color(.systemBackground), in: shape)
+                .background(Color(.systemBackground).opacity(0.72), in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         }
     }
