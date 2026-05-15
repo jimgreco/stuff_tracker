@@ -126,6 +126,88 @@ private struct ReorderRowFrameReporter: ViewModifier {
     }
 }
 
+private struct SwipeToDeleteRow<Content: View>: View {
+    private let actionWidth: CGFloat = 96
+    private let onDelete: () -> Void
+    private let content: Content
+
+    @State private var offsetX: CGFloat = 0
+    @State private var gestureStartOffsetX: CGFloat?
+
+    init(onDelete: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.onDelete = onDelete
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive) {
+                delete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: actionWidth)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.plain)
+            .background(Color.red)
+            .opacity(offsetX < 0 ? 1 : 0)
+
+            content
+                .background(Color(.secondarySystemGroupedBackground))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .offset(x: offsetX)
+                .allowsHitTesting(offsetX == 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .simultaneousGesture(swipeGesture)
+        .simultaneousGesture(TapGesture().onEnded {
+            guard offsetX < 0 else { return }
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+                offsetX = 0
+            }
+        })
+        .clipped()
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .onChanged { value in
+                guard isHorizontalSwipe(value) || offsetX < 0 else { return }
+                if gestureStartOffsetX == nil {
+                    gestureStartOffsetX = offsetX
+                }
+
+                let baseOffset = gestureStartOffsetX ?? 0
+                offsetX = min(0, max(-actionWidth, baseOffset + value.translation.width))
+            }
+            .onEnded { value in
+                defer { gestureStartOffsetX = nil }
+                guard isHorizontalSwipe(value) || offsetX < 0 else { return }
+
+                let baseOffset = gestureStartOffsetX ?? 0
+                let predictedOffset = baseOffset + value.predictedEndTranslation.width
+
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+                    offsetX = predictedOffset < -actionWidth * 0.35 ? -actionWidth : 0
+                }
+            }
+    }
+
+    private func isHorizontalSwipe(_ value: DragGesture.Value) -> Bool {
+        abs(value.translation.width) > abs(value.translation.height) * 1.15
+    }
+
+    private func delete() {
+        withAnimation {
+            offsetX = 0
+            onDelete()
+        }
+    }
+}
+
 struct ItemEditView: View {
     let item: Item
     @ObservedObject var homeStore: HomeStore
@@ -281,41 +363,36 @@ struct ItemEditView: View {
         let propertyID = property.wrappedValue.id
         let isDropTarget = propertyDropTargetID == propertyID
 
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 10) {
+        SwipeToDeleteRow {
+            properties.removeAll { $0.id == propertyID }
+        } content: {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
                     TextField("Key", text: property.key)
                         .textInputAutocapitalization(.words)
 
-                    Button(role: .destructive) {
-                        properties.removeAll { $0.id == propertyID }
-                    } label: {
-                        Image(systemName: "minus.circle")
-                    }
+                    TextField("Value", text: property.value, axis: .vertical)
+                        .lineLimit(1...3)
                 }
-
-                TextField("Value", text: property.value, axis: .vertical)
-                    .lineLimit(1...3)
+                .padding(.vertical, 2)
+                .opacity(draggedPropertyID == propertyID ? 0.5 : 1)
             }
-            .padding(.vertical, 2)
-            .buttonStyle(.borderless)
-            .opacity(draggedPropertyID == propertyID ? 0.5 : 1)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                ReorderInsertionLine(isVisible: isDropTarget && propertyDropPlacement == .before, edge: .top)
+            }
+            .overlay(alignment: .bottom) {
+                ReorderInsertionLine(isVisible: isDropTarget && propertyDropPlacement == .after, edge: .bottom)
+            }
+            .modifier(ReorderRowFrameReporter(id: propertyID, frames: $propertyFrames))
+            .simultaneousGesture(propertyReorderGesture(for: propertyID))
         }
-        .contentShape(Rectangle())
-        .overlay(alignment: .top) {
-            ReorderInsertionLine(isVisible: isDropTarget && propertyDropPlacement == .before, edge: .top)
-        }
-        .overlay(alignment: .bottom) {
-            ReorderInsertionLine(isVisible: isDropTarget && propertyDropPlacement == .after, edge: .bottom)
-        }
-        .modifier(ReorderRowFrameReporter(id: propertyID, frames: $propertyFrames))
-        .simultaneousGesture(propertyReorderGesture(for: propertyID))
         .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
     }
 
     @ViewBuilder
     private var photosSection: some View {
-        Section("Photo") {
+        Section("Photos") {
             if !photoAttachments.isEmpty {
                 ForEach(photoAttachments) { attachment in
                     photoRow(attachment)
@@ -334,44 +411,42 @@ struct ItemEditView: View {
         let attachmentID = attachment.id
         let isDropTarget = photoDropTargetID == attachmentID
 
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    viewedPhotoAttachment = attachment
-                } label: {
-                    PhotoAttachmentThumbnail(attachment: attachment)
-                        .frame(width: 92, height: 92)
-                }
-                .buttonStyle(.plain)
+        SwipeToDeleteRow {
+            photoAttachments.removeAll { $0.id == attachmentID }
+        } content: {
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        viewedPhotoAttachment = attachment
+                    } label: {
+                        PhotoAttachmentThumbnail(attachment: attachment)
+                            .frame(width: 92, height: 92)
+                    }
+                    .buttonStyle(.plain)
 
-                Spacer()
-
-                Button(role: .destructive) {
-                    photoAttachments.removeAll { $0.id == attachmentID }
-                } label: {
-                    Image(systemName: "minus.circle")
+                    Spacer()
                 }
-                .buttonStyle(.borderless)
+                .padding(.leading, 24)
+                .padding(.vertical, 3)
+                .frame(minHeight: 98)
+                .opacity(draggedPhotoAttachmentID == attachmentID ? 0.5 : 1)
             }
-            .padding(.leading, 24)
-            .padding(.vertical, 4)
-            .opacity(draggedPhotoAttachmentID == attachmentID ? 0.5 : 1)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                ReorderInsertionLine(isVisible: isDropTarget && photoDropPlacement == .before, edge: .top)
+            }
+            .overlay(alignment: .bottom) {
+                ReorderInsertionLine(isVisible: isDropTarget && photoDropPlacement == .after, edge: .bottom)
+            }
+            .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $photoFrames))
+            .simultaneousGesture(photoReorderGesture(for: attachmentID))
         }
-        .contentShape(Rectangle())
-        .overlay(alignment: .top) {
-            ReorderInsertionLine(isVisible: isDropTarget && photoDropPlacement == .before, edge: .top)
-        }
-        .overlay(alignment: .bottom) {
-            ReorderInsertionLine(isVisible: isDropTarget && photoDropPlacement == .after, edge: .bottom)
-        }
-        .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $photoFrames))
-        .simultaneousGesture(photoReorderGesture(for: attachmentID))
-        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
     }
 
     @ViewBuilder
     private var documentsSection: some View {
-        Section("Document") {
+        Section("Documents") {
             ForEach($documentAttachments) { attachment in
                 documentRow(attachment)
             }
@@ -391,54 +466,51 @@ struct ItemEditView: View {
         let contentType = attachment.wrappedValue.document?.contentType ?? attachment.wrappedValue.pendingDocument?.contentType
         let isDropTarget = documentDropTargetID == attachmentID
 
-        VStack(spacing: 0) {
-            HStack {
-                DocumentAttachmentEditor(
-                    name: Binding(
-                        get: {
-                            attachment.wrappedValue.document?.name ?? attachment.wrappedValue.pendingDocument?.name ?? ""
-                        },
-                        set: { newName in
-                            var nextAttachment = attachment.wrappedValue
-                            if nextAttachment.document != nil {
-                                nextAttachment.document?.name = newName
-                            } else if nextAttachment.pendingDocument != nil {
-                                nextAttachment.pendingDocument?.name = newName
+        SwipeToDeleteRow {
+            documentAttachments.removeAll { $0.id == attachmentID }
+        } content: {
+            VStack(spacing: 0) {
+                HStack {
+                    DocumentAttachmentEditor(
+                        name: Binding(
+                            get: {
+                                attachment.wrappedValue.document?.name ?? attachment.wrappedValue.pendingDocument?.name ?? ""
+                            },
+                            set: { newName in
+                                var nextAttachment = attachment.wrappedValue
+                                if nextAttachment.document != nil {
+                                    nextAttachment.document?.name = newName
+                                } else if nextAttachment.pendingDocument != nil {
+                                    nextAttachment.pendingDocument?.name = newName
+                                }
+                                attachment.wrappedValue = nextAttachment
                             }
-                            attachment.wrappedValue = nextAttachment
+                        ),
+                        contentType: contentType
+                    )
+
+                    Spacer()
+
+                    if let document = attachment.wrappedValue.document, let url = URL(string: document.url) {
+                        Link(destination: url) {
+                            Image(systemName: "arrow.up.right.square")
                         }
-                    ),
-                    contentType: contentType
-                )
-
-                Spacer()
-
-                if let document = attachment.wrappedValue.document, let url = URL(string: document.url) {
-                    Link(destination: url) {
-                        Image(systemName: "arrow.up.right.square")
                     }
                 }
-
-                Button(role: .destructive) {
-                    documentAttachments.removeAll { $0.id == attachmentID }
-                } label: {
-                    Image(systemName: "minus.circle")
-                }
+                .padding(.vertical, 1)
                 .buttonStyle(.borderless)
+                .opacity(draggedDocumentAttachmentID == attachmentID ? 0.5 : 1)
             }
-            .padding(.vertical, 1)
-            .buttonStyle(.borderless)
-            .opacity(draggedDocumentAttachmentID == attachmentID ? 0.5 : 1)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                ReorderInsertionLine(isVisible: isDropTarget && documentDropPlacement == .before, edge: .top)
+            }
+            .overlay(alignment: .bottom) {
+                ReorderInsertionLine(isVisible: isDropTarget && documentDropPlacement == .after, edge: .bottom)
+            }
+            .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $documentFrames))
+            .simultaneousGesture(documentReorderGesture(for: attachmentID))
         }
-        .contentShape(Rectangle())
-        .overlay(alignment: .top) {
-            ReorderInsertionLine(isVisible: isDropTarget && documentDropPlacement == .before, edge: .top)
-        }
-        .overlay(alignment: .bottom) {
-            ReorderInsertionLine(isVisible: isDropTarget && documentDropPlacement == .after, edge: .bottom)
-        }
-        .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $documentFrames))
-        .simultaneousGesture(documentReorderGesture(for: attachmentID))
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
     }
 
