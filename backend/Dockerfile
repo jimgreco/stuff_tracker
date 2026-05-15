@@ -11,6 +11,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
+COPY scripts ./scripts
 COPY --from=builder /app/dist ./dist
 COPY src/db/schema.sql ./dist/db/schema.sql
 EXPOSE 3002

@@ -50,13 +50,26 @@ CREATE TABLE IF NOT EXISTS items (
   name TEXT NOT NULL,
   notes TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
-  tags TEXT[] NOT NULL DEFAULT '{}',
   photo_url TEXT,
+  photo_urls TEXT[] NOT NULL DEFAULT '{}',
+  document_url TEXT,
+  document_name TEXT,
+  document_content_type TEXT,
+  properties JSONB NOT NULL DEFAULT '[]'::jsonb,
+  documents JSONB NOT NULL DEFAULT '[]'::jsonb,
   purchase_date DATE,
   created_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE items DROP COLUMN IF EXISTS tags;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS photo_urls TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS document_url TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS document_name TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS document_content_type TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS properties JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS documents JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_locations_home_id ON locations(home_id);

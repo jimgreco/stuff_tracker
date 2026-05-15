@@ -466,8 +466,9 @@ final class LocalDataManager {
                     name: item.name,
                     notes: item.notes,
                     quantity: item.quantity,
-                    tags: item.tags,
-                    photoUrl: item.photoUrl,
+                    properties: item.properties,
+                    photoUrls: item.photoUrls,
+                    documents: item.documents,
                     purchaseDate: item.purchaseDate,
                     createdBy: item.createdBy,
                     needsSync: false

@@ -47,7 +47,8 @@ router.get('/:homeId', async (req: AuthRequest, res: Response) => {
       [homeId]
     ),
     pool.query(
-      `SELECT id, home_id, location_id, name, notes, quantity, tags, photo_url, purchase_date, created_by
+      `SELECT id, home_id, location_id, name, notes, quantity, properties, photo_urls,
+              documents, purchase_date, created_by
        FROM items WHERE home_id = $1 ORDER BY name`,
       [homeId]
     ),

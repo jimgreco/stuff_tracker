@@ -455,8 +455,9 @@ final class SyncManager: ObservableObject {
             icon: item.icon,
             notes: item.notes,
             quantity: item.quantity,
-            tags: item.tags,
-            photoUrl: item.photoUrl,
+            properties: item.properties,
+            photoUrls: item.photoUrls,
+            documents: item.documents,
             purchaseDate: item.purchaseDate
         )
     }

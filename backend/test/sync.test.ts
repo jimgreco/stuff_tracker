@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOCATION_TYPES, locationTypeConstraintSql } from '../src/db/locationTypeConstraint';
-import { ItemSchema, LocationSchema } from '../src/lib/schemas';
+import { ItemSchema, ItemUploadSchema, LocationSchema } from '../src/lib/schemas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +38,57 @@ test('item sync validation allows missing legacy fields and explicit root locati
 
   assert.equal(parsed.location_id, null);
   assert.equal(parsed.name, 'Couch 5');
+});
+
+test('item validation keeps ordered properties and document metadata', () => {
+  const parsed = ItemSchema.parse({
+    name: 'Warranty folder',
+    properties: [
+      { id: 'prop-1', key: 'Location', value: 'Garage' },
+      { id: 'prop-2', key: 'Category', value: 'Tools' },
+      { id: 'prop-3', key: 'Receipt', value: 'Yes' },
+    ],
+    photo_urls: ['https://cdn.example.com/chair-front.jpg', 'https://cdn.example.com/chair-side.jpg'],
+    documents: [
+      {
+        id: 'doc-1',
+        url: 'https://cdn.example.com/manual.pdf',
+        name: 'manual.pdf',
+        content_type: 'application/pdf',
+      },
+      {
+        id: 'doc-2',
+        url: 'https://cdn.example.com/receipt.jpg',
+        name: 'receipt.jpg',
+        content_type: 'image/jpeg',
+      },
+    ],
+  });
+
+  assert.deepEqual(parsed.properties?.map(({ key, value }) => [key, value]), [
+    ['Location', 'Garage'],
+    ['Category', 'Tools'],
+    ['Receipt', 'Yes'],
+  ]);
+  assert.deepEqual(parsed.photo_urls, [
+    'https://cdn.example.com/chair-front.jpg',
+    'https://cdn.example.com/chair-side.jpg',
+  ]);
+  assert.equal(parsed.documents?.length, 2);
+});
+
+test('item upload validation accepts photos and documents', () => {
+  assert.equal(ItemUploadSchema.parse({
+    kind: 'photo',
+    file_name: 'chair.jpg',
+    content_type: 'image/jpeg',
+  }).kind, 'photo');
+
+  assert.equal(ItemUploadSchema.parse({
+    kind: 'document',
+    file_name: 'manual.pdf',
+    content_type: 'application/pdf',
+  }).kind, 'document');
 });
 
 test('location type migration constraint stays in sync with accepted schema values', () => {

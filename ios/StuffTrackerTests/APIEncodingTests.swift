@@ -18,6 +18,18 @@ final class APIEncodingTests: XCTestCase {
         )
     }
 
+    func testAPIErrorMessageIncludesValidationDetails() throws {
+        let data = try XCTUnwrap(
+            #"{"error":"Validation error","details":[{"message":"String must contain at most 100 character(s)","path":["documents",0,"id"]}]}"#
+                .data(using: .utf8)
+        )
+
+        XCTAssertEqual(
+            APIClient.errorMessage(from: data, fallback: "Request failed"),
+            "Validation error: documents.0.id: String must contain at most 100 character(s)"
+        )
+    }
+
     func testItemBodyEncodesNilLocationAsExplicitNull() throws {
         let body = APIClient.ItemBody(
             name: "Couch 5",
@@ -25,8 +37,9 @@ final class APIEncodingTests: XCTestCase {
             icon: nil,
             notes: nil,
             quantity: 1,
-            tags: nil,
-            photoUrl: nil,
+            properties: [],
+            photoUrls: [],
+            documents: [],
             purchaseDate: nil
         )
 
@@ -35,6 +48,9 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertEqual(json["name"] as? String, "Couch 5")
         XCTAssertTrue(json.keys.contains("location_id"))
         XCTAssertTrue(json["location_id"] is NSNull)
+        XCTAssertTrue((json["properties"] as? [[String: Any]])?.isEmpty == true)
+        XCTAssertEqual(json["photo_urls"] as? [String], [])
+        XCTAssertTrue((json["documents"] as? [[String: Any]])?.isEmpty == true)
         XCTAssertFalse(json.keys.contains("tags"))
         XCTAssertFalse(json.keys.contains("purchase_date"))
     }

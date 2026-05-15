@@ -2,10 +2,40 @@ import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
-import { ItemSchema } from '../lib/schemas';
+import { ItemSchema, ItemUploadSchema } from '../lib/schemas';
+import { createItemAttachmentUpload, S3ConfigurationError } from '../lib/s3';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
+
+// ── Create a direct-to-S3 upload URL for item attachments ─────────────────────
+router.post('/uploads', async (req: AuthRequest, res: Response) => {
+  const { homeId } = req.params;
+  const role = await getHomeRole(homeId, req.user!.userId);
+  if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
+
+  const { kind, file_name, content_type } = ItemUploadSchema.parse(req.body);
+  if (kind === 'photo' && !content_type.startsWith('image/')) {
+    res.status(400).json({ error: 'Photo uploads must use an image content type' });
+    return;
+  }
+
+  try {
+    const upload = await createItemAttachmentUpload({
+      homeId,
+      kind,
+      fileName: file_name,
+      contentType: content_type,
+    });
+    res.status(201).json(upload);
+  } catch (err) {
+    if (err instanceof S3ConfigurationError) {
+      res.status(503).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+});
 
 // ── Create item ────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
@@ -13,7 +43,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  const { name, location_id, notes, quantity, tags, photo_url, purchase_date } = ItemSchema.parse(req.body);
+  const {
+    name,
+    location_id,
+    notes,
+    quantity,
+    properties,
+    photo_urls,
+    documents,
+    purchase_date,
+  } = ItemSchema.parse(req.body);
   if (location_id) {
     const location = await pool.query(
       'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
@@ -26,8 +65,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO items (home_id, location_id, name, notes, quantity, tags, photo_url, purchase_date, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO items (
+       home_id, location_id, name, notes, quantity, properties, photo_urls,
+       documents, purchase_date, created_by
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       homeId,
@@ -35,8 +77,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       name,
       notes ?? null,
       quantity ?? 1,
-      tags ?? [],
-      photo_url ?? null,
+      JSON.stringify(properties ?? []),
+      photo_urls ?? [],
+      JSON.stringify(documents ?? []),
       purchase_date ?? null,
       req.user!.userId,
     ]
@@ -66,11 +109,21 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   const values: unknown[] = [];
   let i = 1;
 
-  const allowed = ['name', 'location_id', 'notes', 'quantity', 'tags', 'photo_url', 'purchase_date'] as const;
+  const allowed = [
+    'name',
+    'location_id',
+    'notes',
+    'quantity',
+    'properties',
+    'photo_urls',
+    'documents',
+    'purchase_date',
+  ] as const;
   for (const key of allowed) {
     if (key in updates) {
       fields.push(`${key} = $${i++}`);
-      values.push((updates as Record<string, unknown>)[key] ?? null);
+      const value = (updates as Record<string, unknown>)[key];
+      values.push(key === 'documents' || key === 'properties' ? JSON.stringify(value ?? []) : value ?? null);
     }
   }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
@@ -106,13 +159,14 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
   const q = String(req.query.q ?? '').trim();
   if (!q) { res.json([]); return; }
 
+  const searchVector = `to_tsvector('english', i.name || ' ' || COALESCE(i.notes, '') || ' ' || COALESCE(i.properties::text, ''))`;
   const { rows } = await pool.query(
     `SELECT i.*, l.name AS location_name, l.parent_id AS location_parent_id
      FROM items i
      LEFT JOIN locations l ON l.id = i.location_id
      WHERE i.home_id = $1
-       AND to_tsvector('english', i.name || ' ' || COALESCE(i.notes, '')) @@ plainto_tsquery('english', $2)
-     ORDER BY ts_rank(to_tsvector('english', i.name || ' ' || COALESCE(i.notes, '')), plainto_tsquery('english', $2)) DESC
+       AND ${searchVector} @@ plainto_tsquery('english', $2)
+     ORDER BY ts_rank(${searchVector}, plainto_tsquery('english', $2)) DESC
      LIMIT 50`,
     [homeId, q]
   );

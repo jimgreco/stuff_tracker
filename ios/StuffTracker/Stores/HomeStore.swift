@@ -310,8 +310,9 @@ final class HomeStore: ObservableObject {
             localItem.icon = body.icon
             localItem.notes = body.notes
             localItem.quantity = body.quantity ?? localItem.quantity
-            localItem.tags = body.tags ?? localItem.tags
-            localItem.photoUrl = body.photoUrl
+            localItem.properties = body.properties ?? localItem.properties
+            localItem.photoUrls = body.photoUrls ?? localItem.photoUrls
+            localItem.documents = body.documents ?? localItem.documents
             localItem.purchaseDate = body.purchaseDate
             local.updateItem(localItem)
 

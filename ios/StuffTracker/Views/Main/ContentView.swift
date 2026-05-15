@@ -190,11 +190,14 @@ struct ContentView: View {
                 toExpand = newChildren
             }
 
-            // Find items that match by name/notes/tags
+            // Find items that match by name/notes/properties
             let matchingItems = home.items.filter {
                 $0.name.localizedCaseInsensitiveContains(q) ||
                 ($0.notes ?? "").localizedCaseInsensitiveContains(q) ||
-                $0.tags.contains(where: { $0.localizedCaseInsensitiveContains(q) })
+                $0.properties.contains {
+                    $0.key.localizedCaseInsensitiveContains(q) ||
+                    $0.value.localizedCaseInsensitiveContains(q)
+                }
             }
 
             if !homeMatches && directMatchIds.isEmpty && matchingItems.isEmpty {

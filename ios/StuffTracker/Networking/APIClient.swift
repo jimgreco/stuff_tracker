@@ -53,11 +53,58 @@ final class APIClient {
     private struct ErrorResponse: Decodable {
         let error: String?
         let message: String?
+        let details: [ValidationDetail]?
+
+        var displayMessage: String? {
+            let base = error ?? message
+            guard let detail = details?.first, !detail.message.isEmpty else {
+                return base
+            }
+
+            let detailMessage = detail.pathDescription.isEmpty
+                ? detail.message
+                : "\(detail.pathDescription): \(detail.message)"
+
+            guard let base, !base.isEmpty else {
+                return detailMessage
+            }
+            return "\(base): \(detailMessage)"
+        }
+    }
+
+    private struct ValidationDetail: Decodable {
+        let message: String
+        let path: [ValidationPathComponent]
+
+        var pathDescription: String {
+            path.map(\.description).joined(separator: ".")
+        }
+    }
+
+    private enum ValidationPathComponent: Decodable, CustomStringConvertible {
+        case string(String)
+        case int(Int)
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let string = try? container.decode(String.self) {
+                self = .string(string)
+            } else {
+                self = .int(try container.decode(Int.self))
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .string(let value): return value
+            case .int(let value): return String(value)
+            }
+        }
     }
 
     static func errorMessage(from data: Data, fallback: String = "Unknown error") -> String {
         if let decoded = try? JSONDecoder().decode(ErrorResponse.self, from: data),
-           let message = decoded.error ?? decoded.message,
+           let message = decoded.displayMessage,
            !message.isEmpty {
             return message
         }
@@ -267,12 +314,14 @@ final class APIClient {
         let icon: String?
         let notes: String?
         let quantity: Int?
-        let tags: [String]?
-        let photoUrl: String?
+        let properties: [ItemProperty]?
+        let photoUrls: [String]?
+        let documents: [ItemDocument]?
         let purchaseDate: String?
 
         enum CodingKeys: String, CodingKey {
-            case name, locationId, icon, notes, quantity, tags, photoUrl, purchaseDate
+            case name, locationId, icon, notes, quantity, properties, photoUrls
+            case documents, purchaseDate
         }
 
         func encode(to encoder: Encoder) throws {
@@ -282,10 +331,29 @@ final class APIClient {
             try container.encodeIfPresent(icon, forKey: .icon)
             try container.encode(notes, forKey: .notes)
             try container.encodeIfPresent(quantity, forKey: .quantity)
-            try container.encodeIfPresent(tags, forKey: .tags)
-            try container.encode(photoUrl, forKey: .photoUrl)
+            try container.encodeIfPresent(properties, forKey: .properties)
+            try container.encodeIfPresent(photoUrls, forKey: .photoUrls)
+            try container.encodeIfPresent(documents, forKey: .documents)
             try container.encodeIfPresent(purchaseDate, forKey: .purchaseDate)
         }
+    }
+
+    enum ItemAttachmentKind: String, Encodable {
+        case photo
+        case document
+    }
+
+    struct ItemUploadResponse: Decodable {
+        let uploadUrl: String
+        let fileUrl: String
+        let key: String
+        let headers: [String: String]
+    }
+
+    private struct ItemUploadBody: Encodable {
+        let kind: ItemAttachmentKind
+        let fileName: String
+        let contentType: String
     }
 
     func createItem(homeId: String, body: ItemBody) async throws -> Item {
@@ -303,6 +371,42 @@ final class APIClient {
     func searchItems(homeId: String, query: String) async throws -> [Item] {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
         return try await request("GET", path: "/homes/\(homeId)/items/search?q=\(encoded)")
+    }
+
+    func uploadItemAttachment(
+        homeId: String,
+        kind: ItemAttachmentKind,
+        fileName: String,
+        contentType: String,
+        data: Data
+    ) async throws -> ItemUploadResponse {
+        let upload: ItemUploadResponse = try await request(
+            "POST",
+            path: "/homes/\(homeId)/items/uploads",
+            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType)
+        )
+
+        guard let url = URL(string: upload.uploadUrl) else { throw APIError.invalidURL }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        for (header, value) in upload.headers {
+            req.setValue(value, forHTTPHeaderField: header)
+        }
+
+        let (responseData, response): (Data, URLResponse)
+        do {
+            (responseData, response) = try await URLSession.shared.upload(for: req, from: data)
+        } catch {
+            throw APIError.networkError(error)
+        }
+
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let msg = Self.errorMessage(from: responseData, fallback: "Upload failed")
+            throw APIError.httpError(status, msg)
+        }
+
+        return upload
     }
 }
 

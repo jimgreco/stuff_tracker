@@ -59,5 +59,30 @@ test('item schema rejects invalid quantities and urls', () => {
 
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 0 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 1.5 }));
-  assert.throws(() => ItemSchema.parse({ name: 'Keys', photo_url: 'not-a-url' }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', photo_urls: ['not-a-url'] }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', properties: [{ id: 'prop-1', key: '', value: 'Brass' }] }));
+});
+
+test('item schema accepts generated S3 object keys as document ids', () => {
+  const key = [
+    'homes',
+    'b59688f2-4dbf-468c-995d-5332260ea096',
+    'items',
+    'documents',
+    '7a8560c4-d0dc-4f46-a5a3-22ac0a50685d-Untitled.png-B00B638F-07C2-47B1-9B3D-7C2764286D76.png',
+  ].join('/');
+
+  const parsed = ItemSchema.parse({
+    name: 'Manual',
+    documents: [
+      {
+        id: key,
+        url: `https://cdn.example.com/${key}`,
+        name: 'Untitled.png B00B638F-07C2-47B1-9B3D-7C2764286D76.png',
+        content_type: 'image/png',
+      },
+    ],
+  });
+
+  assert.equal(parsed.documents?.[0]?.id, key);
 });

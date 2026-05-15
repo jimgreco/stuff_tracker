@@ -142,8 +142,9 @@ final class LocalItem {
     var icon: String?
     var notes: String?
     var quantity: Int
-    var tags: [String]
-    var photoUrl: String?
+    var propertiesData: Data?
+    var photoUrls: [String] = []
+    var documentsData: Data?
     var purchaseDate: String?
     var sortOrder: Int = 0
     var createdBy: String?
@@ -161,8 +162,9 @@ final class LocalItem {
          icon: String? = nil,
          notes: String? = nil,
          quantity: Int = 1,
-         tags: [String] = [],
-         photoUrl: String? = nil,
+         properties: [ItemProperty] = [],
+         photoUrls: [String] = [],
+         documents: [ItemDocument] = [],
          purchaseDate: String? = nil,
          sortOrder: Int = 0,
          createdBy: String? = nil,
@@ -175,8 +177,9 @@ final class LocalItem {
         self.icon = icon
         self.notes = notes
         self.quantity = quantity
-        self.tags = tags
-        self.photoUrl = photoUrl
+        self.propertiesData = Self.encodedProperties(properties)
+        self.photoUrls = photoUrls
+        self.documentsData = Self.encodedDocuments(documents)
         self.purchaseDate = purchaseDate
         self.sortOrder = sortOrder
         self.createdBy = createdBy
@@ -195,8 +198,9 @@ final class LocalItem {
             icon: icon,
             notes: notes,
             quantity: quantity,
-            tags: tags,
-            photoUrl: photoUrl,
+            properties: properties,
+            photoUrls: photoUrls,
+            documents: documents,
             purchaseDate: purchaseDate,
             sortOrder: sortOrder,
             createdBy: createdBy ?? "",
@@ -210,12 +214,47 @@ final class LocalItem {
         self.icon = item.icon
         self.notes = item.notes
         self.quantity = item.quantity
-        self.tags = item.tags
-        self.photoUrl = item.photoUrl
+        self.properties = item.properties
+        self.photoUrls = item.photoUrls
+        self.documents = item.documents
         self.purchaseDate = item.purchaseDate
         self.sortOrder = item.sortOrder
         self.needsSync = false
         self.updatedAt = Date()
+    }
+
+    var properties: [ItemProperty] {
+        get {
+            guard let propertiesData,
+                  let decoded = try? JSONDecoder().decode([ItemProperty].self, from: propertiesData) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            propertiesData = Self.encodedProperties(newValue)
+        }
+    }
+
+    var documents: [ItemDocument] {
+        get {
+            guard let documentsData,
+                  let decoded = try? JSONDecoder().decode([ItemDocument].self, from: documentsData) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            documentsData = Self.encodedDocuments(newValue)
+        }
+    }
+
+    private static func encodedProperties(_ properties: [ItemProperty]) -> Data? {
+        try? JSONEncoder().encode(properties)
+    }
+
+    private static func encodedDocuments(_ documents: [ItemDocument]) -> Data? {
+        try? JSONEncoder().encode(documents)
     }
 }
 
