@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
 export const LocationTypeSchema = z.enum(['floor', 'room', 'container']);
+const IconSchema = z.string().trim().min(1).max(100).nullable().optional();
 
 export const LocationSchema = z.object({
   name: z.string().min(1).max(200),
   parent_id: z.string().uuid().nullable().optional(),
   type: LocationTypeSchema,
   sort_order: z.number().int().optional(),
+  icon: IconSchema,
 });
 
 export const ItemDocumentSchema = z.object({
@@ -25,6 +27,7 @@ export const ItemPropertySchema = z.object({
 export const ItemSchema = z.object({
   name: z.string().min(1).max(200),
   location_id: z.string().uuid().nullable().optional(),
+  icon: IconSchema,
   notes: z.string().max(2000).nullable().optional(),
   quantity: z.number().int().min(1).optional(),
   properties: z.array(ItemPropertySchema).max(100).optional(),
@@ -41,6 +44,11 @@ export const ItemUploadSchema = z.object({
 
 export const HomeNameSchema = z.object({
   name: z.string().min(1).max(100),
+});
+
+export const HomeSchema = z.object({
+  name: z.string().min(1).max(100),
+  icon: IconSchema,
 });
 
 export const MemberRoleSchema = z.enum(['admin', 'editor', 'viewer']);

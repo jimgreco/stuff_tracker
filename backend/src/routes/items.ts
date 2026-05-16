@@ -46,6 +46,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const {
     name,
     location_id,
+    icon,
     notes,
     quantity,
     properties,
@@ -66,15 +67,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
   const { rows } = await pool.query(
     `INSERT INTO items (
-       home_id, location_id, name, notes, quantity, properties, photo_urls,
+       home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
        documents, purchase_date, created_by
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       homeId,
       location_id ?? null,
       name,
+      icon ?? null,
       notes ?? null,
       quantity ?? 1,
       JSON.stringify(properties ?? []),
@@ -112,6 +114,7 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   const allowed = [
     'name',
     'location_id',
+    'icon',
     'notes',
     'quantity',
     'properties',

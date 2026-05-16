@@ -219,8 +219,8 @@ final class APIClient {
         try await request("GET", path: "/homes")
     }
 
-    func createHome(name: String) async throws -> Home {
-        try await request("POST", path: "/homes", body: ["name": name])
+    func createHome(name: String, icon: String? = nil) async throws -> Home {
+        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon))
     }
 
     func getHome(_ id: String) async throws -> HomeDetail {

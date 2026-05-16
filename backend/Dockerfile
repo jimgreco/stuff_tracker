@@ -15,4 +15,4 @@ COPY scripts ./scripts
 COPY --from=builder /app/dist ./dist
 COPY src/db/schema.sql ./dist/db/schema.sql
 EXPOSE 3002
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npm run db:migrate && node dist/index.js"]

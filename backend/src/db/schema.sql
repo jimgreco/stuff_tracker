@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS homes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  icon TEXT,
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS locations (
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('floor', 'room', 'container')),
   sort_order INTEGER NOT NULL DEFAULT 0,
+  icon TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -48,6 +50,7 @@ CREATE TABLE IF NOT EXISTS items (
   home_id UUID NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
   location_id UUID REFERENCES locations(id) ON DELETE SET NULL, -- NULL means "in the home directly"
   name TEXT NOT NULL,
+  icon TEXT,
   notes TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
   photo_url TEXT,
@@ -64,6 +67,9 @@ CREATE TABLE IF NOT EXISTS items (
 );
 
 ALTER TABLE items DROP COLUMN IF EXISTS tags;
+ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT;
+ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS icon TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS photo_urls TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS document_url TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS document_name TEXT;

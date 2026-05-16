@@ -34,7 +34,7 @@ final class APIEncodingTests: XCTestCase {
         let body = APIClient.ItemBody(
             name: "Couch 5",
             locationId: nil,
-            icon: nil,
+            icon: "sofa.fill",
             notes: nil,
             quantity: 1,
             properties: [],
@@ -48,6 +48,7 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertEqual(json["name"] as? String, "Couch 5")
         XCTAssertTrue(json.keys.contains("location_id"))
         XCTAssertTrue(json["location_id"] is NSNull)
+        XCTAssertEqual(json["icon"] as? String, "sofa.fill")
         XCTAssertTrue((json["properties"] as? [[String: Any]])?.isEmpty == true)
         XCTAssertEqual(json["photo_urls"] as? [String], [])
         XCTAssertTrue((json["documents"] as? [[String: Any]])?.isEmpty == true)
@@ -69,6 +70,8 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertTrue(json.keys.contains("parent_id"))
         XCTAssertTrue(json["parent_id"] is NSNull)
         XCTAssertEqual(json["sort_order"] as? Int, 0)
+        XCTAssertTrue(json.keys.contains("icon"))
+        XCTAssertTrue(json["icon"] is NSNull)
     }
 
     func testCreateLocationBodyEncodesTopLevelParentAsExplicitNull() throws {
@@ -85,6 +88,8 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "floor")
         XCTAssertTrue(json.keys.contains("parent_id"))
         XCTAssertTrue(json["parent_id"] is NSNull)
+        XCTAssertTrue(json.keys.contains("icon"))
+        XCTAssertTrue(json["icon"] is NSNull)
     }
 
     private func encodedJSON<T: Encodable>(_ value: T) throws -> [String: Any] {

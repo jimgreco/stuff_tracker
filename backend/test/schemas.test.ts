@@ -37,12 +37,15 @@ test('member invite schemas accept supported roles and valid emails only', () =>
 test('location schema validates parent ids and sort order', () => {
   const id = '7c5b9f9b-44bd-4cea-8ef2-17490c9d42a6';
 
-  assert.equal(LocationSchema.parse({
+  const parsed = LocationSchema.parse({
     name: 'Living Room',
     parent_id: id,
     type: 'room',
     sort_order: 2,
-  }).parent_id, id);
+    icon: 'sofa.fill',
+  });
+  assert.equal(parsed.parent_id, id);
+  assert.equal(parsed.icon, 'sofa.fill');
 
   assert.equal(LocationSchema.parse({
     name: 'Top Floor',
@@ -55,12 +58,15 @@ test('location schema validates parent ids and sort order', () => {
 });
 
 test('item schema rejects invalid quantities and urls', () => {
-  assert.equal(ItemSchema.parse({ name: 'Keys', quantity: 1 }).quantity, 1);
+  const parsed = ItemSchema.parse({ name: 'Keys', quantity: 1, icon: 'key.fill' });
+  assert.equal(parsed.quantity, 1);
+  assert.equal(parsed.icon, 'key.fill');
 
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 0 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 1.5 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', photo_urls: ['not-a-url'] }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', properties: [{ id: 'prop-1', key: '', value: 'Brass' }] }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', icon: '' }));
 });
 
 test('item schema accepts generated S3 object keys as document ids', () => {

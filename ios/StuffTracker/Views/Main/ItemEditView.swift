@@ -369,9 +369,12 @@ struct ItemEditView: View {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("Key", text: property.key)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .textInputAutocapitalization(.words)
 
                     TextField("Value", text: property.value, axis: .vertical)
+                        .font(.body)
                         .lineLimit(1...3)
                 }
                 .padding(.vertical, 2)

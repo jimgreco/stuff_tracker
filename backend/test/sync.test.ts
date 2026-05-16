@@ -16,9 +16,11 @@ test('location sync validation accepts floor locations', () => {
     parent_id: null,
     type: 'floor',
     sort_order: 0,
+    icon: 'building.2',
   });
 
   assert.equal(parsed.type, 'floor');
+  assert.equal(parsed.icon, 'building.2');
 });
 
 test('location sync validation rejects unknown location types', () => {
@@ -32,12 +34,14 @@ test('item sync validation allows missing legacy fields and explicit root locati
   const parsed = ItemSchema.parse({
     name: 'Couch 5',
     location_id: null,
+    icon: 'sofa.fill',
     notes: null,
     quantity: 1,
   });
 
   assert.equal(parsed.location_id, null);
   assert.equal(parsed.name, 'Couch 5');
+  assert.equal(parsed.icon, 'sofa.fill');
 });
 
 test('item validation keeps ordered properties and document metadata', () => {
@@ -106,4 +110,7 @@ test('fresh database schema allows floor locations', () => {
   const schemaSql = fs.readFileSync(path.join(backendRoot, 'src/db/schema.sql'), 'utf8');
 
   assert.match(schemaSql, /type IN \('floor', 'room', 'container'\)/);
+  assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT/);
+  assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT/);
+  assert.match(schemaSql, /ALTER TABLE items ADD COLUMN IF NOT EXISTS icon TEXT/);
 });

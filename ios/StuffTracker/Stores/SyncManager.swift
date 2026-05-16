@@ -133,7 +133,7 @@ final class SyncManager: ObservableObject {
                     let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon)
                 } catch {
                     // Doesn't exist, create
-                    let created = try await api.createHome(name: home.name)
+                    let created = try await api.createHome(name: home.name, icon: home.icon)
                     // Remap the local ID to server ID if different
                     if created.id != home.id {
                         local.remapHomeId(from: home.id, to: created.id)
@@ -267,7 +267,7 @@ final class SyncManager: ObservableObject {
                 icon: detail.icon
             )
         } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
-            let created = try await api.createHome(name: home.name)
+            let created = try await api.createHome(name: home.name, icon: home.icon)
             let oldId = home.id
             if created.id != oldId {
                 local.remapHomeId(from: oldId, to: created.id)

@@ -91,14 +91,15 @@ final class HomeStore: ObservableObject {
     }
 
     func updateHomeIcon(_ id: String, icon: String) {
+        let customIcon = icon.isEmpty ? nil : icon
         if let idx = homes.firstIndex(where: { $0.id == id }) {
-            homes[idx].icon = icon
+            homes[idx].icon = customIcon
         }
         if let idx = detailIndex(for: id) {
-            homeDetails[idx].icon = icon
+            homeDetails[idx].icon = customIcon
         }
         if let localHome = local.fetchHome(id: id) {
-            localHome.icon = icon
+            localHome.icon = customIcon
             local.updateHome(localHome)
         }
         enqueueSyncIfNeeded()
@@ -157,12 +158,13 @@ final class HomeStore: ObservableObject {
     }
 
     func updateLocationIcon(homeId: String, locationId: String, icon: String) {
+        let customIcon = icon.isEmpty ? nil : icon
         if let hIdx = detailIndex(for: homeId),
            let lIdx = homeDetails[hIdx].locations.firstIndex(where: { $0.id == locationId }) {
-            homeDetails[hIdx].locations[lIdx].icon = icon
+            homeDetails[hIdx].locations[lIdx].icon = customIcon
         }
         if let localLoc = local.fetchLocation(id: locationId) {
-            localLoc.icon = icon
+            localLoc.icon = customIcon
             local.updateLocation(localLoc)
         }
         enqueueSyncIfNeeded()

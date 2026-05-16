@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { getHomeRole, canEdit, canAdmin } from '../lib/access';
-import { HomeNameSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
+import { getHomeRole, canAdmin } from '../lib/access';
+import { HomeSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
 
 const router = Router();
 router.use(requireAuth);
@@ -11,7 +11,7 @@ router.use(requireAuth);
 router.get('/', async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
   const { rows } = await pool.query(
-    `SELECT h.id, h.name, h.owner_id, h.created_at,
+    `SELECT h.id, h.name, h.icon, h.owner_id, h.created_at,
             CASE WHEN h.owner_id = $1 THEN 'owner' ELSE hm.role END AS role
      FROM homes h
      LEFT JOIN home_members hm ON hm.home_id = h.id AND hm.user_id = $1
@@ -24,11 +24,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 // ── Create home ────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
-  const { name } = HomeNameSchema.parse(req.body);
+  const { name, icon } = HomeSchema.parse(req.body);
   const { rows } = await pool.query(
-    `INSERT INTO homes (name, owner_id) VALUES ($1, $2)
-     RETURNING id, name, owner_id, created_at`,
-    [name, req.user!.userId]
+    `INSERT INTO homes (name, icon, owner_id) VALUES ($1, $2, $3)
+     RETURNING id, name, icon, owner_id, created_at`,
+    [name, icon ?? null, req.user!.userId]
   );
   res.status(201).json({ ...rows[0], role: 'owner' });
 });
@@ -40,14 +40,14 @@ router.get('/:homeId', async (req: AuthRequest, res: Response) => {
   if (!role) { res.status(403).json({ error: 'Access denied' }); return; }
 
   const [homeRes, locRes, itemRes] = await Promise.all([
-    pool.query('SELECT id, name, owner_id FROM homes WHERE id = $1', [homeId]),
+    pool.query('SELECT id, name, icon, owner_id FROM homes WHERE id = $1', [homeId]),
     pool.query(
-      `SELECT id, home_id, parent_id, name, type, sort_order FROM locations
+      `SELECT id, home_id, parent_id, name, type, sort_order, icon FROM locations
        WHERE home_id = $1 ORDER BY sort_order, name`,
       [homeId]
     ),
     pool.query(
-      `SELECT id, home_id, location_id, name, notes, quantity, properties, photo_urls,
+      `SELECT id, home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
               documents, purchase_date, created_by
        FROM items WHERE home_id = $1 ORDER BY name`,
       [homeId]
@@ -58,18 +58,18 @@ router.get('/:homeId', async (req: AuthRequest, res: Response) => {
   res.json({ ...homeRes.rows[0], role, locations: locRes.rows, items: itemRes.rows });
 });
 
-// ── Update home name ───────────────────────────────────────────────────────────
+// ── Update home ────────────────────────────────────────────────────────────────
 router.patch('/:homeId', async (req: AuthRequest, res: Response) => {
   const { homeId } = req.params;
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
 
-  const { name } = HomeNameSchema.parse(req.body);
+  const { name, icon } = HomeSchema.parse(req.body);
   const { rows } = await pool.query(
-    'UPDATE homes SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name',
-    [name, homeId]
+    'UPDATE homes SET name = $1, icon = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, icon, owner_id',
+    [name, icon ?? null, homeId]
   );
-  res.json(rows[0]);
+  res.json({ ...rows[0], role });
 });
 
 // ── Delete home ────────────────────────────────────────────────────────────────

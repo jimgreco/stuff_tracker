@@ -37,6 +37,11 @@ private func defaultContainerIcon(_ name: String) -> String {
     return "square.stack.3d.up"
 }
 
+private func customIcon(_ icon: String?, fallback: String) -> String {
+    guard let icon, !icon.isEmpty else { return fallback }
+    return icon
+}
+
 // MARK: - Descendant counting
 
 private func descendantCount(of locationId: String, in home: HomeDetail) -> (locations: Int, items: Int) {
@@ -176,7 +181,7 @@ struct HomeBoxView: View {
     @State private var showDeleteConfirm = false
 
     private var currentIcon: String {
-        home.icon ?? "house.fill"
+        customIcon(home.icon, fallback: "house.fill")
     }
 
     private var hasDescendants: Bool {
@@ -341,7 +346,7 @@ struct FloorBoxView: View {
     @State private var showDeleteConfirm = false
 
     private var currentIcon: String {
-        floor.icon ?? defaultIcon(for: .floor, name: floor.name)
+        customIcon(floor.icon, fallback: defaultIcon(for: .floor, name: floor.name))
     }
 
     private var hasDescendants: Bool {
@@ -483,7 +488,7 @@ struct RoomBoxView: View {
     @State private var showDeleteConfirm = false
 
     private var currentIcon: String {
-        room.icon ?? defaultIcon(for: .room, name: room.name)
+        customIcon(room.icon, fallback: defaultIcon(for: .room, name: room.name))
     }
 
     private var hasDescendants: Bool {
@@ -620,7 +625,7 @@ struct ContainerBoxView: View {
     @State private var showDeleteConfirm = false
 
     private var currentIcon: String {
-        container.icon ?? defaultIcon(for: .container, name: container.name)
+        customIcon(container.icon, fallback: defaultIcon(for: .container, name: container.name))
     }
 
     private var hasDescendants: Bool {
