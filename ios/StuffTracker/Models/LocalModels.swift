@@ -128,6 +128,7 @@ final class LocalLocation {
         self.name = location.name
         self.type = location.type.rawValue
         self.sortOrder = location.sortOrder
+        self.icon = location.icon
         self.needsSync = false
         self.updatedAt = Date()
     }

@@ -130,7 +130,7 @@ final class SyncManager: ObservableObject {
                 do {
                     let _ = try await api.getHome(home.id)
                     // Exists on server, update
-                    let _: Home = try await api.updateHome(home.id, name: home.name)
+                    let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon)
                 } catch {
                     // Doesn't exist, create
                     let created = try await api.createHome(name: home.name)
@@ -254,7 +254,7 @@ final class SyncManager: ObservableObject {
         do {
             let detail = try await api.getHome(home.id)
             if home.needsSync {
-                let updated: Home = try await api.updateHome(home.id, name: home.name)
+                let updated: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon)
                 home.needsSync = false
                 local.save()
                 return updated
@@ -316,7 +316,8 @@ final class SyncManager: ObservableObject {
                 locationId: loc.id,
                 name: loc.name,
                 parentId: loc.parentId,
-                sortOrder: loc.sortOrder
+                sortOrder: loc.sortOrder,
+                icon: loc.icon
             )
             loc.update(from: updated)
             local.save()
@@ -327,7 +328,8 @@ final class SyncManager: ObservableObject {
                 name: loc.name,
                 parentId: loc.parentId,
                 type: loc.type,
-                sortOrder: loc.sortOrder
+                sortOrder: loc.sortOrder,
+                icon: loc.icon
             )
             if created.id != oldId {
                 local.remapLocationId(from: oldId, to: created.id)

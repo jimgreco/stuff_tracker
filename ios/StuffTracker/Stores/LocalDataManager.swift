@@ -402,6 +402,7 @@ final class LocalDataManager {
                     name: home.name,
                     ownerId: home.ownerId,
                     role: home.role,
+                    icon: home.icon,
                     needsSync: false
                 )
                 modelContext?.insert(localHome)
@@ -418,6 +419,7 @@ final class LocalDataManager {
             home.name = homeDetail.name
             home.ownerId = homeDetail.ownerId
             home.role = homeDetail.role
+            home.icon = homeDetail.icon
             home.needsSync = false
         }
 
@@ -440,6 +442,7 @@ final class LocalDataManager {
                     name: location.name,
                     type: location.type.rawValue,
                     sortOrder: location.sortOrder,
+                    icon: location.icon,
                     needsSync: false
                 )
                 modelContext?.insert(localLocation)
@@ -464,6 +467,7 @@ final class LocalDataManager {
                     homeId: item.homeId,
                     locationId: item.locationId,
                     name: item.name,
+                    icon: item.icon,
                     notes: item.notes,
                     quantity: item.quantity,
                     properties: item.properties,

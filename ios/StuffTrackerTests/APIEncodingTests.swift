@@ -59,7 +59,8 @@ final class APIEncodingTests: XCTestCase {
         let body = APIClient.UpdateLocationBody(
             name: "Top Floor",
             parentId: nil,
-            sortOrder: 0
+            sortOrder: 0,
+            icon: nil
         )
 
         let json = try encodedJSON(body)
@@ -75,7 +76,8 @@ final class APIEncodingTests: XCTestCase {
             name: "Top Floor",
             parentId: nil,
             type: "floor",
-            sortOrder: 0
+            sortOrder: 0,
+            icon: nil
         )
 
         let json = try encodedJSON(body)
