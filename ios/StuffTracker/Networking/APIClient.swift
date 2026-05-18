@@ -20,11 +20,7 @@ final class APIClient {
     static let shared = APIClient()
 
     #if DEBUG
-    #if targetEnvironment(simulator)
-    private let baseURL = "http://localhost:3002"
-    #else
-    private let baseURL = "http://192.168.4.45:3002"
-    #endif
+    private let baseURL = APIClient.debugBaseURL()
     #else
     private let baseURL = "https://stuff-tracker.jim-greco.com"
     #endif
@@ -37,6 +33,23 @@ final class APIClient {
     var hasToken: Bool { token != nil }
     
     func setToken(_ t: String?) { token = t }
+
+    #if DEBUG
+    private static func debugBaseURL() -> String {
+        if let rawOverride = ProcessInfo.processInfo.environment["STUFF_TRACKER_API_BASE_URL"] {
+            let override = rawOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !override.isEmpty {
+                return override
+            }
+        }
+
+        #if targetEnvironment(simulator)
+        return "http://localhost:3002"
+        #else
+        return "https://stuff-tracker.jim-greco.com"
+        #endif
+    }
+    #endif
 
     private lazy var decoder: JSONDecoder = {
         let d = JSONDecoder()

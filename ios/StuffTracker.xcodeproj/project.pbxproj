@@ -29,6 +29,7 @@
 		A020 /* TrashBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A120 /* TrashBinView.swift */; };
 		A021 /* PendingChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A121 /* PendingChangesView.swift */; };
 		A022 /* SyncUploadPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A122 /* SyncUploadPlanner.swift */; };
+		A023 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A123 /* PrivacyInfo.xcprivacy */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
@@ -71,7 +72,9 @@
 		A120 /* TrashBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrashBinView.swift; sourceTree = "<group>"; };
 		A121 /* PendingChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingChangesView.swift; sourceTree = "<group>"; };
 		A122 /* SyncUploadPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlanner.swift; sourceTree = "<group>"; };
+		A123 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B37719F62FAD719C004BBAEC /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B37719F92FADFB7C004BBAEC /* StuffTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StuffTracker.entitlements; sourceTree = "<group>"; };
 		T101 /* SyncUploadPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlannerTests.swift; sourceTree = "<group>"; };
@@ -117,6 +120,7 @@
 				B37719F92FADFB7C004BBAEC /* StuffTracker.entitlements */,
 				A101 /* StuffTrackerApp.swift */,
 				A117 /* Assets.xcassets */,
+				A123 /* PrivacyInfo.xcprivacy */,
 				AMODELS /* Models */,
 				ANET /* Networking */,
 				ASTORES /* Stores */,
@@ -171,6 +175,7 @@
 				AMAIN /* StuffTracker */,
 				TGROUP /* StuffTrackerTests */,
 				APRODUCTS /* Products */,
+				B37719F62FAD719C004BBAEC /* Info-Debug.plist */,
 				B37719F72FAD719C004BBAEC /* Info.plist */,
 			);
 			sourceTree = "<group>";
@@ -317,6 +322,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A017 /* Assets.xcassets in Resources */,
+				A023 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -511,7 +517,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_FILE = "Info-Debug.plist";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
