@@ -42,6 +42,56 @@ private func customIcon(_ icon: String?, fallback: String) -> String {
     return icon
 }
 
+// MARK: - Container collapse state
+
+final class ContainerCollapseStore: ObservableObject {
+    @Published private(set) var collapsedContainerIds: Set<String>
+
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(defaults: UserDefaults = .standard, key: String = "collapsed_container_ids_v1") {
+        self.defaults = defaults
+        self.key = key
+        self.collapsedContainerIds = Set(defaults.stringArray(forKey: key) ?? [])
+    }
+
+    func isCollapsed(_ containerId: String) -> Bool {
+        collapsedContainerIds.contains(containerId)
+    }
+
+    func toggle(_ containerId: String) {
+        setCollapsed(!isCollapsed(containerId), for: containerId)
+    }
+
+    func setCollapsed(_ collapsed: Bool, for containerId: String) {
+        guard !containerId.isEmpty else { return }
+
+        let changed: Bool
+        if collapsed {
+            changed = collapsedContainerIds.insert(containerId).inserted
+        } else {
+            changed = collapsedContainerIds.remove(containerId) != nil
+        }
+
+        if changed {
+            persist()
+        }
+    }
+
+    func prune(validContainerIds: Set<String>) {
+        let pruned = collapsedContainerIds.intersection(validContainerIds)
+        guard pruned != collapsedContainerIds else { return }
+
+        collapsedContainerIds = pruned
+        persist()
+    }
+
+    private func persist() {
+        defaults.set(collapsedContainerIds.sorted(), forKey: key)
+    }
+}
+
 // MARK: - Descendant counting
 
 private func descendantCount(of locationId: String, in home: HomeDetail) -> (locations: Int, items: Int) {
@@ -168,6 +218,8 @@ private func breadcrumbPath(for locationId: String?, homeName: String, locations
 struct HomeBoxView: View {
     let home: HomeDetail
     @ObservedObject var homeStore: HomeStore
+    @ObservedObject var collapseStore: ContainerCollapseStore
+    let isSearchActive: Bool
     @State private var isAddingFloor = false
     @State private var isAddingRoom = false
     @State private var isAddingItem = false
@@ -243,13 +295,31 @@ struct HomeBoxView: View {
             ForEach(Array(home.topLevelLocations.enumerated()), id: \.element.id) { index, location in
                 switch location.type {
                 case .floor:
-                    FloorBoxView(floor: location, home: home, homeStore: homeStore)
+                    FloorBoxView(
+                        floor: location,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
                         .padding(.horizontal, 10)
                 case .room:
-                    RoomBoxView(room: location, home: home, homeStore: homeStore)
+                    RoomBoxView(
+                        room: location,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
                         .padding(.horizontal, 10)
                 case .container:
-                    ContainerBoxView(container: location, home: home, homeStore: homeStore)
+                    ContainerBoxView(
+                        container: location,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
                         .padding(.horizontal, 10)
                 }
                 LocationDropZone(homeId: home.id, parentId: nil, insertionIndex: index + 1, homeStore: homeStore)
@@ -334,6 +404,8 @@ struct FloorBoxView: View {
     let floor: Location
     let home: HomeDetail
     @ObservedObject var homeStore: HomeStore
+    @ObservedObject var collapseStore: ContainerCollapseStore
+    let isSearchActive: Bool
     @State private var isAddingRoom = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -400,10 +472,22 @@ struct FloorBoxView: View {
             ForEach(Array(home.children(of: floor.id).enumerated()), id: \.element.id) { index, child in
                 switch child.type {
                 case .room:
-                    RoomBoxView(room: child, home: home, homeStore: homeStore)
+                    RoomBoxView(
+                        room: child,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
                         .padding(.horizontal, 8)
                 default:
-                    ContainerBoxView(container: child, home: home, homeStore: homeStore)
+                    ContainerBoxView(
+                        container: child,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
                         .padding(.horizontal, 8)
                 }
                 LocationDropZone(homeId: home.id, parentId: floor.id, insertionIndex: index + 1, homeStore: homeStore)
@@ -475,6 +559,8 @@ struct RoomBoxView: View {
     let room: Location
     let home: HomeDetail
     @ObservedObject var homeStore: HomeStore
+    @ObservedObject var collapseStore: ContainerCollapseStore
+    let isSearchActive: Bool
     @State private var isAddingContainer = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -541,7 +627,13 @@ struct RoomBoxView: View {
             // Child containers
             LocationDropZone(homeId: home.id, parentId: room.id, insertionIndex: 0, homeStore: homeStore)
             ForEach(Array(home.children(of: room.id).enumerated()), id: \.element.id) { index, container in
-                ContainerBoxView(container: container, home: home, homeStore: homeStore)
+                ContainerBoxView(
+                    container: container,
+                    home: home,
+                    homeStore: homeStore,
+                    collapseStore: collapseStore,
+                    isSearchActive: isSearchActive
+                )
                     .padding(.horizontal, 8)
                 LocationDropZone(homeId: home.id, parentId: room.id, insertionIndex: index + 1, homeStore: homeStore)
             }
@@ -612,6 +704,8 @@ struct ContainerBoxView: View {
     let container: Location
     let home: HomeDetail
     @ObservedObject var homeStore: HomeStore
+    @ObservedObject var collapseStore: ContainerCollapseStore
+    let isSearchActive: Bool
     @State private var isAddingChild = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -633,9 +727,46 @@ struct ContainerBoxView: View {
         return d.locations > 0 || d.items > 0
     }
 
+    private var isCollapsed: Bool {
+        !isSearchActive && collapseStore.isCollapsed(container.id)
+    }
+
+    private var collapsedSummary: String {
+        let d = descendantCount(of: container.id, in: home)
+        let locationText = d.locations == 1 ? "1 container" : "\(d.locations) containers"
+        let itemText = d.items == 1 ? "1 item" : "\(d.items) items"
+
+        switch (d.locations, d.items) {
+        case (0, 0):
+            return "Empty"
+        case (0, _):
+            return itemText
+        case (_, 0):
+            return locationText
+        default:
+            return "\(locationText), \(itemText)"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        collapseStore.toggle(container.id)
+                    }
+                } label: {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isSearchActive)
+                .opacity(isSearchActive ? 0.5 : 1)
+                .accessibilityLabel(isCollapsed ? "Expand \(container.name)" : "Collapse \(container.name)")
+
                 RenameableHeader(
                     name: container.name, icon: currentIcon, font: .subheadline.bold(),
                     isRenaming: $isRenaming, renameName: $renameName
@@ -644,12 +775,22 @@ struct ContainerBoxView: View {
                 }
                 .draggable(DraggedLocation(id: container.id, homeId: home.id, parentId: container.parentId))
                 Spacer()
+                if isCollapsed {
+                    Text(collapsedSummary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if !isRenaming {
                     Menu {
                         Button { renameName = container.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
                         Divider()
-                        Button { newName = ""; isAddingChild = true } label: { Label("Add Container", systemImage: "plus") }
+                        Button {
+                            collapseStore.setCollapsed(false, for: container.id)
+                            newName = ""
+                            isAddingChild = true
+                        } label: { Label("Add Container", systemImage: "plus") }
                         Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: container.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
                         Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: container.id) } label: { Label("Order containers by name", systemImage: "arrow.up.arrow.down") }
@@ -663,35 +804,43 @@ struct ContainerBoxView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 4)
 
-            // Nested containers
-            LocationDropZone(homeId: home.id, parentId: container.id, insertionIndex: 0, homeStore: homeStore)
-            ForEach(Array(home.children(of: container.id).enumerated()), id: \.element.id) { index, child in
-                ContainerBoxView(container: child, home: home, homeStore: homeStore)
-                    .padding(.horizontal, 6)
-                LocationDropZone(homeId: home.id, parentId: container.id, insertionIndex: index + 1, homeStore: homeStore)
-            }
+            if !isCollapsed {
+                // Nested containers
+                LocationDropZone(homeId: home.id, parentId: container.id, insertionIndex: 0, homeStore: homeStore)
+                ForEach(Array(home.children(of: container.id).enumerated()), id: \.element.id) { index, child in
+                    ContainerBoxView(
+                        container: child,
+                        home: home,
+                        homeStore: homeStore,
+                        collapseStore: collapseStore,
+                        isSearchActive: isSearchActive
+                    )
+                        .padding(.horizontal, 6)
+                    LocationDropZone(homeId: home.id, parentId: container.id, insertionIndex: index + 1, homeStore: homeStore)
+                }
 
-            // Items after containers
-            let containerItems = home.items(in: container.id)
-            ItemChipsView(items: containerItems, homeStore: homeStore, homeId: home.id, locationId: container.id) {
-                newItemName = ""
-                isAddingItem = true
-            }
-            .padding(.horizontal, 10)
+                // Items after containers
+                let containerItems = home.items(in: container.id)
+                ItemChipsView(items: containerItems, homeStore: homeStore, homeId: home.id, locationId: container.id) {
+                    newItemName = ""
+                    isAddingItem = true
+                }
+                .padding(.horizontal, 10)
 
-            if isAddingChild {
-                InlineAddField(placeholder: "Container name", text: $newName) {
-                    let name = newName; newName = ""; isAddingChild = false
-                    Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: container.id, type: "container") }
-                } onCancel: { newName = ""; isAddingChild = false }
-                .padding(.horizontal, 10).padding(.top, 4)
-            }
-            if isAddingItem {
-                InlineAddField(placeholder: "Item name", text: $newItemName) {
-                    let name = newItemName; newItemName = ""; isAddingItem = false
-                    Task { await homeStore.createItem(homeId: home.id, name: name, locationId: container.id) }
-                } onCancel: { newItemName = ""; isAddingItem = false }
-                .padding(.horizontal, 10).padding(.top, 4)
+                if isAddingChild {
+                    InlineAddField(placeholder: "Container name", text: $newName) {
+                        let name = newName; newName = ""; isAddingChild = false
+                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: container.id, type: "container") }
+                    } onCancel: { newName = ""; isAddingChild = false }
+                    .padding(.horizontal, 10).padding(.top, 4)
+                }
+                if isAddingItem {
+                    InlineAddField(placeholder: "Item name", text: $newItemName) {
+                        let name = newItemName; newItemName = ""; isAddingItem = false
+                        Task { await homeStore.createItem(homeId: home.id, name: name, locationId: container.id) }
+                    } onCancel: { newItemName = ""; isAddingItem = false }
+                    .padding(.horizontal, 10).padding(.top, 4)
+                }
             }
         }
         .padding(.bottom, 6)

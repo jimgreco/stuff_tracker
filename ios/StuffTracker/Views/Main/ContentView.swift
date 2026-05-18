@@ -17,6 +17,7 @@ struct BreadcrumbPreferenceKey: PreferenceKey {
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
     @StateObject private var homeStore = HomeStore()
+    @StateObject private var collapseStore = ContainerCollapseStore()
     @State private var searchText = ""
     @State private var isAddingHome = false
     @State private var newHomeName = ""
@@ -48,7 +49,12 @@ struct ContentView: View {
                                     HomeDropZone(insertionIndex: 0, homeStore: homeStore)
                                 }
                                 ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
-                                    HomeBoxView(home: home, homeStore: homeStore)
+                                    HomeBoxView(
+                                        home: home,
+                                        homeStore: homeStore,
+                                        collapseStore: collapseStore,
+                                        isSearchActive: !searchText.isEmpty
+                                    )
                                     if searchText.isEmpty {
                                         HomeDropZone(insertionIndex: index + 1, homeStore: homeStore)
                                     }
@@ -141,6 +147,9 @@ struct ContentView: View {
                 Text(homeStore.errorMessage ?? "")
             }
             .task { await homeStore.loadHomes() }
+            .onReceive(homeStore.$homeDetails) { homes in
+                collapseStore.prune(validContainerIds: validContainerIds(in: homes))
+            }
         }
     }
 
@@ -242,6 +251,15 @@ struct ContentView: View {
                 items: filteredItems
             )
         }
+    }
+
+    private func validContainerIds(in homes: [HomeDetail]) -> Set<String> {
+        Set(
+            homes
+                .flatMap(\.locations)
+                .filter { $0.type == .container }
+                .map(\.id)
+        )
     }
 }
 

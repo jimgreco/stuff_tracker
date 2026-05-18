@@ -109,4 +109,52 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(detail.locations.map(\.id), ["loc-1"])
         XCTAssertEqual(detail.items.map(\.id), ["item-1"])
     }
+
+    func testContainerCollapseStorePersistsCollapsedIds() {
+        let suiteName = "ContainerCollapseStoreTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let key = "collapsed-containers"
+        let store = ContainerCollapseStore(defaults: defaults, key: key)
+        XCTAssertFalse(store.isCollapsed("container-1"))
+
+        store.toggle("container-1")
+        XCTAssertTrue(store.isCollapsed("container-1"))
+
+        let reloaded = ContainerCollapseStore(defaults: defaults, key: key)
+        XCTAssertTrue(reloaded.isCollapsed("container-1"))
+
+        reloaded.setCollapsed(false, for: "container-1")
+        let cleared = ContainerCollapseStore(defaults: defaults, key: key)
+        XCTAssertFalse(cleared.isCollapsed("container-1"))
+    }
+
+    func testContainerCollapseStorePrunesRemovedContainers() {
+        let suiteName = "ContainerCollapseStoreTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let key = "collapsed-containers"
+        let store = ContainerCollapseStore(defaults: defaults, key: key)
+        store.setCollapsed(true, for: "container-1")
+        store.setCollapsed(true, for: "container-2")
+
+        store.prune(validContainerIds: ["container-2"])
+
+        XCTAssertFalse(store.isCollapsed("container-1"))
+        XCTAssertTrue(store.isCollapsed("container-2"))
+
+        let reloaded = ContainerCollapseStore(defaults: defaults, key: key)
+        XCTAssertFalse(reloaded.isCollapsed("container-1"))
+        XCTAssertTrue(reloaded.isCollapsed("container-2"))
+    }
 }
