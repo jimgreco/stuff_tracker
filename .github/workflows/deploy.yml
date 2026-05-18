@@ -3,18 +3,14 @@ name: Deploy to EC2
 on:
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy.yml'
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    outputs:
+      run_deploy: ${{ steps.changes.outputs.run_deploy }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -42,8 +38,41 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect backend changes
+        id: changes
+        working-directory: .
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            changed_files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            changed_files=$(git ls-tree -r --name-only HEAD)
+          else
+            changed_files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          fi
+
+          printf '%s\n' "$changed_files"
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^(backend/|\.github/workflows/deploy\.yml$)'; then
+            echo "run_backend=true" >> "$GITHUB_OUTPUT"
+            echo "run_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_backend=false" >> "$GITHUB_OUTPUT"
+            echo "run_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No backend changes
+        if: steps.changes.outputs.run_backend != 'true'
+        working-directory: .
+        run: echo "No backend changes detected; required verify check satisfied."
 
       - name: Set up Node
+        if: steps.changes.outputs.run_backend == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -51,19 +80,23 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
+        if: steps.changes.outputs.run_backend == 'true'
         run: npm ci
 
       - name: Typecheck
+        if: steps.changes.outputs.run_backend == 'true'
         run: npm run build
 
       - name: Test
+        if: steps.changes.outputs.run_backend == 'true'
         run: npm test
 
       - name: Audit production dependencies
+        if: steps.changes.outputs.run_backend == 'true'
         run: npm audit --omit=dev
 
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.verify.outputs.run_deploy == 'true'
     needs: verify
     runs-on: ubuntu-latest
     steps:
