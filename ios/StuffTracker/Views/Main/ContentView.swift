@@ -17,7 +17,7 @@ struct BreadcrumbPreferenceKey: PreferenceKey {
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
     @StateObject private var homeStore = HomeStore()
-    @StateObject private var collapseStore = ContainerCollapseStore()
+    @StateObject private var collapseStore = HierarchyCollapseStore()
     @State private var searchText = ""
     @State private var isAddingHome = false
     @State private var newHomeName = ""
@@ -148,7 +148,7 @@ struct ContentView: View {
             }
             .task { await homeStore.loadHomes() }
             .onReceive(homeStore.$homeDetails) { homes in
-                collapseStore.prune(validContainerIds: validContainerIds(in: homes))
+                collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
             }
         }
     }
@@ -253,13 +253,14 @@ struct ContentView: View {
         }
     }
 
-    private func validContainerIds(in homes: [HomeDetail]) -> Set<String> {
-        Set(
+    private func validCollapsibleNodes(in homes: [HomeDetail]) -> Set<CollapsibleTreeNode> {
+        var nodes = Set(homes.map { CollapsibleTreeNode.home($0.id) })
+        nodes.formUnion(
             homes
                 .flatMap(\.locations)
-                .filter { $0.type == .container }
-                .map(\.id)
+                .map { CollapsibleTreeNode.location($0.id) }
         )
+        return nodes
     }
 }
 

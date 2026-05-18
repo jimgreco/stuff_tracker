@@ -110,8 +110,8 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(detail.items.map(\.id), ["item-1"])
     }
 
-    func testContainerCollapseStorePersistsCollapsedIds() {
-        let suiteName = "ContainerCollapseStoreTests.\(UUID().uuidString)"
+    func testHierarchyCollapseStorePersistsCollapsedNodes() {
+        let suiteName = "HierarchyCollapseStoreTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Expected isolated UserDefaults suite")
             return
@@ -119,23 +119,28 @@ final class ModelBehaviorTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let key = "collapsed-containers"
-        let store = ContainerCollapseStore(defaults: defaults, key: key)
-        XCTAssertFalse(store.isCollapsed("container-1"))
+        let key = "collapsed-nodes"
+        let store = HierarchyCollapseStore(defaults: defaults, key: key)
+        XCTAssertFalse(store.isCollapsed(.home("home-1")))
+        XCTAssertFalse(store.isCollapsed(.location("room-1")))
 
-        store.toggle("container-1")
-        XCTAssertTrue(store.isCollapsed("container-1"))
+        store.toggle(.home("home-1"))
+        store.setCollapsed(true, for: .location("room-1"))
+        XCTAssertTrue(store.isCollapsed(.home("home-1")))
+        XCTAssertTrue(store.isCollapsed(.location("room-1")))
 
-        let reloaded = ContainerCollapseStore(defaults: defaults, key: key)
-        XCTAssertTrue(reloaded.isCollapsed("container-1"))
+        let reloaded = HierarchyCollapseStore(defaults: defaults, key: key)
+        XCTAssertTrue(reloaded.isCollapsed(.home("home-1")))
+        XCTAssertTrue(reloaded.isCollapsed(.location("room-1")))
 
-        reloaded.setCollapsed(false, for: "container-1")
-        let cleared = ContainerCollapseStore(defaults: defaults, key: key)
-        XCTAssertFalse(cleared.isCollapsed("container-1"))
+        reloaded.setCollapsed(false, for: .home("home-1"))
+        let cleared = HierarchyCollapseStore(defaults: defaults, key: key)
+        XCTAssertFalse(cleared.isCollapsed(.home("home-1")))
+        XCTAssertTrue(cleared.isCollapsed(.location("room-1")))
     }
 
-    func testContainerCollapseStorePrunesRemovedContainers() {
-        let suiteName = "ContainerCollapseStoreTests.\(UUID().uuidString)"
+    func testHierarchyCollapseStorePrunesRemovedNodes() {
+        let suiteName = "HierarchyCollapseStoreTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             XCTFail("Expected isolated UserDefaults suite")
             return
@@ -143,18 +148,40 @@ final class ModelBehaviorTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.removePersistentDomain(forName: suiteName)
 
-        let key = "collapsed-containers"
-        let store = ContainerCollapseStore(defaults: defaults, key: key)
-        store.setCollapsed(true, for: "container-1")
-        store.setCollapsed(true, for: "container-2")
+        let key = "collapsed-nodes"
+        let store = HierarchyCollapseStore(defaults: defaults, key: key)
+        store.setCollapsed(true, for: .home("home-1"))
+        store.setCollapsed(true, for: .location("room-1"))
+        store.setCollapsed(true, for: .location("container-1"))
 
-        store.prune(validContainerIds: ["container-2"])
+        store.prune(validNodes: [.home("home-1"), .location("container-1")])
 
-        XCTAssertFalse(store.isCollapsed("container-1"))
-        XCTAssertTrue(store.isCollapsed("container-2"))
+        XCTAssertTrue(store.isCollapsed(.home("home-1")))
+        XCTAssertFalse(store.isCollapsed(.location("room-1")))
+        XCTAssertTrue(store.isCollapsed(.location("container-1")))
 
-        let reloaded = ContainerCollapseStore(defaults: defaults, key: key)
-        XCTAssertFalse(reloaded.isCollapsed("container-1"))
-        XCTAssertTrue(reloaded.isCollapsed("container-2"))
+        let reloaded = HierarchyCollapseStore(defaults: defaults, key: key)
+        XCTAssertTrue(reloaded.isCollapsed(.home("home-1")))
+        XCTAssertFalse(reloaded.isCollapsed(.location("room-1")))
+        XCTAssertTrue(reloaded.isCollapsed(.location("container-1")))
+    }
+
+    func testHierarchyCollapseStoreMigratesLegacyContainerIds() {
+        let suiteName = "HierarchyCollapseStoreTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let key = "collapsed-nodes"
+        let legacyKey = "legacy-collapsed-containers"
+        defaults.set(["container-1"], forKey: legacyKey)
+
+        let store = HierarchyCollapseStore(defaults: defaults, key: key, legacyContainerKey: legacyKey)
+
+        XCTAssertTrue(store.isCollapsed(.location("container-1")))
+        XCTAssertEqual(defaults.stringArray(forKey: key), ["location:container-1"])
     }
 }
