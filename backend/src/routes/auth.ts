@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import appleSignin from 'apple-signin-auth';
 import { pool } from '../db/pool';
+import { readAppleFullName, readAuthString } from '../lib/authPayload';
 import { signToken } from '../lib/jwt';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 
@@ -28,7 +29,7 @@ router.post('/dev', async (req: Request, res: Response) => {
 
 // ── Google Sign-In (iOS sends the ID token directly) ──────────────────────────
 router.post('/google', async (req: Request, res: Response) => {
-  const { idToken } = req.body;
+  const idToken = readAuthString(req.body, 'idToken', 'id_token');
   if (!idToken) {
     res.status(400).json({ error: 'idToken required' });
     return;
@@ -56,7 +57,8 @@ router.post('/google', async (req: Request, res: Response) => {
 
 // ── Apple Sign-In ──────────────────────────────────────────────────────────────
 router.post('/apple', async (req: Request, res: Response) => {
-  const { identityToken, fullName } = req.body;
+  const identityToken = readAuthString(req.body, 'identityToken', 'identity_token');
+  const fullName = readAppleFullName(req.body);
   if (!identityToken) {
     res.status(400).json({ error: 'identityToken required' });
     return;
@@ -70,9 +72,10 @@ router.post('/apple', async (req: Request, res: Response) => {
 
     const appleId = applePayload.sub;
     const email = applePayload.email ?? `${appleId}@privaterelay.appleid.com`;
-    const name = fullName
+    const providedName = fullName
       ? [fullName.givenName, fullName.familyName].filter(Boolean).join(' ')
-      : email;
+      : '';
+    const name = providedName || email;
 
     const user = await upsertUser({ appleId, email, name });
     res.json({ token: signToken({ userId: user.id, email: user.email }), user });

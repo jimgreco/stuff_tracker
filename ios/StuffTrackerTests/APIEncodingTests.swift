@@ -92,9 +92,38 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertTrue(json["icon"] is NSNull)
     }
 
-    private func encodedJSON<T: Encodable>(_ value: T) throws -> [String: Any] {
+    func testGoogleSignInBodyKeepsBackendCamelCaseTokenKey() throws {
+        let body = APIClient.GoogleSignInBody(idToken: "google-token")
+
+        let json = try encodedJSON(body, keyEncodingStrategy: .useDefaultKeys)
+
+        XCTAssertEqual(json["idToken"] as? String, "google-token")
+        XCTAssertFalse(json.keys.contains("id_token"))
+    }
+
+    func testAppleSignInBodyKeepsBackendCamelCaseTokenAndNameKeys() throws {
+        var name = PersonNameComponents()
+        name.givenName = "Jane"
+        name.familyName = "Appleseed"
+        let body = APIClient.AppleSignInBody(identityToken: "apple-token", fullName: name)
+
+        let json = try encodedJSON(body, keyEncodingStrategy: .useDefaultKeys)
+        let fullName = try XCTUnwrap(json["fullName"] as? [String: Any])
+
+        XCTAssertEqual(json["identityToken"] as? String, "apple-token")
+        XCTAssertFalse(json.keys.contains("identity_token"))
+        XCTAssertEqual(fullName["givenName"] as? String, "Jane")
+        XCTAssertEqual(fullName["familyName"] as? String, "Appleseed")
+        XCTAssertFalse(fullName.keys.contains("given_name"))
+        XCTAssertFalse(fullName.keys.contains("family_name"))
+    }
+
+    private func encodedJSON<T: Encodable>(
+        _ value: T,
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
+    ) throws -> [String: Any] {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.keyEncodingStrategy = keyEncodingStrategy
         let data = try encoder.encode(value)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }

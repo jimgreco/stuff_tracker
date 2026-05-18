@@ -44,11 +44,14 @@ final class APIClient {
         return d
     }()
 
-    private lazy var encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        return e
-    }()
+    private func encodeBody<T: Encodable>(
+        _ body: T,
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy
+    ) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = keyEncodingStrategy
+        return try encoder.encode(body)
+    }
 
     private struct ErrorResponse: Decodable {
         let error: String?
@@ -124,7 +127,8 @@ final class APIClient {
     func request<T: Decodable>(
         _ method: String,
         path: String,
-        body: (some Encodable)? = nil as String?
+        body: (some Encodable)? = nil as String?,
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
     ) async throws -> T {
         guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
@@ -132,7 +136,7 @@ final class APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         if let body {
-            req.httpBody = try encoder.encode(body)
+            req.httpBody = try encodeBody(body, keyEncodingStrategy: keyEncodingStrategy)
         }
 
         let (data, response): (Data, URLResponse)
@@ -155,13 +159,20 @@ final class APIClient {
         }
     }
 
-    func requestEmpty(_ method: String, path: String, body: (some Encodable)? = nil as String?) async throws {
+    func requestEmpty(
+        _ method: String,
+        path: String,
+        body: (some Encodable)? = nil as String?,
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
+    ) async throws {
         guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        if let body { req.httpBody = try encoder.encode(body) }
+        if let body {
+            req.httpBody = try encodeBody(body, keyEncodingStrategy: keyEncodingStrategy)
+        }
 
         let (data, response): (Data, URLResponse)
         do {
@@ -179,8 +190,34 @@ final class APIClient {
 
     // MARK: - Auth
 
+    struct GoogleSignInBody: Encodable {
+        let idToken: String
+    }
+
+    struct AppleSignInBody: Encodable {
+        let identityToken: String
+        let fullName: FullName?
+
+        struct FullName: Encodable {
+            let givenName: String?
+            let familyName: String?
+        }
+
+        init(identityToken: String, fullName: PersonNameComponents?) {
+            self.identityToken = identityToken
+            self.fullName = fullName.map {
+                FullName(givenName: $0.givenName, familyName: $0.familyName)
+            }
+        }
+    }
+
     func signInWithGoogle(idToken: String) async throws -> AuthResponse {
-        try await request("POST", path: "/auth/google", body: ["idToken": idToken])
+        try await request(
+            "POST",
+            path: "/auth/google",
+            body: GoogleSignInBody(idToken: idToken),
+            keyEncodingStrategy: .useDefaultKeys
+        )
     }
 
     #if DEBUG
@@ -198,19 +235,13 @@ final class APIClient {
     #endif
 
     func signInWithApple(identityToken: String, fullName: PersonNameComponents?) async throws -> AuthResponse {
-        struct Body: Encodable {
-            let identityToken: String
-            let fullName: FullName?
-            struct FullName: Encodable {
-                let givenName: String?
-                let familyName: String?
-            }
-        }
-        let body = Body(
-            identityToken: identityToken,
-            fullName: fullName.map { Body.FullName(givenName: $0.givenName, familyName: $0.familyName) }
+        let body = AppleSignInBody(identityToken: identityToken, fullName: fullName)
+        return try await request(
+            "POST",
+            path: "/auth/apple",
+            body: body,
+            keyEncodingStrategy: .useDefaultKeys
         )
-        return try await request("POST", path: "/auth/apple", body: body)
     }
 
     // MARK: - Homes
