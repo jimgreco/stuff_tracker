@@ -5,6 +5,7 @@ import { pool } from '../db/pool';
 import { readAppleFullName, readAuthString } from '../lib/authPayload';
 import { signToken } from '../lib/jwt';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import { upsertUser, UserIdentityConflictError } from '../lib/users';
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -50,6 +51,10 @@ router.post('/google', async (req: Request, res: Response) => {
     const user = await upsertUser({ googleId, email, name, avatarUrl: picture });
     res.json({ token: signToken({ userId: user.id, email: user.email }), user });
   } catch (err: any) {
+    if (err instanceof UserIdentityConflictError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     console.error('Google sign-in verification failed:', err);
     res.status(401).json({ error: err.message ?? 'Google token verification failed' });
   }
@@ -71,15 +76,20 @@ router.post('/apple', async (req: Request, res: Response) => {
     });
 
     const appleId = applePayload.sub;
+    const emailIsFallback = !applePayload.email;
     const email = applePayload.email ?? `${appleId}@privaterelay.appleid.com`;
     const providedName = fullName
       ? [fullName.givenName, fullName.familyName].filter(Boolean).join(' ')
       : '';
     const name = providedName || email;
 
-    const user = await upsertUser({ appleId, email, name });
+    const user = await upsertUser({ appleId, email, name, emailIsFallback });
     res.json({ token: signToken({ userId: user.id, email: user.email }), user });
   } catch (err: any) {
+    if (err instanceof UserIdentityConflictError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     console.error('Apple sign-in verification failed:', err);
     res.status(401).json({ error: err.message ?? 'Apple token verification failed' });
   }
@@ -97,30 +107,5 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   }
   res.json(rows[0]);
 });
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-async function upsertUser(params: {
-  googleId?: string;
-  appleId?: string;
-  email: string;
-  name: string;
-  avatarUrl?: string;
-}) {
-  const { googleId, appleId, name, avatarUrl } = params;
-  const email = params.email.trim().toLowerCase();
-  const { rows } = await pool.query(
-    `INSERT INTO users (email, name, avatar_url, google_id, apple_id)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (email) DO UPDATE
-       SET name = EXCLUDED.name,
-           avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
-           google_id = COALESCE(EXCLUDED.google_id, users.google_id),
-           apple_id = COALESCE(EXCLUDED.apple_id, users.apple_id),
-           updated_at = NOW()
-     RETURNING id, email, name, avatar_url`,
-    [email, name, avatarUrl ?? null, googleId ?? null, appleId ?? null]
-  );
-  return rows[0];
-}
 
 export default router;

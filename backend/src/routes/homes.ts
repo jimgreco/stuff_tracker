@@ -3,6 +3,7 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canAdmin } from '../lib/access';
 import { HomeSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
+import { signItemsAttachmentUrls } from '../lib/attachmentResponses';
 
 const router = Router();
 router.use(requireAuth);
@@ -55,7 +56,12 @@ router.get('/:homeId', async (req: AuthRequest, res: Response) => {
   ]);
 
   if (!homeRes.rows[0]) { res.status(404).json({ error: 'Home not found' }); return; }
-  res.json({ ...homeRes.rows[0], role, locations: locRes.rows, items: itemRes.rows });
+  res.json({
+    ...homeRes.rows[0],
+    role,
+    locations: locRes.rows,
+    items: await signItemsAttachmentUrls(itemRes.rows),
+  });
 });
 
 // ── Update home ────────────────────────────────────────────────────────────────

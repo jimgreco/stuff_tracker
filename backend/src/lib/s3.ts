@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getIntegerEnv } from './env';
 
 export type ItemUploadKind = 'photo' | 'document';
 
@@ -11,11 +12,19 @@ export class S3ConfigurationError extends Error {
   }
 }
 
+export class UploadLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadLimitError';
+  }
+}
+
 interface UploadRequest {
   homeId: string;
   kind: ItemUploadKind;
   fileName: string;
   contentType: string;
+  sizeBytes: number;
 }
 
 interface UploadResponse {
@@ -39,6 +48,12 @@ function s3Bucket(): string {
   return bucket;
 }
 
+export function maxUploadBytes(kind: ItemUploadKind): number {
+  return kind === 'photo'
+    ? getIntegerEnv('MAX_PHOTO_UPLOAD_BYTES', 10 * 1024 * 1024)
+    : getIntegerEnv('MAX_DOCUMENT_UPLOAD_BYTES', 25 * 1024 * 1024);
+}
+
 function client(): S3Client {
   if (!s3Client) {
     s3Client = new S3Client({ region: s3Region() });
@@ -56,7 +71,7 @@ function encodeKey(key: string): string {
   return key.split('/').map(encodeURIComponent).join('/');
 }
 
-function publicFileUrl(bucket: string, region: string, key: string): string {
+function stableFileUrl(bucket: string, region: string, key: string): string {
   const configuredBase = process.env.S3_PUBLIC_BASE_URL?.replace(/\/+$/, '');
   if (configuredBase) {
     return `${configuredBase}/${encodeKey(key)}`;
@@ -70,6 +85,10 @@ function publicFileUrl(bucket: string, region: string, key: string): string {
 }
 
 export async function createItemAttachmentUpload(request: UploadRequest): Promise<UploadResponse> {
+  if (request.sizeBytes > maxUploadBytes(request.kind)) {
+    throw new UploadLimitError(`${request.kind} upload exceeds the configured size limit`);
+  }
+
   const bucket = s3Bucket();
   const region = s3Region();
   const fileName = safeFileName(request.fileName, request.kind);
@@ -80,12 +99,66 @@ export async function createItemAttachmentUpload(request: UploadRequest): Promis
     Bucket: bucket,
     Key: key,
     ContentType: request.contentType,
+    ContentLength: request.sizeBytes,
   });
 
   return {
     uploadUrl: await getSignedUrl(client(), command, { expiresIn: 5 * 60 }),
-    fileUrl: publicFileUrl(bucket, region, key),
+    fileUrl: await createItemAttachmentReadUrl(key),
     key,
     headers,
   };
+}
+
+export async function createItemAttachmentReadUrl(key: string): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: s3Bucket(),
+    Key: key,
+  });
+
+  return getSignedUrl(client(), command, {
+    expiresIn: getIntegerEnv('S3_READ_URL_TTL_SECONDS', 60 * 60),
+  });
+}
+
+export async function signStoredAttachmentUrl(url: string): Promise<string> {
+  const key = attachmentKeyFromUrl(url);
+  return key ? createItemAttachmentReadUrl(key) : url;
+}
+
+export function attachmentKeyFromUrl(value: string): string | undefined {
+  if (value.startsWith('homes/')) {
+    return value;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+
+  const configuredBase = process.env.S3_PUBLIC_BASE_URL?.replace(/\/+$/, '');
+  if (configuredBase && value.startsWith(`${configuredBase}/`)) {
+    return decodeKeyPath(value.slice(configuredBase.length + 1).split('?')[0]);
+  }
+
+  const bucket = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET;
+  if (!bucket) {
+    return undefined;
+  }
+
+  if (parsed.hostname === `${bucket}.s3.amazonaws.com` || parsed.hostname.startsWith(`${bucket}.s3.`)) {
+    return decodeKeyPath(parsed.pathname.replace(/^\/+/, ''));
+  }
+
+  return undefined;
+}
+
+export function stableAttachmentUrlForKey(key: string): string {
+  return stableFileUrl(s3Bucket(), s3Region(), key);
+}
+
+function decodeKeyPath(path: string): string {
+  return path.split('/').map(decodeURIComponent).join('/');
 }

@@ -19,6 +19,10 @@ enum APIError: LocalizedError {
 final class APIClient {
     static let shared = APIClient()
 
+    private init() {
+        SecureTokenStore.migrateLegacyTokenIfNeeded()
+    }
+
     #if DEBUG
     private let baseURL = APIClient.debugBaseURL()
     #else
@@ -26,8 +30,8 @@ final class APIClient {
     #endif
 
     private var token: String? {
-        get { UserDefaults.standard.string(forKey: "jwt_token") }
-        set { UserDefaults.standard.set(newValue, forKey: "jwt_token") }
+        get { SecureTokenStore.token }
+        set { SecureTokenStore.token = newValue }
     }
 
     var hasToken: Bool { token != nil }
@@ -417,6 +421,7 @@ final class APIClient {
         let kind: ItemAttachmentKind
         let fileName: String
         let contentType: String
+        let sizeBytes: Int
     }
 
     func createItem(homeId: String, body: ItemBody) async throws -> Item {
@@ -446,7 +451,7 @@ final class APIClient {
         let upload: ItemUploadResponse = try await request(
             "POST",
             path: "/homes/\(homeId)/items/uploads",
-            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType)
+            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType, sizeBytes: data.count)
         )
 
         guard let url = URL(string: upload.uploadUrl) else { throw APIError.invalidURL }

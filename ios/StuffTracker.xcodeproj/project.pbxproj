@@ -30,6 +30,7 @@
 		A021 /* PendingChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A121 /* PendingChangesView.swift */; };
 		A022 /* SyncUploadPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A122 /* SyncUploadPlanner.swift */; };
 		A023 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A123 /* PrivacyInfo.xcprivacy */; };
+		A024 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A124 /* SecureTokenStore.swift */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
@@ -73,6 +74,7 @@
 		A121 /* PendingChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingChangesView.swift; sourceTree = "<group>"; };
 		A122 /* SyncUploadPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlanner.swift; sourceTree = "<group>"; };
 		A123 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A124 /* SecureTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureTokenStore.swift; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B37719F62FAD719C004BBAEC /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				A103 /* APIClient.swift */,
+				A124 /* SecureTokenStore.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -385,6 +388,7 @@
 				A020 /* TrashBinView.swift in Sources */,
 				A021 /* PendingChangesView.swift in Sources */,
 				A022 /* SyncUploadPlanner.swift in Sources */,
+				A024 /* SecureTokenStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

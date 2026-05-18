@@ -1,19 +1,45 @@
 import fs from 'fs';
 import path from 'path';
 import { pool } from './pool';
-import { locationTypeConstraintSql } from './locationTypeConstraint';
 
 async function migrate() {
-  const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const migrationsDir = path.join(__dirname, 'migrations');
+  const migrations = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort();
+
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    await client.query(sql);
-    await client.query(locationTypeConstraintSql());
-    await client.query('COMMIT');
-    console.log('Migration complete');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    for (const file of migrations) {
+      const version = path.basename(file, '.sql');
+      const applied = await client.query(
+        'SELECT 1 FROM schema_migrations WHERE version = $1',
+        [version]
+      );
+      if (applied.rows[0]) {
+        continue;
+      }
+
+      await client.query('BEGIN');
+      await client.query(fs.readFileSync(path.join(migrationsDir, file), 'utf8'));
+      await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [version]);
+      await client.query('COMMIT');
+      console.log(`Applied migration ${version}`);
+    }
+
+    console.log('Migrations complete');
   } catch (err) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {}
     throw err;
   } finally {
     client.release();

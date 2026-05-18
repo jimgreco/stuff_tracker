@@ -14,5 +14,6 @@ RUN npm ci --omit=dev
 COPY scripts ./scripts
 COPY --from=builder /app/dist ./dist
 COPY src/db/schema.sql ./dist/db/schema.sql
+COPY src/db/migrations ./dist/db/migrations
 EXPOSE 3002
 CMD ["sh", "-c", "npm run db:migrate && node dist/index.js"]

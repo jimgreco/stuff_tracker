@@ -86,13 +86,22 @@ test('item upload validation accepts photos and documents', () => {
     kind: 'photo',
     file_name: 'chair.jpg',
     content_type: 'image/jpeg',
+    size_bytes: 1024,
   }).kind, 'photo');
 
   assert.equal(ItemUploadSchema.parse({
     kind: 'document',
     file_name: 'manual.pdf',
     content_type: 'application/pdf',
+    size_bytes: 2048,
   }).kind, 'document');
+
+  assert.throws(() => ItemUploadSchema.parse({
+    kind: 'photo',
+    file_name: 'chair.jpg',
+    content_type: 'image/jpeg',
+    size_bytes: 0,
+  }));
 });
 
 test('location type migration constraint stays in sync with accepted schema values', () => {
@@ -109,6 +118,7 @@ test('location type migration constraint stays in sync with accepted schema valu
 test('fresh database schema allows floor locations', () => {
   const schemaSql = fs.readFileSync(path.join(backendRoot, 'src/db/schema.sql'), 'utf8');
 
+  assert.match(schemaSql, /CREATE EXTENSION IF NOT EXISTS pgcrypto/);
   assert.match(schemaSql, /type IN \('floor', 'room', 'container'\)/);
   assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT/);
   assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT/);

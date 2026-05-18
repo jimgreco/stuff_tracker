@@ -3,20 +3,26 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
 import { ItemSchema, ItemUploadSchema } from '../lib/schemas';
-import { createItemAttachmentUpload, S3ConfigurationError } from '../lib/s3';
+import { createItemAttachmentUpload, maxUploadBytes, S3ConfigurationError, UploadLimitError } from '../lib/s3';
+import { signItemAttachmentUrls, signItemsAttachmentUrls } from '../lib/attachmentResponses';
+import { uploadRateLimit } from '../lib/rateLimits';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
 
 // ── Create a direct-to-S3 upload URL for item attachments ─────────────────────
-router.post('/uploads', async (req: AuthRequest, res: Response) => {
+router.post('/uploads', uploadRateLimit, async (req: AuthRequest, res: Response) => {
   const { homeId } = req.params;
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  const { kind, file_name, content_type } = ItemUploadSchema.parse(req.body);
+  const { kind, file_name, content_type, size_bytes } = ItemUploadSchema.parse(req.body);
   if (kind === 'photo' && !content_type.startsWith('image/')) {
     res.status(400).json({ error: 'Photo uploads must use an image content type' });
+    return;
+  }
+  if (size_bytes > maxUploadBytes(kind)) {
+    res.status(413).json({ error: `${kind} upload exceeds the configured size limit` });
     return;
   }
 
@@ -26,9 +32,14 @@ router.post('/uploads', async (req: AuthRequest, res: Response) => {
       kind,
       fileName: file_name,
       contentType: content_type,
+      sizeBytes: size_bytes,
     });
     res.status(201).json(upload);
   } catch (err) {
+    if (err instanceof UploadLimitError) {
+      res.status(413).json({ error: err.message });
+      return;
+    }
     if (err instanceof S3ConfigurationError) {
       res.status(503).json({ error: err.message });
       return;
@@ -86,7 +97,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       req.user!.userId,
     ]
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json(await signItemAttachmentUrls(rows[0]));
 });
 
 // ── Update item ────────────────────────────────────────────────────────────────
@@ -140,7 +151,7 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     values
   );
   if (!rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }
-  res.json(rows[0]);
+  res.json(await signItemAttachmentUrls(rows[0]));
 });
 
 // ── Delete item ────────────────────────────────────────────────────────────────
@@ -173,7 +184,7 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
      LIMIT 50`,
     [homeId, q]
   );
-  res.json(rows);
+  res.json(await signItemsAttachmentUrls(rows));
 });
 
 export default router;

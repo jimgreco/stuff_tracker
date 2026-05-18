@@ -32,12 +32,11 @@ CREATE TABLE IF NOT EXISTS home_members (
   PRIMARY KEY (home_id, user_id)
 );
 
--- Locations: rooms, containers, nested containers — all in one self-referencing table
--- type: 'room' (child of home), 'container' (child of room or container)
+-- Locations
 CREATE TABLE IF NOT EXISTS locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   home_id UUID NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
-  parent_id UUID REFERENCES locations(id) ON DELETE CASCADE, -- NULL means direct child of home (i.e. a room)
+  parent_id UUID REFERENCES locations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('floor', 'room', 'container')),
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -46,11 +45,11 @@ CREATE TABLE IF NOT EXISTS locations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Items (stuff)
+-- Items
 CREATE TABLE IF NOT EXISTS items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   home_id UUID NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
-  location_id UUID REFERENCES locations(id) ON DELETE SET NULL, -- NULL means "in the home directly"
+  location_id UUID REFERENCES locations(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   icon TEXT,
   notes TEXT,
@@ -78,6 +77,11 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS document_name TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS document_content_type TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS properties JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS documents JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+ALTER TABLE locations DROP CONSTRAINT IF EXISTS locations_type_check;
+ALTER TABLE locations
+  ADD CONSTRAINT locations_type_check
+  CHECK (type IN ('floor', 'room', 'container'));
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_locations_home_id ON locations(home_id);

@@ -6,6 +6,11 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/testflight.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/testflight.yml'
   workflow_dispatch:
 
 jobs:
@@ -40,6 +45,7 @@ jobs:
             test
 
   build:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: macos-latest
     timeout-minutes: 45

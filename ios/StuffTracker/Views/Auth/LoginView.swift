@@ -147,7 +147,7 @@ struct GoogleSignInButton: View {
             signInWithGoogle()
         } label: {
             HStack(spacing: 12) {
-                Image("google_logo") // add to Assets.xcassets
+                Image("google_logo")
                     .resizable()
                     .frame(width: 20, height: 20)
                 Text("Sign in with Google")
@@ -191,12 +191,16 @@ struct GoogleSignInButton: View {
         // Use signIn with presenting view controller - this should handle passkeys
         GIDSignIn.sharedInstance.signIn(withPresenting: rootVC) { result, error in
             if let error {
-                authStore.errorMessage = error.localizedDescription
+                Task { @MainActor in
+                    authStore.errorMessage = error.localizedDescription
+                }
                 return
             }
             guard let user = result?.user,
                   let idToken = user.idToken?.tokenString else { 
-                authStore.errorMessage = "Failed to get ID token from Google"
+                Task { @MainActor in
+                    authStore.errorMessage = "Failed to get ID token from Google"
+                }
                 return 
             }
             Task { await authStore.signInWithGoogle(idToken: idToken) }

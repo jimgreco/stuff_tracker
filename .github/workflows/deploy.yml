@@ -6,13 +6,39 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stuff_tracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stuff_tracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stuff_tracker_test
+      JWT_SECRET: ci-test-secret-that-is-long-enough-for-runtime
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      APPLE_BUNDLE_ID: com.jimgreco.stufftracker
+      NODE_ENV: test
+      RUN_DATABASE_INTEGRATION_TESTS: 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,6 +63,7 @@ jobs:
         run: npm audit --omit=dev
 
   deploy:
+    if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
     steps:
@@ -45,9 +72,12 @@ jobs:
 
       - name: Transfer backend to EC2
         run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
+          printf '%s\n' "${{ secrets.EC2_SSH_KNOWN_HOSTS }}" > known_hosts
+          chmod 600 known_hosts
+          test -s known_hosts
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
             --exclude '.git' \
             --exclude '.DS_Store' \
             --exclude 'node_modules' \
@@ -56,5 +86,5 @@ jobs:
 
       - name: Rebuild stuff container
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "cd ~/deploy && docker-compose up -d --build stuff && docker system prune -f"

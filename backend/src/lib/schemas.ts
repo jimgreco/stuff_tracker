@@ -40,6 +40,7 @@ export const ItemUploadSchema = z.object({
   kind: z.enum(['photo', 'document']),
   file_name: z.string().min(1).max(255),
   content_type: z.string().min(1).max(255),
+  size_bytes: z.number().int().min(1).max(50 * 1024 * 1024),
 });
 
 export const HomeNameSchema = z.object({
