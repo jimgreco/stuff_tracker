@@ -17,6 +17,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Protect `main` with required `verify` and `test` checks.
 - [x] Pin EC2 SSH host keys in `EC2_SSH_KNOWN_HOSTS`.
 - [x] Remove deploy-time SSH host-key scanning fallback.
+- [x] Move GitHub Actions checkout and Node setup actions to Node 24-ready major versions.
 
 ## Next
 
@@ -27,7 +28,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; document restore steps and expected recovery time.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
-- [ ] Add dependency and supply-chain automation: Dependabot, GitHub code scanning, secret scanning review, and GitHub Actions Node 24 migration.
+- [ ] Add dependency and supply-chain automation: Dependabot, GitHub code scanning, and secret scanning review.
 - [ ] Add post-deploy smoke tests: health, auth, upload-signing, and basic item CRUD.
 - [ ] Add an operational runbook for incident response, credential rotation, failed deploy rollback, and database restore.
 
