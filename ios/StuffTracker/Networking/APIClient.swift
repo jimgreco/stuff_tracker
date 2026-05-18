@@ -417,11 +417,18 @@ final class APIClient {
         let headers: [String: String]
     }
 
-    private struct ItemUploadBody: Encodable {
+    struct ItemUploadBody: Encodable {
         let kind: ItemAttachmentKind
         let fileName: String
         let contentType: String
         let sizeBytes: Int
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case fileName = "file_name"
+            case contentType = "content_type"
+            case sizeBytes = "size_bytes"
+        }
     }
 
     func createItem(homeId: String, body: ItemBody) async throws -> Item {
@@ -451,7 +458,8 @@ final class APIClient {
         let upload: ItemUploadResponse = try await request(
             "POST",
             path: "/homes/\(homeId)/items/uploads",
-            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType, sizeBytes: data.count)
+            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType, sizeBytes: data.count),
+            keyEncodingStrategy: .useDefaultKeys
         )
 
         guard let url = URL(string: upload.uploadUrl) else { throw APIError.invalidURL }

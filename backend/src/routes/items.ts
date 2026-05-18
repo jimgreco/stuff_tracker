@@ -21,7 +21,7 @@ router.post('/uploads', uploadRateLimit, async (req: AuthRequest, res: Response)
     res.status(400).json({ error: 'Photo uploads must use an image content type' });
     return;
   }
-  if (size_bytes > maxUploadBytes(kind)) {
+  if (size_bytes !== undefined && size_bytes > maxUploadBytes(kind)) {
     res.status(413).json({ error: `${kind} upload exceeds the configured size limit` });
     return;
   }

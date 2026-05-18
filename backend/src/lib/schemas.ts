@@ -36,12 +36,24 @@ export const ItemSchema = z.object({
   purchase_date: z.string().nullable().optional(),
 });
 
-export const ItemUploadSchema = z.object({
+export const ItemUploadSchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const body = value as Record<string, unknown>;
+  return {
+    ...body,
+    file_name: body.file_name ?? body.fileName,
+    content_type: body.content_type ?? body.contentType,
+    size_bytes: body.size_bytes ?? body.sizeBytes,
+  };
+}, z.object({
   kind: z.enum(['photo', 'document']),
   file_name: z.string().min(1).max(255),
   content_type: z.string().min(1).max(255),
-  size_bytes: z.number().int().min(1).max(50 * 1024 * 1024),
-});
+  size_bytes: z.number().int().min(1).max(50 * 1024 * 1024).optional(),
+}));
 
 export const HomeNameSchema = z.object({
   name: z.string().min(1).max(100),

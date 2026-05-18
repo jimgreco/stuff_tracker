@@ -24,7 +24,7 @@ interface UploadRequest {
   kind: ItemUploadKind;
   fileName: string;
   contentType: string;
-  sizeBytes: number;
+  sizeBytes?: number;
 }
 
 interface UploadResponse {
@@ -85,7 +85,7 @@ function stableFileUrl(bucket: string, region: string, key: string): string {
 }
 
 export async function createItemAttachmentUpload(request: UploadRequest): Promise<UploadResponse> {
-  if (request.sizeBytes > maxUploadBytes(request.kind)) {
+  if (request.sizeBytes !== undefined && request.sizeBytes > maxUploadBytes(request.kind)) {
     throw new UploadLimitError(`${request.kind} upload exceeds the configured size limit`);
   }
 

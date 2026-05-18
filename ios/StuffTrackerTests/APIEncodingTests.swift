@@ -118,6 +118,25 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertFalse(fullName.keys.contains("family_name"))
     }
 
+    func testItemUploadBodyUsesBackendSnakeCaseKeys() throws {
+        let body = APIClient.ItemUploadBody(
+            kind: .photo,
+            fileName: "chair.jpg",
+            contentType: "image/jpeg",
+            sizeBytes: 1024
+        )
+
+        let json = try encodedJSON(body, keyEncodingStrategy: .useDefaultKeys)
+
+        XCTAssertEqual(json["kind"] as? String, "photo")
+        XCTAssertEqual(json["file_name"] as? String, "chair.jpg")
+        XCTAssertEqual(json["content_type"] as? String, "image/jpeg")
+        XCTAssertEqual(json["size_bytes"] as? Int, 1024)
+        XCTAssertFalse(json.keys.contains("fileName"))
+        XCTAssertFalse(json.keys.contains("contentType"))
+        XCTAssertFalse(json.keys.contains("sizeBytes"))
+    }
+
     private func encodedJSON<T: Encodable>(
         _ value: T,
         keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase

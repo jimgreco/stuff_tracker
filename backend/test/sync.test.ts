@@ -96,6 +96,22 @@ test('item upload validation accepts photos and documents', () => {
     size_bytes: 2048,
   }).kind, 'document');
 
+  const camelCaseUpload = ItemUploadSchema.parse({
+    kind: 'photo',
+    fileName: 'chair.jpg',
+    contentType: 'image/jpeg',
+    sizeBytes: 1024,
+  });
+  assert.equal(camelCaseUpload.file_name, 'chair.jpg');
+  assert.equal(camelCaseUpload.content_type, 'image/jpeg');
+  assert.equal(camelCaseUpload.size_bytes, 1024);
+
+  assert.equal(ItemUploadSchema.parse({
+    kind: 'photo',
+    file_name: 'legacy-client.jpg',
+    content_type: 'image/jpeg',
+  }).size_bytes, undefined);
+
   assert.throws(() => ItemUploadSchema.parse({
     kind: 'photo',
     file_name: 'chair.jpg',
