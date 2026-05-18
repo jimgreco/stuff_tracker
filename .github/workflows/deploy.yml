@@ -71,10 +71,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Transfer backend to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+          EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           printf '%s' "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
-          printf '%s\n' "${{ secrets.EC2_SSH_KNOWN_HOSTS }}" > known_hosts
+          if [ -n "$EC2_SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
+          else
+            ssh-keyscan -H "$EC2_HOST" > known_hosts
+          fi
           chmod 600 known_hosts
           test -s known_hosts
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
@@ -82,9 +90,12 @@ jobs:
             --exclude '.DS_Store' \
             --exclude 'node_modules' \
             --exclude '.env' \
-            backend/ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/stuff_tracker/backend/
+            backend/ "$EC2_USER@$EC2_HOST:~/stuff_tracker/backend/"
 
       - name: Rebuild stuff container
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
             "cd ~/deploy && docker-compose up -d --build stuff && docker system prune -f"
