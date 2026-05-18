@@ -3,25 +3,62 @@ name: TestFlight
 on:
   push:
     branches: [main]
-    paths:
-      - 'ios/**'
-      - '.github/workflows/testflight.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'ios/**'
-      - '.github/workflows/testflight.yml'
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: macos-latest
     timeout-minutes: 30
+    outputs:
+      run_build: ${{ steps.changes.outputs.run_build }}
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect iOS changes
+        id: changes
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "run_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            changed_files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            changed_files=$(git ls-tree -r --name-only HEAD)
+          else
+            changed_files=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          fi
+
+          printf '%s\n' "$changed_files"
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^(ios/|\.github/workflows/testflight\.yml$)'; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_tests=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if printf '%s\n' "$changed_files" | grep -Eq '^ios/'; then
+            echo "run_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No iOS changes
+        if: steps.changes.outputs.run_tests != 'true'
+        run: echo "No iOS changes detected; required test check satisfied."
 
       - name: Select Xcode 26
+        if: steps.changes.outputs.run_tests == 'true'
         run: |
           ls /Applications | grep -i '^Xcode' || true
           for p in /Applications/Xcode_26.app /Applications/Xcode_26.0.app /Applications/Xcode_26.1.app /Applications/Xcode_26.2.app /Applications/Xcode-26.app /Applications/Xcode.app; do
@@ -34,6 +71,7 @@ jobs:
           xcodebuild -version
 
       - name: Run iOS tests
+        if: steps.changes.outputs.run_tests == 'true'
         working-directory: ios
         run: |
           xcodebuild \
@@ -45,7 +83,7 @@ jobs:
             test
 
   build:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.test.outputs.run_build == 'true'
     needs: test
     runs-on: macos-latest
     timeout-minutes: 45
