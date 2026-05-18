@@ -5,11 +5,17 @@ import UIKit
 
 private enum ItemEditError: LocalizedError {
     case signInRequired
+    case cameraUnavailable
+    case cameraCaptureFailed
 
     var errorDescription: String? {
         switch self {
         case .signInRequired:
             return "Sign in before adding hosted photos or documents."
+        case .cameraUnavailable:
+            return "Camera is not available on this device."
+        case .cameraCaptureFailed:
+            return "Could not save the captured photo."
         }
     }
 }
@@ -233,6 +239,7 @@ struct ItemEditView: View {
     @State private var photoFrames: [String: CGRect] = [:]
     @State private var viewedPhotoAttachment: EditablePhotoAttachment?
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var showCamera = false
     @State private var documentAttachments: [EditableDocumentAttachment]
     @State private var draggedDocumentAttachmentID: String?
     @State private var documentDropTargetID: String?
@@ -285,6 +292,11 @@ struct ItemEditView: View {
             }
             .fullScreenCover(item: $viewedPhotoAttachment) { attachment in
                 PhotoAttachmentViewer(attachment: attachment)
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraCaptureView { result in
+                    handleCameraCapture(result)
+                }
             }
             .fileImporter(isPresented: $showDocumentImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 handleDocumentImport(result)
@@ -403,8 +415,20 @@ struct ItemEditView: View {
             }
 
             PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
-                Label("Add Photos", systemImage: "photo")
+                Label("Choose Photos", systemImage: "photo.on.rectangle")
             }
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+
+            Button {
+                if CameraCaptureView.isAvailable {
+                    showCamera = true
+                } else {
+                    attachmentError = ItemEditError.cameraUnavailable.localizedDescription
+                }
+            } label: {
+                Label("Take Photo", systemImage: "camera.fill")
+            }
+            .disabled(!CameraCaptureView.isAvailable)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
         }
     }
@@ -789,6 +813,28 @@ struct ItemEditView: View {
         }
     }
 
+    @MainActor
+    private func handleCameraCapture(_ result: Result<UIImage, Error>) {
+        do {
+            let image = try result.get()
+            guard let data = image.jpegData(compressionQuality: 0.9) else {
+                throw ItemEditError.cameraCaptureFailed
+            }
+
+            photoAttachments.append(
+                EditablePhotoAttachment(
+                    pendingPhoto: PendingPhoto(
+                        data: data,
+                        fileName: "item-photo-\(UUID().uuidString).jpg",
+                        contentType: "image/jpeg"
+                    )
+                )
+            )
+        } catch {
+            attachmentError = error.localizedDescription
+        }
+    }
+
     private func save() {
         isSaving = true
         attachmentError = nil
@@ -963,6 +1009,57 @@ private struct RemotePhotoImage: View {
             @unknown default:
                 EmptyView()
             }
+        }
+    }
+}
+
+private struct CameraCaptureView: UIViewControllerRepresentable {
+    static var isAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
+    let onComplete: (Result<UIImage, Error>) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.mediaTypes = [UTType.image.identifier]
+        picker.cameraCaptureMode = .photo
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onComplete: onComplete, dismiss: dismiss)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let onComplete: (Result<UIImage, Error>) -> Void
+        private let dismiss: DismissAction
+
+        init(onComplete: @escaping (Result<UIImage, Error>) -> Void, dismiss: DismissAction) {
+            self.onComplete = onComplete
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                onComplete(.success(image))
+            } else {
+                onComplete(.failure(ItemEditError.cameraCaptureFailed))
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
         }
     }
 }
