@@ -3,12 +3,12 @@
 ## Required GitHub Secrets
 
 - `EC2_SSH_KEY`: private deployment key.
-- `EC2_SSH_KNOWN_HOSTS`: pinned SSH host key entry for `EC2_HOST` (recommended). If omitted, deploy scans the host key at runtime with `ssh-keyscan`.
+- `EC2_SSH_KNOWN_HOSTS`: pinned SSH host key entry for `EC2_HOST`.
 - `EC2_USER`: deployment user.
 - `EC2_HOST`: deployment host.
 - iOS signing and App Store Connect secrets used by `.github/workflows/testflight.yml`.
 
-Generate the pinned host key from a trusted network and review it before saving:
+Generate the pinned host key from a trusted network and review it before saving. Include each hostname or IP form that `EC2_HOST` might use:
 
 ```sh
 ssh-keyscan -H "$EC2_HOST"

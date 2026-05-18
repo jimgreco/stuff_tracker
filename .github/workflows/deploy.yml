@@ -111,11 +111,8 @@ jobs:
         run: |
           printf '%s' "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
-          if [ -n "$EC2_SSH_KNOWN_HOSTS" ]; then
-            printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
-          else
-            ssh-keyscan -H "$EC2_HOST" > known_hosts
-          fi
+          test -n "$EC2_SSH_KNOWN_HOSTS"
+          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
           chmod 600 known_hosts
           test -s known_hosts
           rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
