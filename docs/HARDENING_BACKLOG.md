@@ -18,6 +18,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Pin EC2 SSH host keys in `EC2_SSH_KNOWN_HOSTS`.
 - [x] Remove deploy-time SSH host-key scanning fallback.
 - [x] Move GitHub Actions checkout and Node setup actions to Node 24-ready major versions.
+- [x] Document database restore steps, verification checks, and provisional recovery targets.
 
 ## Next
 
@@ -26,7 +27,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [ ] Validate uploaded file bytes instead of trusting MIME strings; strip image metadata and consider recompressing photos before upload/storage.
 - [ ] Add session hardening: shorter JWT lifetime, refresh tokens or reauth flow, token revocation, device/session listing, and logout-all.
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
-- [ ] Schedule database backups and run a restore drill; document restore steps and expected recovery time.
+- [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Add dependency and supply-chain automation: Dependabot, GitHub code scanning, and secret scanning review.
 - [ ] Add post-deploy smoke tests: health, auth, upload-signing, and basic item CRUD.
