@@ -19,6 +19,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Remove deploy-time SSH host-key scanning fallback.
 - [x] Move GitHub Actions checkout and Node setup actions to Node 24-ready major versions.
 - [x] Document database restore steps, verification checks, and provisional recovery targets.
+- [x] Add an operational runbook for incident triage, failed deploy rollback, and credential rotation.
 
 ## Next
 
@@ -31,7 +32,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Add dependency and supply-chain automation: Dependabot, GitHub code scanning, and secret scanning review.
 - [ ] Add post-deploy smoke tests: health, auth, upload-signing, and basic item CRUD.
-- [ ] Add an operational runbook for incident response, credential rotation, failed deploy rollback, and database restore.
+- [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
 ## Suggested Order
 

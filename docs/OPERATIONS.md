@@ -23,6 +23,71 @@ Protect `main` in GitHub and require these status checks before merge:
 
 Keep direct pushes limited to maintainers. The deploy workflow only deploys on pushes to `main`; pull requests run verification without deploying.
 
+## Incident Response
+
+Use this runbook for production incidents, suspected credential exposure, failed deploys, and data recovery events. Keep notes with exact UTC timestamps, the observed impact, commands run, and the commit or backup involved.
+
+Initial triage:
+
+- Identify the affected surface: iOS app, backend API, database, S3 attachments, CI/CD, or account auth.
+- Check the latest GitHub Actions runs for `Deploy to EC2` and `TestFlight`.
+- Check `/health/live` for process liveness and `/health` for database connectivity.
+- If the incident follows a deploy, compare the current commit against the last known-good commit.
+- Avoid destructive recovery commands until the impact, recovery point, and expected data loss are explicit.
+
+Escalation criteria:
+
+- Authentication is unavailable or appears compromised.
+- Writes are failing or data integrity is uncertain.
+- Attachment uploads or reads expose data unexpectedly.
+- A deploy changed production behavior and cannot be fixed quickly.
+- Database restore, credential rotation, or provider console changes are required.
+
+## Failed Deploy Rollback
+
+Preferred rollback path is a revert or forward-fix through `main`, because the deploy workflow is the source of record for production backend code.
+
+1. Identify the last known-good commit.
+2. Revert the bad commit or prepare a forward-fix locally.
+3. Run backend verification:
+
+   ```sh
+   cd backend
+   npm run build
+   npm test
+   npm audit --omit=dev
+   ```
+
+4. Push to `main` and watch the `Deploy to EC2` workflow.
+5. Confirm `/health` after deploy completion.
+
+If GitHub Actions is unavailable and production is down, manually deploy a clean checkout of the last known-good commit from a trusted machine using the same backend files and pinned SSH host key. Record that manual action and reconcile `main` afterward.
+
+## Credential Rotation
+
+Rotate credentials when there is suspected exposure, staff/device loss, provider key rollover, or after an incident involving secrets. Prefer adding a replacement secret before removing the old one when the provider supports overlap.
+
+Rotation checklist:
+
+- Identify all consumers of the secret.
+- Create or obtain the replacement credential.
+- Update the relevant GitHub secret or server environment variable.
+- Redeploy or restart only the affected service.
+- Verify the affected flow.
+- Revoke the old credential.
+- Record the rotation time and verification result.
+
+High-value credentials:
+
+- `EC2_SSH_KEY`
+- `EC2_SSH_KNOWN_HOSTS`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GOOGLE_CLIENT_ID`
+- Apple Sign In configuration for `APPLE_BUNDLE_ID`
+- S3 bucket credentials and bucket policy
+- iOS signing certificate, provisioning profile, and App Store Connect API key
+
 ## Database Migrations
 
 Migrations live in `backend/src/db/migrations` and are applied once in lexical order. Add new schema changes as a new numbered SQL file instead of editing an already-applied migration.
