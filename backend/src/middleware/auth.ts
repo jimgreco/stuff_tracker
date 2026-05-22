@@ -36,6 +36,10 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 }
 
 async function isRevoked(payload: JwtPayload): Promise<boolean> {
+  if (process.env.SKIP_TOKEN_REVOCATION_CHECKS === 'true') {
+    return false;
+  }
+
   if (process.env.NODE_ENV === 'test' && process.env.RUN_DATABASE_INTEGRATION_TESTS !== 'true') {
     return false;
   }

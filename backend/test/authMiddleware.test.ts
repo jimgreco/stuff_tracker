@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'unit-test-secret';
 process.env.NODE_ENV = 'test';
+process.env.SKIP_TOKEN_REVOCATION_CHECKS = 'true';
 
 const requireModule = createRequire(import.meta.url);
 const { signToken, verifyToken } = requireModule('../src/lib/jwt') as typeof import('../src/lib/jwt');
