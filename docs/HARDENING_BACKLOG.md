@@ -24,6 +24,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add CodeQL code scanning for backend JavaScript/TypeScript.
 - [x] Review GitHub secret scanning settings and document alert handling.
 - [x] Make JWT lifetime configurable and document production session-token guidance.
+- [x] Resolve current backend npm audit advisories for Express, qs, Google auth, gaxios, and uuid.
 
 ## Next
 
@@ -39,8 +40,8 @@ This is the working checklist for security, reliability, and operations hardenin
 ## Suggested Order
 
 1. S3 private-by-default policy and IAM cleanup.
-2. Backup scheduling plus restore drill.
-3. Observability and deploy smoke tests.
-4. JWT revocation and refresh-token design.
-5. Database role separation and SSL enforcement.
-6. Dependency/code scanning automation.
+2. Uploaded file byte validation and metadata stripping.
+3. Backup scheduling plus restore drill.
+4. Observability and deploy smoke tests.
+5. JWT revocation and refresh-token design.
+6. Database role separation and SSL enforcement.
