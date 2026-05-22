@@ -88,6 +88,23 @@ High-value credentials:
 - S3 bucket credentials and bucket policy
 - iOS signing certificate, provisioning profile, and App Store Connect API key
 
+## GitHub Security Monitoring
+
+Current repository security setting review from GitHub API:
+
+- Secret scanning: enabled.
+- Secret scanning push protection: enabled.
+- Secret scanning non-provider patterns: disabled.
+- Secret scanning validity checks: disabled.
+- Dependabot security updates: disabled.
+
+Review cadence:
+
+- Check GitHub security alerts weekly when Dependabot opens updates.
+- Treat secret scanning alerts as incidents until the exposed credential is rotated or proven invalid.
+- Consider enabling non-provider patterns and validity checks if alert volume is acceptable.
+- Consider enabling Dependabot security updates if automated vulnerability PRs are preferred over manual review.
+
 ## Database Migrations
 
 Migrations live in `backend/src/db/migrations` and are applied once in lexical order. Add new schema changes as a new numbered SQL file instead of editing an already-applied migration.

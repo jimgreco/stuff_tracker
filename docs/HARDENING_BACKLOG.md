@@ -22,6 +22,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add an operational runbook for incident triage, failed deploy rollback, and credential rotation.
 - [x] Add Dependabot automation for backend npm packages and GitHub Actions.
 - [x] Add CodeQL code scanning for backend JavaScript/TypeScript.
+- [x] Review GitHub secret scanning settings and document alert handling.
 
 ## Next
 
@@ -31,7 +32,6 @@ This is the working checklist for security, reliability, and operations hardenin
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
-- [ ] Add dependency and supply-chain automation: secret scanning review.
 - [ ] Add post-deploy smoke tests: health, auth, upload-signing, and basic item CRUD.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
