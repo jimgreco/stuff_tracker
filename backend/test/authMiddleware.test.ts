@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'unit-test-secret';
+process.env.NODE_ENV = 'test';
 
 const requireModule = createRequire(import.meta.url);
 const { signToken, verifyToken } = requireModule('../src/lib/jwt') as typeof import('../src/lib/jwt');
@@ -35,22 +36,22 @@ test('JWT helper honors configurable token lifetime', () => {
   }
 });
 
-test('requireAuth rejects missing bearer token', () => {
+test('requireAuth rejects missing bearer token', async () => {
   const res = createMockResponse();
   let nextCalled = false;
 
-  requireAuth({ headers: {} } as any, res as any, () => { nextCalled = true; });
+  await requireAuth({ headers: {} } as any, res as any, () => { nextCalled = true; });
 
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 401);
   assert.deepEqual(res.body, { error: 'Missing or invalid Authorization header' });
 });
 
-test('requireAuth rejects invalid bearer token', () => {
+test('requireAuth rejects invalid bearer token', async () => {
   const res = createMockResponse();
   let nextCalled = false;
 
-  requireAuth(
+  await requireAuth(
     { headers: { authorization: 'Bearer not-a-real-token' } } as any,
     res as any,
     () => { nextCalled = true; }
@@ -61,7 +62,7 @@ test('requireAuth rejects invalid bearer token', () => {
   assert.deepEqual(res.body, { error: 'Invalid or expired token' });
 });
 
-test('requireAuth attaches verified user and calls next', () => {
+test('requireAuth attaches verified user and calls next', async () => {
   const req: any = {
     headers: {
       authorization: `Bearer ${signToken({ userId: 'user-1', email: 'user@example.com' })}`,
@@ -70,7 +71,7 @@ test('requireAuth attaches verified user and calls next', () => {
   const res = createMockResponse();
   let nextCalled = false;
 
-  requireAuth(req, res as any, () => { nextCalled = true; });
+  await requireAuth(req, res as any, () => { nextCalled = true; });
 
   assert.equal(nextCalled, true);
   assert.equal(req.user.userId, 'user-1');

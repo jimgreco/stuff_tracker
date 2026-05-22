@@ -104,7 +104,7 @@ High-value credentials:
 
 Backend auth tokens are signed with `JWT_SECRET`. `JWT_EXPIRES_IN` controls the token lifetime using the `jsonwebtoken` duration format, and defaults to `90d` when unset.
 
-Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Refresh tokens, server-side revocation, device/session listing, and logout-all are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
+Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Server-side logout-all revocation is available through `POST /auth/logout-all`; refresh tokens, reauth UX, and device/session listing are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
 
 ## GitHub Security Monitoring
 

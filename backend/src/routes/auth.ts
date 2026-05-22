@@ -108,4 +108,12 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json(rows[0]);
 });
 
+router.post('/logout-all', requireAuth, async (req: AuthRequest, res: Response) => {
+  await pool.query(
+    'UPDATE users SET tokens_revoked_before = NOW(), updated_at = NOW() WHERE id = $1',
+    [req.user!.userId]
+  );
+  res.status(204).send();
+});
+
 export default router;

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   google_id TEXT UNIQUE,
   apple_id TEXT UNIQUE,
+  tokens_revoked_before TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -78,6 +79,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS document_name TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS document_content_type TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS properties JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS documents JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_revoked_before TIMESTAMPTZ;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_locations_home_id ON locations(home_id);

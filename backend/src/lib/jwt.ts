@@ -6,6 +6,7 @@ const DEFAULT_EXPIRES_IN = '90d';
 export interface JwtPayload {
   userId: string;
   email: string;
+  iat?: number;
 }
 
 export function signToken(payload: JwtPayload): string {

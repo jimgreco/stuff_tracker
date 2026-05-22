@@ -65,6 +65,17 @@ test('dev auth and homes API work against a real database', { skip: !runDatabase
   const health = await fetch(`${baseUrl}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true, db: true });
+
+  const logoutAll = await fetch(`${baseUrl}/auth/logout-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authBody.token}` },
+  });
+  assert.equal(logoutAll.status, 204);
+
+  const revokedHomes = await fetch(`${baseUrl}/homes`, {
+    headers: { Authorization: `Bearer ${authBody.token}` },
+  });
+  assert.equal(revokedHomes.status, 401);
 });
 
 test('provider upsert preserves an existing Apple email when later tokens omit it', { skip: !runDatabaseIntegrationTests }, async () => {

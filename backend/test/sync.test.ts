@@ -135,6 +135,7 @@ test('fresh database schema allows floor locations', () => {
   const schemaSql = fs.readFileSync(path.join(backendRoot, 'src/db/schema.sql'), 'utf8');
 
   assert.match(schemaSql, /CREATE EXTENSION IF NOT EXISTS pgcrypto/);
+  assert.match(schemaSql, /tokens_revoked_before TIMESTAMPTZ/);
   assert.match(schemaSql, /type IN \('floor', 'room', 'container'\)/);
   assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT/);
   assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT/);
