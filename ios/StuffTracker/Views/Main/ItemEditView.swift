@@ -7,6 +7,7 @@ private enum ItemEditError: LocalizedError {
     case signInRequired
     case cameraUnavailable
     case cameraCaptureFailed
+    case photoProcessingFailed
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ private enum ItemEditError: LocalizedError {
             return "Camera is not available on this device."
         case .cameraCaptureFailed:
             return "Could not save the captured photo."
+        case .photoProcessingFailed:
+            return "Could not prepare the selected photo."
         }
     }
 }
@@ -769,13 +772,16 @@ struct ItemEditView: View {
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
-                let type = item.supportedContentTypes.first(where: { $0.conforms(to: .image) }) ?? .jpeg
+                guard let image = UIImage(data: data) else {
+                    throw ItemEditError.photoProcessingFailed
+                }
+                let sanitizedData = try sanitizedJPEGData(from: image)
                 photoAttachments.append(
                     EditablePhotoAttachment(
                         pendingPhoto: PendingPhoto(
-                            data: data,
-                            fileName: "item-photo.\(type.preferredFilenameExtension ?? "jpg")",
-                            contentType: type.preferredMIMEType ?? "image/jpeg"
+                            data: sanitizedData,
+                            fileName: "item-photo-\(UUID().uuidString).jpg",
+                            contentType: "image/jpeg"
                         )
                     )
                 )
@@ -817,9 +823,7 @@ struct ItemEditView: View {
     private func handleCameraCapture(_ result: Result<UIImage, Error>) {
         do {
             let image = try result.get()
-            guard let data = image.jpegData(compressionQuality: 0.9) else {
-                throw ItemEditError.cameraCaptureFailed
-            }
+            let data = try sanitizedJPEGData(from: image, failure: .cameraCaptureFailed)
 
             photoAttachments.append(
                 EditablePhotoAttachment(
@@ -833,6 +837,28 @@ struct ItemEditView: View {
         } catch {
             attachmentError = error.localizedDescription
         }
+    }
+
+    private func sanitizedJPEGData(
+        from image: UIImage,
+        failure: ItemEditError = .photoProcessingFailed
+    ) throws -> Data {
+        let pixelSize = CGSize(
+            width: max(image.size.width * image.scale, 1),
+            height: max(image.size.height * image.scale, 1)
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+
+        let renderer = UIGraphicsImageRenderer(size: pixelSize, format: format)
+        let renderedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: pixelSize))
+        }
+
+        guard let data = renderedImage.jpegData(compressionQuality: 0.9) else {
+            throw failure
+        }
+        return data
     }
 
     private func save() {

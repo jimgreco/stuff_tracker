@@ -26,11 +26,11 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Make JWT lifetime configurable and document production session-token guidance.
 - [x] Resolve current backend npm audit advisories for Express, qs, Google auth, gaxios, and uuid.
 - [x] Validate stored attachment bytes for newly saved S3 photo and document uploads.
+- [x] Strip photo metadata by recompressing selected and captured iOS photos before upload.
 
 ## Next
 
 - [ ] Make S3 fully private: block public access, use least-privilege IAM, enforce server-side encryption, and review bucket lifecycle policy.
-- [ ] Strip image metadata and consider recompressing photos before upload/storage.
 - [ ] Add session hardening: refresh tokens or reauth flow, token revocation, device/session listing, and logout-all.
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
@@ -41,8 +41,7 @@ This is the working checklist for security, reliability, and operations hardenin
 ## Suggested Order
 
 1. S3 private-by-default policy and IAM cleanup.
-2. Uploaded file byte validation and metadata stripping.
-3. Backup scheduling plus restore drill.
-4. Observability and deploy smoke tests.
-5. JWT revocation and refresh-token design.
-6. Database role separation and SSL enforcement.
+2. Backup scheduling plus restore drill.
+3. Observability and deploy smoke tests.
+4. JWT revocation and refresh-token design.
+5. Database role separation and SSL enforcement.
