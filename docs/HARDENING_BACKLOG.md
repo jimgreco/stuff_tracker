@@ -28,12 +28,13 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Validate stored attachment bytes for newly saved S3 photo and document uploads.
 - [x] Strip photo metadata by recompressing selected and captured iOS photos before upload.
 - [x] Add post-deploy smoke tests for health, auth, upload signing, and basic item CRUD.
+- [x] Add structured production HTTP/error logs with request IDs.
 
 ## Next
 
 - [ ] Make S3 fully private: block public access, use least-privilege IAM, enforce server-side encryption, and review bucket lifecycle policy.
 - [ ] Add session hardening: refresh tokens or reauth flow, token revocation, device/session listing, and logout-all.
-- [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
+- [ ] Add production observability: app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.

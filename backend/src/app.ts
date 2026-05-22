@@ -1,4 +1,5 @@
 import 'express-async-errors';
+import { randomUUID } from 'node:crypto';
 import express, { NextFunction, Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
@@ -21,7 +22,8 @@ export function createApp() {
 
   app.use(helmet());
   app.use(cors(corsOptions()));
-  app.use(morgan(isProduction() ? 'combined' : 'short'));
+  app.use(assignRequestId);
+  app.use(httpLogger());
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health/live', (_req, res) => res.json({ ok: true }));
@@ -49,11 +51,64 @@ export function createApp() {
       return;
     }
 
-    console.error(err);
+    logError(err, res.locals.requestId);
     res.status(500).json({ error: 'Internal server error' });
   });
 
   return app;
+}
+
+const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/;
+
+function assignRequestId(req: Request, res: Response, next: NextFunction): void {
+  const header = req.header('x-request-id');
+  const requestId = header && REQUEST_ID_PATTERN.test(header) ? header : randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
+  next();
+}
+
+function httpLogger() {
+  if (process.env.NODE_ENV === 'test') {
+    return (_req: Request, _res: Response, next: NextFunction) => next();
+  }
+
+  if (!isProduction()) {
+    return morgan('short');
+  }
+
+  return morgan((tokens, req: Request, res: Response) => JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: Number(tokens.status(req, res)) >= 500 ? 'error' : 'info',
+    event: 'http_request',
+    request_id: res.locals.requestId,
+    method: req.method,
+    path: req.path,
+    status: Number(tokens.status(req, res)),
+    duration_ms: Number(tokens['response-time'](req, res)),
+    content_length: tokens.res(req, res, 'content-length') ?? null,
+    remote_addr: tokens['remote-addr'](req, res),
+    user_agent: tokens['user-agent'](req, res) ?? null,
+  }));
+}
+
+function logError(err: unknown, requestId: string | undefined): void {
+  if (!isProduction()) {
+    console.error(err);
+    return;
+  }
+
+  const error = err instanceof Error
+    ? { name: err.name, message: err.message, stack: err.stack }
+    : { name: 'UnknownError', message: String(err) };
+
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    event: 'unhandled_error',
+    request_id: requestId,
+    error,
+  }));
 }
 
 function corsOptions(): CorsOptions {

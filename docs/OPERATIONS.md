@@ -69,6 +69,12 @@ The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production co
 
 The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
 
+## Production Logging
+
+Production HTTP access logs are JSON lines with `event=http_request`, `request_id`, method, path, status, duration, response length, remote address, and user agent. The API accepts a valid `x-request-id` header or generates one, then echoes it on the response so app logs and client-side reports can be correlated.
+
+Unhandled production errors are logged as JSON lines with `event=unhandled_error` and the same `request_id` when one is available.
+
 ## Credential Rotation
 
 Rotate credentials when there is suspected exposure, staff/device loss, provider key rollover, or after an incident involving secrets. Prefer adding a replacement secret before removing the old one when the provider supports overlap.
