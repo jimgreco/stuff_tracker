@@ -63,6 +63,12 @@ Preferred rollback path is a revert or forward-fix through `main`, because the d
 
 If GitHub Actions is unavailable and production is down, manually deploy a clean checkout of the last known-good commit from a trusted machine using the same backend files and pinned SSH host key. Record that manual action and reconcile `main` afterward.
 
+## Post-Deploy Smoke Tests
+
+The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production container after each backend deploy. The smoke test checks `/health/live`, `/health`, authenticated `/homes`, home creation/deletion, item creation/deletion, and attachment upload signing.
+
+The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
+
 ## Credential Rotation
 
 Rotate credentials when there is suspected exposure, staff/device loss, provider key rollover, or after an incident involving secrets. Prefer adding a replacement secret before removing the old one when the provider supports overlap.

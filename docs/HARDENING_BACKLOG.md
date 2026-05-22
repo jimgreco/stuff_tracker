@@ -27,6 +27,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Resolve current backend npm audit advisories for Express, qs, Google auth, gaxios, and uuid.
 - [x] Validate stored attachment bytes for newly saved S3 photo and document uploads.
 - [x] Strip photo metadata by recompressing selected and captured iOS photos before upload.
+- [x] Add post-deploy smoke tests for health, auth, upload signing, and basic item CRUD.
 
 ## Next
 
@@ -35,13 +36,12 @@ This is the working checklist for security, reliability, and operations hardenin
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
-- [ ] Add post-deploy smoke tests: health, auth, upload-signing, and basic item CRUD.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
 ## Suggested Order
 
 1. S3 private-by-default policy and IAM cleanup.
 2. Backup scheduling plus restore drill.
-3. Observability and deploy smoke tests.
+3. Observability and deploy alerts.
 4. JWT revocation and refresh-token design.
 5. Database role separation and SSL enforcement.

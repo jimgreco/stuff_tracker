@@ -129,3 +129,11 @@ jobs:
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
             "cd ~/deploy && docker-compose up -d --build stuff && docker system prune -f"
+
+      - name: Run post-deploy smoke tests
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
+            "cd ~/deploy && docker-compose exec -T stuff npm run smoke:deploy"
