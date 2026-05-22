@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'unit-test-secret';
 
@@ -14,6 +15,24 @@ test('JWT helper signs and verifies auth payloads', () => {
 
   assert.equal(payload.userId, 'user-1');
   assert.equal(payload.email, 'user@example.com');
+});
+
+test('JWT helper honors configurable token lifetime', () => {
+  const previous = process.env.JWT_EXPIRES_IN;
+  process.env.JWT_EXPIRES_IN = '1h';
+
+  try {
+    const token = signToken({ userId: 'user-1', email: 'user@example.com' });
+    const decoded = jwt.decode(token) as jwt.JwtPayload;
+
+    assert.equal(decoded.exp! - decoded.iat!, 60 * 60);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.JWT_EXPIRES_IN;
+    } else {
+      process.env.JWT_EXPIRES_IN = previous;
+    }
+  }
 });
 
 test('requireAuth rejects missing bearer token', () => {

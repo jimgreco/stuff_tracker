@@ -88,6 +88,12 @@ High-value credentials:
 - S3 bucket credentials and bucket policy
 - iOS signing certificate, provisioning profile, and App Store Connect API key
 
+## Session Tokens
+
+Backend auth tokens are signed with `JWT_SECRET`. `JWT_EXPIRES_IN` controls the token lifetime using the `jsonwebtoken` duration format, and defaults to `90d` when unset.
+
+Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Refresh tokens, server-side revocation, device/session listing, and logout-all are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
+
 ## GitHub Security Monitoring
 
 Current repository security setting review from GitHub API:
