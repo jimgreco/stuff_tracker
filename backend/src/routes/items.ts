@@ -3,7 +3,14 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
 import { ItemSchema, ItemUploadSchema } from '../lib/schemas';
-import { createItemAttachmentUpload, maxUploadBytes, S3ConfigurationError, UploadLimitError } from '../lib/s3';
+import {
+  createItemAttachmentUpload,
+  maxUploadBytes,
+  S3ConfigurationError,
+  UploadLimitError,
+  UploadValidationError,
+  validateStoredItemAttachments,
+} from '../lib/s3';
 import { signItemAttachmentUrls, signItemsAttachmentUrls } from '../lib/attachmentResponses';
 import { uploadRateLimit } from '../lib/rateLimits';
 
@@ -75,6 +82,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
   }
+  if (!await validateAttachmentsOrRespond(res, { photoUrls: photo_urls, documents })) {
+    return;
+  }
 
   const { rows } = await pool.query(
     `INSERT INTO items (
@@ -141,6 +151,12 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     }
   }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
+  if (!await validateAttachmentsOrRespond(res, {
+    photoUrls: updates.photo_urls,
+    documents: updates.documents,
+  })) {
+    return;
+  }
 
   fields.push(`updated_at = NOW()`);
   values.push(itemId, homeId);
@@ -188,3 +204,23 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
+async function validateAttachmentsOrRespond(
+  res: Response,
+  attachments: Parameters<typeof validateStoredItemAttachments>[0]
+): Promise<boolean> {
+  try {
+    await validateStoredItemAttachments(attachments);
+    return true;
+  } catch (err) {
+    if (err instanceof UploadValidationError) {
+      res.status(400).json({ error: err.message });
+      return false;
+    }
+    if (err instanceof S3ConfigurationError) {
+      res.status(503).json({ error: err.message });
+      return false;
+    }
+    throw err;
+  }
+}

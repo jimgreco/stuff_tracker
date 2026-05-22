@@ -25,11 +25,12 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Review GitHub secret scanning settings and document alert handling.
 - [x] Make JWT lifetime configurable and document production session-token guidance.
 - [x] Resolve current backend npm audit advisories for Express, qs, Google auth, gaxios, and uuid.
+- [x] Validate stored attachment bytes for newly saved S3 photo and document uploads.
 
 ## Next
 
 - [ ] Make S3 fully private: block public access, use least-privilege IAM, enforce server-side encryption, and review bucket lifecycle policy.
-- [ ] Validate uploaded file bytes instead of trusting MIME strings; strip image metadata and consider recompressing photos before upload/storage.
+- [ ] Strip image metadata and consider recompressing photos before upload/storage.
 - [ ] Add session hardening: refresh tokens or reauth flow, token revocation, device/session listing, and logout-all.
 - [ ] Add production observability: structured logs, app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.

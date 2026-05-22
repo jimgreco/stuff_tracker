@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachmentKeyFromUrl, maxUploadBytes } from '../src/lib/s3';
+import {
+  assertAllowedAttachmentBytes,
+  attachmentKeyFromUrl,
+  maxUploadBytes,
+  UploadValidationError,
+} from '../src/lib/s3';
 
 process.env.S3_BUCKET = 'stuff-test-bucket';
 process.env.S3_REGION = 'us-east-2';
@@ -23,3 +28,36 @@ test('upload size limits are configurable per attachment kind', () => {
   assert.equal(maxUploadBytes('photo'), 1234);
   assert.equal(maxUploadBytes('document'), 5678);
 });
+
+test('attachment byte validation accepts supported photos and documents', () => {
+  assert.doesNotThrow(() => assertAllowedAttachmentBytes('photo', 'image/jpeg', bytes([
+    0xff, 0xd8, 0xff, 0xe0,
+  ])));
+  assert.doesNotThrow(() => assertAllowedAttachmentBytes('photo', 'image/png', bytes([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ])));
+  assert.doesNotThrow(() => assertAllowedAttachmentBytes('document', 'application/pdf', ascii('%PDF-1.7')));
+  assert.doesNotThrow(() => assertAllowedAttachmentBytes('document', 'application/zip', bytes([
+    0x50, 0x4b, 0x03, 0x04,
+  ])));
+  assert.doesNotThrow(() => assertAllowedAttachmentBytes('document', 'text/plain', ascii('plain text')));
+});
+
+test('attachment byte validation rejects mismatched upload content', () => {
+  assert.throws(
+    () => assertAllowedAttachmentBytes('photo', 'image/jpeg', ascii('%PDF-1.7')),
+    UploadValidationError
+  );
+  assert.throws(
+    () => assertAllowedAttachmentBytes('document', 'application/pdf', bytes([0xff, 0xd8, 0xff, 0xe0])),
+    UploadValidationError
+  );
+});
+
+function bytes(values: number[]): Uint8Array {
+  return Uint8Array.from(values);
+}
+
+function ascii(value: string): Uint8Array {
+  return Buffer.from(value, 'ascii');
+}
