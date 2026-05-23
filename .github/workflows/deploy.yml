@@ -58,7 +58,7 @@ jobs:
 
           printf '%s\n' "$changed_files"
 
-          if printf '%s\n' "$changed_files" | grep -Eq '^(backend/|\.github/workflows/deploy\.yml$)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(backend/|web/|\.github/workflows/deploy\.yml$)'; then
             echo "run_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_deploy=true" >> "$GITHUB_OUTPUT"
           else
@@ -103,7 +103,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Transfer backend to EC2
+      - name: Transfer stuff app to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
@@ -121,6 +121,9 @@ jobs:
             --exclude 'node_modules' \
             --exclude '.env' \
             backend/ "$EC2_USER@$EC2_HOST:~/stuff_tracker/backend/"
+          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
+            --exclude '.DS_Store' \
+            web/ "$EC2_USER@$EC2_HOST:~/stuff_tracker/web/"
 
       - name: Rebuild stuff container
         env:

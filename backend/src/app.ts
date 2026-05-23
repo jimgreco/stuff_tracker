@@ -1,5 +1,7 @@
 import 'express-async-errors';
+import * as fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import * as path from 'node:path';
 import express, { NextFunction, Request, Response } from 'express';
 import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
@@ -20,7 +22,13 @@ export function createApp() {
   app.disable('x-powered-by');
   configureTrustProxy(app);
 
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        'img-src': ["'self'", 'data:', 'https:'],
+      },
+    },
+  }));
   app.use(cors(corsOptions()));
   app.use(assignRequestId);
   app.use(httpLogger());
@@ -41,6 +49,8 @@ export function createApp() {
   app.use('/homes/:homeId/locations', locationsRouter);
   app.use('/homes/:homeId/items', itemsRouter);
 
+  configureStaticWeb(app);
+
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
   });
@@ -56,6 +66,32 @@ export function createApp() {
   });
 
   return app;
+}
+
+function configureStaticWeb(app: ReturnType<typeof express>): void {
+  const webRoot = staticWebRoot();
+  if (!webRoot) {
+    return;
+  }
+
+  const indexPath = path.join(webRoot, 'index.html');
+  const sendIndex = (_req: Request, res: Response) => {
+    res.sendFile(indexPath);
+  };
+
+  app.use(express.static(webRoot, { index: false }));
+  app.use('/web', express.static(webRoot, { index: false }));
+  app.get(['/', '/web', '/web/'], sendIndex);
+}
+
+function staticWebRoot(): string | undefined {
+  const candidates = [
+    process.env.STUFF_WEB_DIR,
+    path.resolve(__dirname, '../web'),
+    path.resolve(__dirname, '../../web'),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find((candidate) => fs.existsSync(path.join(candidate, 'index.html')));
 }
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/;

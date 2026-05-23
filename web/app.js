@@ -10,7 +10,7 @@
     collapsed: "stuffTrackerMobileWeb.collapsed",
   };
 
-  const DEFAULT_API_BASE_URL = "http://localhost:3002";
+  const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
   const app = document.getElementById("app");
 
   const state = {
@@ -108,6 +108,15 @@
     } catch {
       return fallback;
     }
+  }
+
+  function defaultApiBaseUrl() {
+    const { hostname, origin, protocol } = window.location;
+    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    if ((protocol === "http:" || protocol === "https:") && !isLocalHost) {
+      return origin;
+    }
+    return "http://localhost:3002";
   }
 
   function writeJson(key, value) {

@@ -33,6 +33,20 @@ test('app generates request ids when incoming ids are invalid', async (t) => {
   assert.match(response.headers.get('x-request-id') ?? '', /^[a-f0-9-]{36}$/);
 });
 
+test('app serves the mobile web shell at root and /web', async (t) => {
+  const server = await listen();
+  t.after(() => close(server));
+
+  for (const path of ['/', '/web/']) {
+    const response = await fetch(`${serverBaseUrl(server)}${path}`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(body, /<title>Stuff Tracker<\/title>/);
+  }
+});
+
 async function listen(): Promise<http.Server> {
   const app = createApp();
   const server = app.listen(0, '127.0.0.1');
