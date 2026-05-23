@@ -31,10 +31,11 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add structured production HTTP/error logs with request IDs.
 - [x] Add server-side token revocation support and a logout-all API endpoint.
 - [x] Add a database backup freshness check for scheduled backup monitoring.
+- [x] Add a read-only S3 hardening check for public access, policy status, encryption, and lifecycle review.
 
 ## Next
 
-- [ ] Make S3 fully private: block public access, use least-privilege IAM, enforce server-side encryption, and review bucket lifecycle policy.
+- [ ] Make S3 fully private: apply block public access, use least-privilege IAM, enforce server-side encryption, and finalize bucket lifecycle policy.
 - [ ] Add session hardening: refresh tokens or reauth flow and device/session listing.
 - [ ] Add production observability: app error reporting, uptime checks, deploy alerts, and error-rate alerts.
 - [ ] Schedule database backups, alert on freshness failures, and run a restore drill; record actual restore time and recovery point.

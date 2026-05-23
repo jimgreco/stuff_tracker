@@ -191,6 +191,15 @@ Current recovery expectations until a real drill is recorded:
 
 ## Attachment Cleanup
 
+Review S3 bucket hardening without changing bucket policy:
+
+```sh
+cd backend
+npm run storage:s3:check
+```
+
+The check fails if public access block is incomplete, the bucket policy is public, or default server-side encryption is missing. It warns when no bucket policy or lifecycle configuration is present because those require an operator decision about least-privilege IAM and retention policy.
+
 Run a dry cleanup first:
 
 ```sh

@@ -11,6 +11,7 @@
     "db:backup": "node scripts/backup-db.cjs",
     "db:backup:check": "node scripts/check-backup-freshness.cjs",
     "smoke:deploy": "node scripts/smoke-deploy.cjs",
+    "storage:s3:check": "node scripts/check-s3-hardening.cjs",
     "storage:cleanup": "node scripts/cleanup-orphaned-uploads.cjs",
     "test": "node --require tsx/cjs --test test/*.test.ts"
   },
