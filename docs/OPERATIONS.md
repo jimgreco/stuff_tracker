@@ -141,7 +141,14 @@ cd backend
 npm run db:backup
 ```
 
-Schedule it on the server with cron or systemd and sync the backup directory to durable storage.
+Check that the newest backup is recent and non-empty:
+
+```sh
+cd backend
+npm run db:backup:check
+```
+
+`DB_BACKUP_MAX_AGE_HOURS` defaults to `26`. Schedule the backup and freshness check on the server with cron or systemd, send freshness failures to an alerting channel, and sync the backup directory to durable storage.
 
 ## Database Restore
 
@@ -171,6 +178,7 @@ psql "$RESTORE_DATABASE_URL" -c 'select count(*) from schema_migrations;'
 Restore drill checklist:
 
 - Confirm the newest backup is present in durable storage.
+- Run `npm run db:backup:check` on the host that writes backups.
 - Restore the newest backup into a disposable database.
 - Run the basic verification queries.
 - Point a staging or local backend at the restored database and check `/health`.

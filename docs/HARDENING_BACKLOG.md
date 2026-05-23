@@ -30,13 +30,14 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add post-deploy smoke tests for health, auth, upload signing, and basic item CRUD.
 - [x] Add structured production HTTP/error logs with request IDs.
 - [x] Add server-side token revocation support and a logout-all API endpoint.
+- [x] Add a database backup freshness check for scheduled backup monitoring.
 
 ## Next
 
 - [ ] Make S3 fully private: block public access, use least-privilege IAM, enforce server-side encryption, and review bucket lifecycle policy.
 - [ ] Add session hardening: refresh tokens or reauth flow and device/session listing.
 - [ ] Add production observability: app error reporting, uptime checks, deploy alerts, and error-rate alerts.
-- [ ] Schedule database backups and run a restore drill; record actual restore time and recovery point.
+- [ ] Schedule database backups, alert on freshness failures, and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
