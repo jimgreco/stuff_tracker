@@ -19,12 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect iOS changes
+      - name: Plan iOS workflow
         id: changes
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "run_tests=true" >> "$GITHUB_OUTPUT"
             echo "run_build=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -47,11 +47,7 @@ jobs:
             echo "run_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if printf '%s\n' "$changed_files" | grep -Eq '^ios/'; then
-            echo "run_build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_build=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "run_build=false" >> "$GITHUB_OUTPUT"
 
       - name: No iOS changes
         if: steps.changes.outputs.run_tests != 'true'
@@ -179,6 +175,16 @@ jobs:
           echo "key file last line: $(tail -n 1 "$KEY_FILE")"
           echo "key file line count: $(wc -l < "$KEY_FILE")"
           echo "API_KEY_PATH=$KEY_FILE" >> "$GITHUB_ENV"
+
+      - name: Compute CI build number
+        run: |
+          set -euo pipefail
+          commit_count=$(git rev-list HEAD --count)
+          run_number="${{ github.run_number }}"
+          run_attempt="${{ github.run_attempt }}"
+          build_number=$((run_number * 1000000 + commit_count * 100 + run_attempt))
+          echo "CI_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+          echo "Build number: $build_number"
 
       - name: Archive
         working-directory: ios

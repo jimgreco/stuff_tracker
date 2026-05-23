@@ -259,6 +259,8 @@ struct InviteSheet: View {
                     .disabled(!canInvite)
                 }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 }

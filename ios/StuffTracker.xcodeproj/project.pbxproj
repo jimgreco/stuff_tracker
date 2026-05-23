@@ -358,7 +358,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "BUILD_NUMBER=$(git -C \"$SRCROOT/..\" rev-list HEAD --count)\nGIT_COMMIT_HASH=$(git -C \"$SRCROOT/..\" rev-parse --short HEAD)\nif [ -n \"$(git -C \"$SRCROOT/..\" status --porcelain)\" ]; then\n  GIT_COMMIT_HASH=\"$GIT_COMMIT_HASH-dirty\"\nfi\nplutil -replace CFBundleVersion -string \"$BUILD_NUMBER\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nif /usr/libexec/PlistBuddy -c \"Print :GitCommitHash\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\" >/dev/null 2>&1; then\n  plutil -replace GitCommitHash -string \"$GIT_COMMIT_HASH\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nelse\n  plutil -insert GitCommitHash -string \"$GIT_COMMIT_HASH\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nfi\ntouch \"$DERIVED_FILE_DIR/build-info.stamp\"\n";
+			shellScript = "if [ -n \"${CI_BUILD_NUMBER:-}\" ]; then\n  BUILD_NUMBER=\"$CI_BUILD_NUMBER\"\nelse\n  BUILD_NUMBER=$(git -C \"$SRCROOT/..\" rev-list HEAD --count)\nfi\nGIT_COMMIT_HASH=$(git -C \"$SRCROOT/..\" rev-parse --short HEAD)\nif [ -n \"$(git -C \"$SRCROOT/..\" status --porcelain)\" ]; then\n  GIT_COMMIT_HASH=\"$GIT_COMMIT_HASH-dirty\"\nfi\nplutil -replace CFBundleVersion -string \"$BUILD_NUMBER\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nif /usr/libexec/PlistBuddy -c \"Print :GitCommitHash\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\" >/dev/null 2>&1; then\n  plutil -replace GitCommitHash -string \"$GIT_COMMIT_HASH\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nelse\n  plutil -insert GitCommitHash -string \"$GIT_COMMIT_HASH\" \"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nfi\ntouch \"$DERIVED_FILE_DIR/build-info.stamp\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

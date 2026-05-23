@@ -263,6 +263,8 @@ struct IconPickerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
     }
 

@@ -33,15 +33,12 @@ struct ContentView: View {
                 } else {
                     let filtered = filteredHomes
                     if !searchText.isEmpty && filtered.isEmpty {
-                        VStack(spacing: 12) {
-                            Spacer()
-                            Image(systemName: "magnifyingglass")
-                                .font(.largeTitle)
-                                .foregroundStyle(.secondary)
-                            Text("No results")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
+                        ContentUnavailableView(
+                            "No Results",
+                            systemImage: "magnifyingglass",
+                            description: Text("No matches for \"\(searchText)\".")
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
                             VStack(spacing: 8) {
@@ -280,18 +277,45 @@ private struct BreadcrumbBar: View {
                         .font(.caption)
                         .foregroundStyle(index == path.count - 1 ? .primary : .secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Spacer()
             }
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity)
-            .background(.thinMaterial)
-            .overlay(Divider(), alignment: .bottom)
+            .floatingBreadcrumbSurface()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
             .allowsHitTesting(false)
             .transition(.move(edge: .top).combined(with: .opacity))
             .animation(.easeInOut(duration: 0.16), value: path)
         }
+    }
+}
+
+private struct FloatingBreadcrumbSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = Capsule(style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color(.systemBackground).opacity(0.16), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+        } else {
+            content
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.thinMaterial, in: shape)
+                .overlay(shape.stroke(Color(.separator).opacity(0.18), lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+        }
+    }
+}
+
+private extension View {
+    func floatingBreadcrumbSurface() -> some View {
+        modifier(FloatingBreadcrumbSurfaceModifier())
     }
 }
 
