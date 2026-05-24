@@ -1,0 +1,66 @@
+name: Production Health
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/production-health.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/production-health.yml
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_BASE_URL: ${{ secrets.PRODUCTION_BASE_URL }}
+
+    steps:
+      - name: Check production health endpoints
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PRODUCTION_BASE_URL:-}" ]; then
+            echo "::notice title=Production health skipped::Set PRODUCTION_BASE_URL to enable scheduled production health checks."
+            exit 0
+          fi
+
+          base_url="${PRODUCTION_BASE_URL%/}"
+
+          check_json() {
+            path="$1"
+            expected_db="$2"
+            response_file="$RUNNER_TEMP/health-response.json"
+
+            echo "Checking ${path}"
+            curl --fail --silent --show-error \
+              --retry 2 \
+              --retry-delay 2 \
+              --connect-timeout 5 \
+              --max-time 15 \
+              "${base_url}${path}" \
+              --output "$response_file"
+
+            RESPONSE_FILE="$response_file" EXPECTED_DB="$expected_db" node <<'NODE'
+          const fs = require('node:fs');
+
+          const body = JSON.parse(fs.readFileSync(process.env.RESPONSE_FILE, 'utf8'));
+          if (body.ok !== true) {
+            throw new Error(`health payload did not include ok=true: ${JSON.stringify(body)}`);
+          }
+          if (process.env.EXPECTED_DB === 'true' && body.db !== true) {
+            throw new Error(`database health payload did not include db=true: ${JSON.stringify(body)}`);
+          }
+          NODE
+          }
+
+          check_json "/health/live" "false"
+          check_json "/health" "true"

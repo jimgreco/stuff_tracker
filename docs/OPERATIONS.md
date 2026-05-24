@@ -69,6 +69,14 @@ The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production co
 
 The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
 
+## Production Health Monitoring
+
+The `Production Health` GitHub Actions workflow checks `/health/live` and `/health` on an hourly schedule. Set the `PRODUCTION_BASE_URL` repository secret to the public backend origin, with no trailing slash, to enable the check.
+
+If `PRODUCTION_BASE_URL` is unset, the workflow exits successfully with a notice so the workflow can be merged before the secret is configured. When enabled, the check fails if either health endpoint is unreachable, if `ok` is not `true`, or if `/health` does not report `db: true`.
+
+Treat a failing scheduled health run as an availability incident and follow the incident response runbook above.
+
 ## Production Logging
 
 Production HTTP access logs are JSON lines with `event=http_request`, `request_id`, method, path, status, duration, response length, remote address, and user agent. The API accepts a valid `x-request-id` header or generates one, then echoes it on the response so app logs and client-side reports can be correlated.
