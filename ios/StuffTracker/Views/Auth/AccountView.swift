@@ -9,7 +9,6 @@ struct AccountView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showMergeSheet = false
     @State private var serverHasData = false
-    @State private var wasAuthenticated = false
 
     private var ownedHomes: [HomeDetail] {
         homeStore.homeDetails.filter { $0.role == "owner" || $0.role == "admin" }
@@ -48,19 +47,13 @@ struct AccountView: View {
             .sheet(isPresented: $showMergeSheet) {
                 MergeChoiceView(
                     homeStore: homeStore,
-                    serverHasData: serverHasData
-                )
-                .environmentObject(syncManager)
-            }
-            .onAppear { wasAuthenticated = authStore.isAuthenticated }
-            .onChange(of: authStore.isAuthenticated) { _, isAuth in
-                // Auto-dismiss after successful sign-in (but not on sign-out)
-                if isAuth && !wasAuthenticated {
-                    // Small delay so handlePostSignIn can run first
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    serverHasData: serverHasData,
+                    onCompleted: {
+                        showMergeSheet = false
                         dismiss()
                     }
-                }
+                )
+                .environmentObject(syncManager)
             }
         }
     }
@@ -279,10 +272,12 @@ struct AccountView: View {
                 // Only local data — upload it
                 await syncManager.uploadLocalToServer()
                 homeStore.reloadFromLocal()
+                dismiss()
             } else {
                 // Only server data (or neither) — pull from server
                 await syncManager.replaceLocalWithServer()
                 homeStore.reloadFromLocal()
+                dismiss()
             }
         }
     }
@@ -392,6 +387,7 @@ struct GoogleSignInButtonCompact: View {
 struct MergeChoiceView: View {
     @ObservedObject var homeStore: HomeStore
     let serverHasData: Bool
+    let onCompleted: () -> Void
     @EnvironmentObject var syncManager: SyncManager
     @Environment(\.dismiss) private var dismiss
 
@@ -418,6 +414,7 @@ struct MergeChoiceView: View {
                             await syncManager.mergeLocalAndServer()
                             homeStore.reloadFromLocal()
                             dismiss()
+                            onCompleted()
                         }
                     } label: {
                         VStack(spacing: 4) {
@@ -439,6 +436,7 @@ struct MergeChoiceView: View {
                             await syncManager.uploadLocalToServer()
                             homeStore.reloadFromLocal()
                             dismiss()
+                            onCompleted()
                         }
                     } label: {
                         VStack(spacing: 4) {
@@ -459,6 +457,7 @@ struct MergeChoiceView: View {
                             await syncManager.replaceLocalWithServer()
                             homeStore.reloadFromLocal()
                             dismiss()
+                            onCompleted()
                         }
                     } label: {
                         VStack(spacing: 4) {
