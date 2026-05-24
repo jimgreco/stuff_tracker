@@ -6,6 +6,8 @@
 	<false/>
 	<key>GIDClientID</key>
 	<string>1018348991868-1oe0rr3l61huscj4eli4fj0e3baljvei.apps.googleusercontent.com</string>
+	<key>CFBundleDisplayName</key>
+	<string>Stuff Tracker</string>
 	<key>NSCameraUsageDescription</key>
 	<string>StuffTracker uses the camera to add photos to your items.</string>
 	<key>CFBundleURLTypes</key>
