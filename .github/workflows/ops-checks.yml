@@ -1,22 +1,6 @@
 name: Production Ops Checks
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/ops-checks.yml
-      - docs/OPERATIONS.md
-      - docs/HARDENING_BACKLOG.md
-      - backend/scripts/check-backup-freshness.cjs
-      - backend/scripts/check-s3-hardening.cjs
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/ops-checks.yml
-      - docs/OPERATIONS.md
-      - docs/HARDENING_BACKLOG.md
-      - backend/scripts/check-backup-freshness.cjs
-      - backend/scripts/check-s3-hardening.cjs
   schedule:
     - cron: "43 11 * * *"
   workflow_dispatch:
