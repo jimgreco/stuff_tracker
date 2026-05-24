@@ -32,7 +32,12 @@ function webAppleClientId(): string | undefined {
 
 async function verifyAppleIdentityToken(identityToken: string) {
   let lastError: unknown;
-  for (const audience of appleAudiences()) {
+  const audiences = appleAudiences();
+  if (audiences.length === 0) {
+    throw new Error('Apple Sign-In is not configured');
+  }
+
+  for (const audience of audiences) {
     try {
       return await appleSignin.verifyIdToken(identityToken, {
         audience,
@@ -108,6 +113,10 @@ router.post('/apple', async (req: Request, res: Response) => {
   const fullName = readAppleFullName(req.body);
   if (!identityToken) {
     res.status(400).json({ error: 'identityToken required' });
+    return;
+  }
+  if (appleAudiences().length === 0) {
+    res.status(503).json({ error: 'Apple Sign-In is not configured' });
     return;
   }
 

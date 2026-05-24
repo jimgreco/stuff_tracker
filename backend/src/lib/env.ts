@@ -49,7 +49,7 @@ export function assertStrongJwtSecret(secret: string): void {
 }
 
 export function validateRuntimeEnvironment(): void {
-  const required = ['DATABASE_URL', 'JWT_SECRET', 'GOOGLE_CLIENT_ID', 'APPLE_BUNDLE_ID'];
+  const required = ['DATABASE_URL', 'JWT_SECRET', 'GOOGLE_CLIENT_ID'];
   for (const name of required) {
     getRequiredEnv(name);
   }
