@@ -77,6 +77,17 @@ If `PRODUCTION_BASE_URL` is unset, the workflow exits successfully with a notice
 
 Treat a failing scheduled health run as an availability incident and follow the incident response runbook above.
 
+## Production Ops Checks
+
+The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host and runs these read-only checks inside the `stuff` container:
+
+```sh
+npm run db:backup:check
+npm run storage:s3:check
+```
+
+Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened.
+
 ## Production Logging
 
 Production HTTP access logs are JSON lines with `event=http_request`, `request_id`, method, path, status, duration, response length, remote address, and user agent. The API accepts a valid `x-request-id` header or generates one, then echoes it on the response so app logs and client-side reports can be correlated.

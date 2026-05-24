@@ -70,6 +70,18 @@ final class AuthStore: ObservableObject {
         currentUser = nil
     }
 
+    func signOutEverywhere() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            errorMessage = nil
+            try await APIClient.shared.logoutAll()
+            signOut()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func fetchCurrentUser() async {
         do {
             let user: User = try await APIClient.shared.request("GET", path: "/auth/me")

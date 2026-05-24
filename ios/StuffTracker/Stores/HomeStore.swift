@@ -46,16 +46,18 @@ final class HomeStore: ObservableObject {
             await SyncManager.shared.syncPendingChanges()
 
             let serverHomes = try await api.listHomes()
-            local.mergeFromServer(homes: serverHomes)
+            var mergeResult = local.mergeFromServer(homes: serverHomes)
 
             for home in serverHomes {
                 do {
                     let detail = try await api.getHome(home.id)
-                    local.mergeHomeDetail(homeDetail: detail)
+                    mergeResult.add(local.mergeHomeDetail(homeDetail: detail))
                 } catch {
                     // Individual home detail fetch failed, skip
                 }
             }
+
+            SyncManager.shared.deferredServerChangeCount = mergeResult.deferred
 
             // Reload UI from local (now updated with server data)
             reloadFromLocal()
@@ -316,6 +318,10 @@ final class HomeStore: ObservableObject {
             localItem.photoUrls = body.photoUrls ?? localItem.photoUrls
             localItem.documents = body.documents ?? localItem.documents
             localItem.purchaseDate = body.purchaseDate
+            localItem.serialNumber = body.serialNumber
+            localItem.modelNumber = body.modelNumber
+            localItem.warrantyExpiresDate = body.warrantyExpiresDate
+            localItem.estimatedValueCents = body.estimatedValueCents
             local.updateItem(localItem)
 
             // Update in-memory

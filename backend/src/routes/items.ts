@@ -71,6 +71,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     photo_urls,
     documents,
     purchase_date,
+    serial_number,
+    model_number,
+    warranty_expires_date,
+    estimated_value_cents,
   } = ItemSchema.parse(req.body);
   if (location_id) {
     const location = await pool.query(
@@ -89,9 +93,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const { rows } = await pool.query(
     `INSERT INTO items (
        home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
-       documents, purchase_date, created_by
+       documents, purchase_date, serial_number, model_number, warranty_expires_date,
+       estimated_value_cents, created_by
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       homeId,
@@ -104,6 +109,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       photo_urls ?? [],
       JSON.stringify(documents ?? []),
       purchase_date ?? null,
+      serial_number ?? null,
+      model_number ?? null,
+      warranty_expires_date ?? null,
+      estimated_value_cents ?? null,
       req.user!.userId,
     ]
   );
@@ -142,6 +151,10 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     'photo_urls',
     'documents',
     'purchase_date',
+    'serial_number',
+    'model_number',
+    'warranty_expires_date',
+    'estimated_value_cents',
   ] as const;
   for (const key of allowed) {
     if (key in updates) {
@@ -189,7 +202,7 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
   const q = String(req.query.q ?? '').trim();
   if (!q) { res.json([]); return; }
 
-  const searchVector = `to_tsvector('english', i.name || ' ' || COALESCE(i.notes, '') || ' ' || COALESCE(i.properties::text, ''))`;
+  const searchVector = `to_tsvector('english', i.name || ' ' || COALESCE(i.notes, '') || ' ' || COALESCE(i.properties::text, '') || ' ' || COALESCE(i.serial_number, '') || ' ' || COALESCE(i.model_number, ''))`;
   const { rows } = await pool.query(
     `SELECT i.*, l.name AS location_name, l.parent_id AS location_parent_id
      FROM items i

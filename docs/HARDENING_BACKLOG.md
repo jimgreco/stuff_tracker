@@ -33,20 +33,21 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add a database backup freshness check for scheduled backup monitoring.
 - [x] Add a read-only S3 hardening check for public access, policy status, encryption, and lifecycle review.
 - [x] Add a scheduled production health check workflow for `/health/live` and `/health`.
+- [x] Add a scheduled production ops check workflow for backup freshness and S3 hardening verification.
 
 ## Next
 
 - [ ] Make S3 fully private: apply block public access, use least-privilege IAM, enforce server-side encryption, and finalize bucket lifecycle policy.
 - [ ] Add session hardening: refresh tokens or reauth flow and device/session listing.
 - [ ] Add production observability: app error reporting, deploy alerts, and error-rate alerts.
-- [ ] Schedule database backups, alert on freshness failures, and run a restore drill; record actual restore time and recovery point.
+- [ ] Confirm production database backups are scheduled, keep the scheduled freshness alert green, and run a restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
 ## Suggested Order
 
 1. S3 private-by-default policy and IAM cleanup.
-2. Backup scheduling plus restore drill.
+2. Backup schedule confirmation plus restore drill.
 3. Observability and deploy alerts.
 4. JWT revocation and refresh-token design.
 5. Database role separation and SSL enforcement.

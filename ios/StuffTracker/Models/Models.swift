@@ -78,24 +78,36 @@ struct Item: Codable, Identifiable {
     var photoUrls: [String]
     var documents: [ItemDocument]
     var purchaseDate: String?
+    var serialNumber: String?
+    var modelNumber: String?
+    var warrantyExpiresDate: String?
+    var estimatedValueCents: Int?
     var sortOrder: Int
     let createdBy: String
     var needsSync: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id, homeId, locationId, name, icon, notes, quantity, properties, photoUrls
-        case documents, purchaseDate, sortOrder, createdBy
+        case documents, purchaseDate, serialNumber, modelNumber, warrantyExpiresDate
+        case estimatedValueCents, sortOrder, createdBy
     }
 
     init(id: String, homeId: String, locationId: String? = nil, name: String, icon: String? = nil,
          notes: String? = nil, quantity: Int = 1, properties: [ItemProperty] = [], photoUrls: [String] = [],
          documents: [ItemDocument] = [],
-         purchaseDate: String? = nil, sortOrder: Int = 0, createdBy: String = "", needsSync: Bool = false) {
+         purchaseDate: String? = nil, serialNumber: String? = nil, modelNumber: String? = nil,
+         warrantyExpiresDate: String? = nil, estimatedValueCents: Int? = nil,
+         sortOrder: Int = 0, createdBy: String = "", needsSync: Bool = false) {
         self.id = id; self.homeId = homeId; self.locationId = locationId; self.name = name
         self.icon = icon; self.notes = notes; self.quantity = quantity; self.properties = properties
         self.photoUrls = photoUrls
         self.documents = documents
-        self.purchaseDate = purchaseDate; self.sortOrder = sortOrder
+        self.purchaseDate = purchaseDate
+        self.serialNumber = serialNumber
+        self.modelNumber = modelNumber
+        self.warrantyExpiresDate = warrantyExpiresDate
+        self.estimatedValueCents = estimatedValueCents
+        self.sortOrder = sortOrder
         self.createdBy = createdBy; self.needsSync = needsSync
     }
 
@@ -112,6 +124,10 @@ struct Item: Codable, Identifiable {
         photoUrls = try c.decodeIfPresent([String].self, forKey: .photoUrls) ?? []
         documents = try c.decodeIfPresent([ItemDocument].self, forKey: .documents) ?? []
         purchaseDate = try c.decodeIfPresent(String.self, forKey: .purchaseDate)
+        serialNumber = try c.decodeIfPresent(String.self, forKey: .serialNumber)
+        modelNumber = try c.decodeIfPresent(String.self, forKey: .modelNumber)
+        warrantyExpiresDate = try c.decodeIfPresent(String.self, forKey: .warrantyExpiresDate)
+        estimatedValueCents = try c.decodeIfPresent(Int.self, forKey: .estimatedValueCents)
         sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
         createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy) ?? ""
         needsSync = false

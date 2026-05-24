@@ -8,6 +8,7 @@ private enum ItemEditError: LocalizedError {
     case cameraUnavailable
     case cameraCaptureFailed
     case photoProcessingFailed
+    case invalidEstimatedValue
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +20,8 @@ private enum ItemEditError: LocalizedError {
             return "Could not save the captured photo."
         case .photoProcessingFailed:
             return "Could not prepare the selected photo."
+        case .invalidEstimatedValue:
+            return "Estimated value must be a valid dollar amount."
         }
     }
 }
@@ -226,6 +229,11 @@ struct ItemEditView: View {
     @State private var name: String
     @State private var notes: String
     @State private var quantity: Int
+    @State private var purchaseDate: Date?
+    @State private var serialNumber: String
+    @State private var modelNumber: String
+    @State private var warrantyExpiresDate: Date?
+    @State private var estimatedValue: String
     @State private var selectedLocationId: String?
     @State private var isSaving = false
     @State private var selectedIcon: String
@@ -258,6 +266,11 @@ struct ItemEditView: View {
         _name = State(initialValue: item.name)
         _notes = State(initialValue: item.notes ?? "")
         _quantity = State(initialValue: item.quantity)
+        _purchaseDate = State(initialValue: ItemDateCodec.parse(item.purchaseDate))
+        _serialNumber = State(initialValue: item.serialNumber ?? "")
+        _modelNumber = State(initialValue: item.modelNumber ?? "")
+        _warrantyExpiresDate = State(initialValue: ItemDateCodec.parse(item.warrantyExpiresDate))
+        _estimatedValue = State(initialValue: Self.formattedDollars(fromCents: item.estimatedValueCents))
         _selectedLocationId = State(initialValue: item.locationId)
         _selectedIcon = State(initialValue: item.icon ?? "")
         _properties = State(initialValue: item.properties)
@@ -273,6 +286,7 @@ struct ItemEditView: View {
         NavigationStack {
             Form {
                 detailsSection
+                lifecycleSection
                 locationSection
                 propertiesSection
                 photosSection
@@ -344,6 +358,23 @@ struct ItemEditView: View {
 
             TextField("Notes", text: $notes, axis: .vertical)
                 .lineLimit(3...6)
+        }
+    }
+
+    @ViewBuilder
+    private var lifecycleSection: some View {
+        Section("Lifecycle") {
+            OptionalDatePickerRow(title: "Purchase Date", date: $purchaseDate)
+            OptionalDatePickerRow(title: "Warranty Expires", date: $warrantyExpiresDate)
+
+            TextField("Serial Number", text: $serialNumber)
+                .textInputAutocapitalization(.characters)
+
+            TextField("Model Number", text: $modelNumber)
+                .textInputAutocapitalization(.characters)
+
+            TextField("Estimated Value", text: $estimatedValue)
+                .keyboardType(.decimalPad)
         }
     }
 
@@ -566,6 +597,25 @@ struct ItemEditView: View {
                 value: property.value.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
+    }
+
+    private func normalizedText(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizedEstimatedValueCents() throws -> Int? {
+        let trimmed = estimatedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let value = Double(trimmed), value >= 0 else {
+            throw ItemEditError.invalidEstimatedValue
+        }
+        return Int((value * 100).rounded())
+    }
+
+    private static func formattedDollars(fromCents cents: Int?) -> String {
+        guard let cents else { return "" }
+        return String(format: "%.2f", Double(cents) / 100)
     }
 
     private func addProperty() {
@@ -917,7 +967,11 @@ struct ItemEditView: View {
                     properties: normalizedProperties,
                     photoUrls: nextPhotoUrls,
                     documents: nextDocuments,
-                    purchaseDate: item.purchaseDate
+                    purchaseDate: ItemDateCodec.string(from: purchaseDate),
+                    serialNumber: normalizedText(serialNumber),
+                    modelNumber: normalizedText(modelNumber),
+                    warrantyExpiresDate: ItemDateCodec.string(from: warrantyExpiresDate),
+                    estimatedValueCents: try normalizedEstimatedValueCents()
                 )
 
                 homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)
@@ -1086,6 +1140,54 @@ private struct CameraCaptureView: UIViewControllerRepresentable {
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             dismiss()
+        }
+    }
+}
+
+private enum ItemDateCodec {
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    static func parse(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+        return formatter.date(from: value)
+    }
+
+    static func string(from date: Date?) -> String? {
+        guard let date else { return nil }
+        return formatter.string(from: date)
+    }
+}
+
+private struct OptionalDatePickerRow: View {
+    let title: String
+    @Binding var date: Date?
+
+    private var selection: Binding<Date> {
+        Binding(
+            get: { date ?? Date() },
+            set: { date = $0 }
+        )
+    }
+
+    var body: some View {
+        HStack {
+            DatePicker(title, selection: selection, displayedComponents: .date)
+                .disabled(date == nil)
+            Button(date == nil ? "Add" : "Clear") {
+                if date == nil {
+                    date = Date()
+                } else {
+                    date = nil
+                }
+            }
+            .buttonStyle(.borderless)
         }
     }
 }

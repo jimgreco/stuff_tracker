@@ -377,7 +377,12 @@ final class LocalDataManager {
             predicate: #Predicate { item in
                 item.homeId == homeId &&
                 !item.isDeleted &&
-                item.name.localizedStandardContains(lowercaseQuery)
+                (
+                    item.name.localizedStandardContains(lowercaseQuery) ||
+                    (item.notes ?? "").localizedStandardContains(lowercaseQuery) ||
+                    (item.serialNumber ?? "").localizedStandardContains(lowercaseQuery) ||
+                    (item.modelNumber ?? "").localizedStandardContains(lowercaseQuery)
+                )
             }
         )
         
@@ -386,17 +391,26 @@ final class LocalDataManager {
     
     // MARK: - Sync from Server
     
-    func mergeFromServer(homes: [Home]) {
+    @discardableResult
+    func mergeFromServer(homes: [Home]) -> ServerMergeResult {
+        var result = ServerMergeResult()
         for home in homes {
             if let existingHome = fetchHome(id: home.id) {
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existingHome.needsSync,
                     isDeleted: existingHome.isDeleted
-                ) else { continue }
+                ) else {
+                    result.deferred += 1
+                    continue
+                }
                 existingHome.update(from: home)
+                result.applied += 1
             } else {
                 // Don't re-insert if it was locally deleted
-                if fetchDeletedHome(id: home.id) != nil { continue }
+                if fetchDeletedHome(id: home.id) != nil {
+                    result.deferred += 1
+                    continue
+                }
                 let localHome = LocalHome(
                     id: home.id,
                     name: home.name,
@@ -406,13 +420,17 @@ final class LocalDataManager {
                     needsSync: false
                 )
                 modelContext?.insert(localHome)
+                result.applied += 1
             }
         }
         save()
+        return result
     }
     
-    func mergeHomeDetail(homeDetail: HomeDetail) {
-        guard let home = fetchHome(id: homeDetail.id) else { return }
+    @discardableResult
+    func mergeHomeDetail(homeDetail: HomeDetail) -> ServerMergeResult {
+        var result = ServerMergeResult()
+        guard let home = fetchHome(id: homeDetail.id) else { return result }
 
         // Update home
         if ServerMergePolicy.shouldApplyServerRecord(needsSync: home.needsSync, isDeleted: home.isDeleted) {
@@ -421,6 +439,9 @@ final class LocalDataManager {
             home.role = homeDetail.role
             home.icon = homeDetail.icon
             home.needsSync = false
+            result.applied += 1
+        } else {
+            result.deferred += 1
         }
 
         // Merge locations
@@ -430,11 +451,18 @@ final class LocalDataManager {
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existing.needsSync,
                     isDeleted: existing.isDeleted
-                ) else { continue }
+                ) else {
+                    result.deferred += 1
+                    continue
+                }
                 existing.update(from: location)
+                result.applied += 1
             } else {
                 // Don't re-insert if locally deleted
-                if home.locations.contains(where: { $0.id == location.id && $0.isDeleted }) { continue }
+                if home.locations.contains(where: { $0.id == location.id && $0.isDeleted }) {
+                    result.deferred += 1
+                    continue
+                }
                 let localLocation = LocalLocation(
                     id: location.id,
                     homeId: location.homeId,
@@ -447,6 +475,7 @@ final class LocalDataManager {
                 )
                 modelContext?.insert(localLocation)
                 localLocation.home = home
+                result.applied += 1
             }
         }
 
@@ -457,11 +486,18 @@ final class LocalDataManager {
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existing.needsSync,
                     isDeleted: existing.isDeleted
-                ) else { continue }
+                ) else {
+                    result.deferred += 1
+                    continue
+                }
                 existing.update(from: item)
+                result.applied += 1
             } else {
                 // Don't re-insert if locally deleted
-                if home.items.contains(where: { $0.id == item.id && $0.isDeleted }) { continue }
+                if home.items.contains(where: { $0.id == item.id && $0.isDeleted }) {
+                    result.deferred += 1
+                    continue
+                }
                 let localItem = LocalItem(
                     id: item.id,
                     homeId: item.homeId,
@@ -474,15 +510,21 @@ final class LocalDataManager {
                     photoUrls: item.photoUrls,
                     documents: item.documents,
                     purchaseDate: item.purchaseDate,
+                    serialNumber: item.serialNumber,
+                    modelNumber: item.modelNumber,
+                    warrantyExpiresDate: item.warrantyExpiresDate,
+                    estimatedValueCents: item.estimatedValueCents,
                     createdBy: item.createdBy,
                     needsSync: false
                 )
                 modelContext?.insert(localItem)
                 localItem.home = home
+                result.applied += 1
             }
         }
 
         save()
+        return result
     }
     
     // MARK: - Helpers

@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const LocationTypeSchema = z.enum(['floor', 'room', 'container']);
 const IconSchema = z.string().trim().min(1).max(100).nullable().optional();
+const DateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+const OptionalTrimmedTextSchema = (max: number) => z.string().trim().max(max).nullable().optional();
 
 export const LocationSchema = z.object({
   name: z.string().min(1).max(200),
@@ -33,7 +35,11 @@ export const ItemSchema = z.object({
   properties: z.array(ItemPropertySchema).max(100).optional(),
   photo_urls: z.array(z.string().url()).max(50).optional(),
   documents: z.array(ItemDocumentSchema).max(50).optional(),
-  purchase_date: z.string().nullable().optional(),
+  purchase_date: DateStringSchema,
+  serial_number: OptionalTrimmedTextSchema(200),
+  model_number: OptionalTrimmedTextSchema(200),
+  warranty_expires_date: DateStringSchema,
+  estimated_value_cents: z.number().int().min(0).nullable().optional(),
 });
 
 export const ItemUploadSchema = z.preprocess((value) => {

@@ -10,6 +10,48 @@ import { upsertUser, UserIdentityConflictError } from '../lib/users';
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+function unique(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function googleAudiences(): string[] {
+  return unique([process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_WEB_CLIENT_ID]);
+}
+
+function webGoogleClientId(): string | undefined {
+  return process.env.GOOGLE_WEB_CLIENT_ID?.trim();
+}
+
+function appleAudiences(): string[] {
+  return unique([process.env.APPLE_BUNDLE_ID, process.env.APPLE_WEB_CLIENT_ID]);
+}
+
+function webAppleClientId(): string | undefined {
+  return process.env.APPLE_WEB_CLIENT_ID?.trim();
+}
+
+async function verifyAppleIdentityToken(identityToken: string) {
+  let lastError: unknown;
+  for (const audience of appleAudiences()) {
+    try {
+      return await appleSignin.verifyIdToken(identityToken, {
+        audience,
+        ignoreExpiration: false,
+      });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error('Apple Sign-In audience is not configured');
+}
+
+router.get('/config', (_req: Request, res: Response) => {
+  res.json({
+    google_client_id: webGoogleClientId() ?? null,
+    apple_client_id: webAppleClientId() ?? null,
+  });
+});
+
 // ── Local dev sign-in (DEBUG/testing only) ────────────────────────────────────
 router.post('/dev', async (req: Request, res: Response) => {
   if (process.env.NODE_ENV === 'production') {
@@ -39,7 +81,7 @@ router.post('/google', async (req: Request, res: Response) => {
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: googleAudiences(),
     });
     const payload = ticket.getPayload();
     if (!payload?.sub || !payload.email) {
@@ -70,10 +112,7 @@ router.post('/apple', async (req: Request, res: Response) => {
   }
 
   try {
-    const applePayload = await appleSignin.verifyIdToken(identityToken, {
-      audience: process.env.APPLE_BUNDLE_ID,
-      ignoreExpiration: false,
-    });
+    const applePayload = await verifyAppleIdentityToken(identityToken);
 
     const appleId = applePayload.sub;
     const emailIsFallback = !applePayload.email;

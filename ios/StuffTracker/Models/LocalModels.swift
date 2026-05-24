@@ -147,6 +147,10 @@ final class LocalItem {
     var photoUrls: [String] = []
     var documentsData: Data?
     var purchaseDate: String?
+    var serialNumber: String?
+    var modelNumber: String?
+    var warrantyExpiresDate: String?
+    var estimatedValueCents: Int?
     var sortOrder: Int = 0
     var createdBy: String?
     var needsSync: Bool
@@ -167,6 +171,10 @@ final class LocalItem {
          photoUrls: [String] = [],
          documents: [ItemDocument] = [],
          purchaseDate: String? = nil,
+         serialNumber: String? = nil,
+         modelNumber: String? = nil,
+         warrantyExpiresDate: String? = nil,
+         estimatedValueCents: Int? = nil,
          sortOrder: Int = 0,
          createdBy: String? = nil,
          needsSync: Bool = true,
@@ -182,6 +190,10 @@ final class LocalItem {
         self.photoUrls = photoUrls
         self.documentsData = Self.encodedDocuments(documents)
         self.purchaseDate = purchaseDate
+        self.serialNumber = serialNumber
+        self.modelNumber = modelNumber
+        self.warrantyExpiresDate = warrantyExpiresDate
+        self.estimatedValueCents = estimatedValueCents
         self.sortOrder = sortOrder
         self.createdBy = createdBy
         self.needsSync = needsSync
@@ -203,6 +215,10 @@ final class LocalItem {
             photoUrls: photoUrls,
             documents: documents,
             purchaseDate: purchaseDate,
+            serialNumber: serialNumber,
+            modelNumber: modelNumber,
+            warrantyExpiresDate: warrantyExpiresDate,
+            estimatedValueCents: estimatedValueCents,
             sortOrder: sortOrder,
             createdBy: createdBy ?? "",
             needsSync: needsSync
@@ -219,6 +235,10 @@ final class LocalItem {
         self.photoUrls = item.photoUrls
         self.documents = item.documents
         self.purchaseDate = item.purchaseDate
+        self.serialNumber = item.serialNumber
+        self.modelNumber = item.modelNumber
+        self.warrantyExpiresDate = item.warrantyExpiresDate
+        self.estimatedValueCents = item.estimatedValueCents
         self.sortOrder = item.sortOrder
         self.needsSync = false
         self.updatedAt = Date()

@@ -895,6 +895,20 @@ button:disabled {
   color: var(--danger);
 }
 
+.provider-button-host {
+  display: grid;
+  min-height: 48px;
+  place-items: center;
+  padding: 6px 12px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface);
+}
+
+.provider-apple {
+  background: #000000;
+  color: #ffffff;
+}
+
 .attachment-list {
   display: grid;
   gap: 8px;

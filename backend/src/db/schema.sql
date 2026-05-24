@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS items (
   properties JSONB NOT NULL DEFAULT '[]'::jsonb,
   documents JSONB NOT NULL DEFAULT '[]'::jsonb,
   purchase_date DATE,
+  serial_number TEXT,
+  model_number TEXT,
+  warranty_expires_date DATE,
+  estimated_value_cents INTEGER,
   created_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -79,7 +83,16 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS document_name TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS document_content_type TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS properties JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS documents JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS serial_number TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS model_number TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS warranty_expires_date DATE;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS estimated_value_cents INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_revoked_before TIMESTAMPTZ;
+
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_estimated_value_cents_check;
+ALTER TABLE items
+  ADD CONSTRAINT items_estimated_value_cents_check
+  CHECK (estimated_value_cents IS NULL OR estimated_value_cents >= 0);
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_locations_home_id ON locations(home_id);
@@ -89,4 +102,13 @@ CREATE INDEX IF NOT EXISTS idx_items_location_id ON items(location_id);
 CREATE INDEX IF NOT EXISTS idx_home_members_user_id ON home_members(user_id);
 
 -- Full-text search index on items
-CREATE INDEX IF NOT EXISTS idx_items_search ON items USING GIN (to_tsvector('english', name || ' ' || COALESCE(notes, '')));
+CREATE INDEX IF NOT EXISTS idx_items_search ON items USING GIN (
+  to_tsvector(
+    'english',
+    name || ' ' ||
+    COALESCE(notes, '') || ' ' ||
+    COALESCE(properties::text, '') || ' ' ||
+    COALESCE(serial_number, '') || ' ' ||
+    COALESCE(model_number, '')
+  )
+);

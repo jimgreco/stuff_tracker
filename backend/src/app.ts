@@ -25,7 +25,10 @@ export function createApp() {
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
+        'connect-src': ["'self'", 'https://accounts.google.com', 'https://appleid.apple.com'],
+        'frame-src': ["'self'", 'https://accounts.google.com', 'https://appleid.apple.com'],
         'img-src': ["'self'", 'data:', 'https:'],
+        'script-src': ["'self'", 'https://accounts.google.com', 'https://appleid.cdn-apple.com'],
       },
     },
   }));

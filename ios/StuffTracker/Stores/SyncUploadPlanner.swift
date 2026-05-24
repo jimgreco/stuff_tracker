@@ -70,3 +70,13 @@ enum ServerMergePolicy {
         !needsSync && !isDeleted
     }
 }
+
+struct ServerMergeResult: Equatable {
+    var applied: Int = 0
+    var deferred: Int = 0
+
+    mutating func add(_ other: ServerMergeResult) {
+        applied += other.applied
+        deferred += other.deferred
+    }
+}

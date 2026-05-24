@@ -261,6 +261,10 @@ final class APIClient {
         )
     }
 
+    func logoutAll() async throws {
+        try await requestEmpty("POST", path: "/auth/logout-all")
+    }
+
     // MARK: - Homes
 
     func listHomes() async throws -> [Home] {
@@ -385,10 +389,15 @@ final class APIClient {
         let photoUrls: [String]?
         let documents: [ItemDocument]?
         let purchaseDate: String?
+        let serialNumber: String?
+        let modelNumber: String?
+        let warrantyExpiresDate: String?
+        let estimatedValueCents: Int?
 
         enum CodingKeys: String, CodingKey {
             case name, locationId, icon, notes, quantity, properties, photoUrls
-            case documents, purchaseDate
+            case documents, purchaseDate, serialNumber, modelNumber, warrantyExpiresDate
+            case estimatedValueCents
         }
 
         func encode(to encoder: Encoder) throws {
@@ -402,6 +411,10 @@ final class APIClient {
             try container.encodeIfPresent(photoUrls, forKey: .photoUrls)
             try container.encodeIfPresent(documents, forKey: .documents)
             try container.encodeIfPresent(purchaseDate, forKey: .purchaseDate)
+            try container.encodeIfPresent(serialNumber, forKey: .serialNumber)
+            try container.encodeIfPresent(modelNumber, forKey: .modelNumber)
+            try container.encodeIfPresent(warrantyExpiresDate, forKey: .warrantyExpiresDate)
+            try container.encodeIfPresent(estimatedValueCents, forKey: .estimatedValueCents)
         }
     }
 

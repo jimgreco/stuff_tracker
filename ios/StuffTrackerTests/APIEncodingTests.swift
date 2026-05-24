@@ -40,7 +40,11 @@ final class APIEncodingTests: XCTestCase {
             properties: [],
             photoUrls: [],
             documents: [],
-            purchaseDate: nil
+            purchaseDate: nil,
+            serialNumber: "SN-123",
+            modelNumber: "MX-1",
+            warrantyExpiresDate: "2027-05-24",
+            estimatedValueCents: 12999
         )
 
         let json = try encodedJSON(body)
@@ -52,6 +56,10 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertTrue((json["properties"] as? [[String: Any]])?.isEmpty == true)
         XCTAssertEqual(json["photo_urls"] as? [String], [])
         XCTAssertTrue((json["documents"] as? [[String: Any]])?.isEmpty == true)
+        XCTAssertEqual(json["serial_number"] as? String, "SN-123")
+        XCTAssertEqual(json["model_number"] as? String, "MX-1")
+        XCTAssertEqual(json["warranty_expires_date"] as? String, "2027-05-24")
+        XCTAssertEqual(json["estimated_value_cents"] as? Int, 12999)
         XCTAssertFalse(json.keys.contains("tags"))
         XCTAssertFalse(json.keys.contains("purchase_date"))
     }

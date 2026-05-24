@@ -143,6 +143,16 @@ struct AccountView: View {
                 }
             }
 
+            if syncManager.deferredServerChangeCount > 0 {
+                HStack {
+                    Label("Server Changes Held", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Spacer()
+                    Text("\(syncManager.deferredServerChangeCount)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Button {
                 Task {
                     await syncManager.performFullSync()
@@ -181,6 +191,19 @@ struct AccountView: View {
         }
 
         Section {
+            Button(role: .destructive) {
+                Task {
+                    await authStore.signOutEverywhere()
+                    dismiss()
+                }
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Sign Out Everywhere")
+                    Spacer()
+                }
+            }
+
             Button(role: .destructive) {
                 authStore.signOut()
                 dismiss()

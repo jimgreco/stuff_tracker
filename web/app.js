@@ -27,6 +27,8 @@
     sheet: null,
     adding: null,
     iconSearch: "",
+    googleClientId: "",
+    appleClientId: "",
   };
 
   const ICON_PATHS = {
@@ -111,9 +113,12 @@
   }
 
   function defaultApiBaseUrl() {
-    const { hostname, origin, protocol } = window.location;
+    const { hostname, origin, port, protocol } = window.location;
     const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
     if ((protocol === "http:" || protocol === "https:") && !isLocalHost) {
+      return origin;
+    }
+    if (isLocalHost && port && port !== "5173") {
       return origin;
     }
     return "http://localhost:3002";
@@ -176,6 +181,19 @@
       return window.crypto.randomUUID();
     }
     return "10000000-1000-4000-8000-" + Math.random().toString(16).slice(2, 14).padEnd(12, "0");
+  }
+
+  function formatDollars(cents) {
+    if (!Number.isInteger(cents)) return "";
+    return (cents / 100).toFixed(2);
+  }
+
+  function centsFromDollars(value) {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return null;
+    const dollars = Number(trimmed);
+    if (!Number.isFinite(dollars) || dollars < 0) return null;
+    return Math.round(dollars * 100);
   }
 
   function iconKey(symbol) {
@@ -406,6 +424,7 @@
     }
 
     requestAnimationFrame(updateBreadcrumb);
+    requestAnimationFrame(renderProviderSignInButtons);
   }
 
   function renderApp() {
@@ -704,6 +723,8 @@
             <input name="apiBaseUrl" value="${escapeAttr(state.apiBaseUrl)}" inputmode="url" autocomplete="url">
           </label>
           <button type="submit" class="row-button">${svgIcon("check")} Save API URL</button>
+          ${!connected && state.googleClientId ? `<div id="google-sign-in-button" class="provider-button-host"></div>` : ""}
+          ${!connected && state.appleClientId ? `<button type="button" class="row-button provider-apple" data-action="apple-sign-in">Sign in with Apple</button>` : ""}
           <button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>
           ${connected ? `<button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>` : ""}
         </div>
@@ -713,10 +734,11 @@
         <div class="form-list">
           <button type="button" class="row-button" data-action="use-demo-data">${svgIcon("archivebox.fill")} Use Demo Data</button>
           <button type="button" class="row-button" data-action="reset-demo-data">${svgIcon("refresh")} Reset Demo Data</button>
+          ${connected ? `<button type="button" class="row-button danger" data-action="logout-all">${svgIcon("x")} Sign Out Everywhere</button>` : ""}
           ${connected ? `<button type="button" class="row-button danger" data-action="sign-out">${svgIcon("x")} Sign Out</button>` : ""}
         </div>
       </section>
-      <p class="footnote">Version web prototype. Google and Apple web OAuth are not wired here; local backend testing uses the same development sign-in route as the iOS debug build.</p>
+      <p class="footnote">Version web prototype.</p>
     `;
     return sheetChrome("Account", body);
   }
@@ -865,6 +887,26 @@
               <span>Quantity</span>
               <input name="quantity" type="number" min="1" max="9999" inputmode="numeric" value="${escapeAttr(draft.quantity || 1)}">
             </label>
+            <label class="form-row">
+              <span>Purchase Date</span>
+              <input name="purchaseDate" type="date" value="${escapeAttr(draft.purchaseDate || "")}">
+            </label>
+            <label class="form-row">
+              <span>Warranty</span>
+              <input name="warrantyExpiresDate" type="date" value="${escapeAttr(draft.warrantyExpiresDate || "")}">
+            </label>
+            <label class="form-row">
+              <span>Serial</span>
+              <input name="serialNumber" value="${escapeAttr(draft.serialNumber || "")}" autocomplete="off">
+            </label>
+            <label class="form-row">
+              <span>Model</span>
+              <input name="modelNumber" value="${escapeAttr(draft.modelNumber || "")}" autocomplete="off">
+            </label>
+            <label class="form-row">
+              <span>Value</span>
+              <input name="estimatedValue" inputmode="decimal" value="${escapeAttr(formatDollars(draft.estimatedValueCents))}">
+            </label>
             <label class="full-row">
               <div class="row-label">Notes</div>
               <textarea name="notes" rows="4">${escapeHtml(draft.notes || "")}</textarea>
@@ -983,7 +1025,13 @@
 
       const matchingItems = home.items.filter((item) => {
         const propertyText = item.properties.map((property) => `${property.key} ${property.value}`).join(" ");
-        return `${item.name} ${item.notes || ""} ${propertyText}`.toLowerCase().includes(query);
+        return [
+          item.name,
+          item.notes || "",
+          item.serialNumber || "",
+          item.modelNumber || "",
+          propertyText,
+        ].join(" ").toLowerCase().includes(query);
       });
 
       if (!homeMatches && directMatchIds.size === 0 && matchingItems.length === 0) {
@@ -1135,6 +1183,88 @@
     return response.json();
   }
 
+  async function loadAuthConfig() {
+    try {
+      const config = await apiRequest("GET", "/auth/config");
+      state.googleClientId = config.googleClientId ?? config.google_client_id ?? "";
+      state.appleClientId = config.appleClientId ?? config.apple_client_id ?? "";
+    } catch {
+      state.googleClientId = "";
+      state.appleClientId = "";
+    }
+    render();
+  }
+
+  function renderProviderSignInButtons() {
+    const container = document.getElementById("google-sign-in-button");
+    if (
+      container &&
+      state.googleClientId &&
+      window.google?.accounts?.id &&
+      container.dataset.clientId !== state.googleClientId
+    ) {
+      container.innerHTML = "";
+      window.google.accounts.id.initialize({
+        client_id: state.googleClientId,
+        callback: handleGoogleCredentialResponse,
+      });
+      window.google.accounts.id.renderButton(container, {
+        theme: "outline",
+        size: "large",
+        width: Math.max(container.clientWidth || 280, 240),
+      });
+      container.dataset.clientId = state.googleClientId;
+    }
+  }
+
+  function handleGoogleCredentialResponse(response) {
+    if (!response?.credential) {
+      showToast("Google sign-in failed");
+      render();
+      return;
+    }
+    void runMutation(async () => {
+      const auth = await apiRequest("POST", "/auth/google", { idToken: response.credential });
+      applyAuthResponse(auth);
+      await loadServerHomes();
+      state.sheet = null;
+    }, "Signed in");
+  }
+
+  async function signInWithApple() {
+    if (!state.appleClientId || !window.AppleID?.auth) {
+      throw new Error("Apple sign-in is not configured");
+    }
+
+    window.AppleID.auth.init({
+      clientId: state.appleClientId,
+      scope: "name email",
+      redirectURI: window.location.origin,
+      usePopup: true,
+    });
+
+    const response = await window.AppleID.auth.signIn();
+    const identityToken = response?.authorization?.id_token;
+    if (!identityToken) {
+      throw new Error("Apple sign-in did not return an identity token");
+    }
+
+    const name = response?.user?.name || {};
+    const fullName = (name.firstName || name.lastName)
+      ? { givenName: name.firstName || null, familyName: name.lastName || null }
+      : null;
+    const auth = await apiRequest("POST", "/auth/apple", { identityToken, fullName });
+    applyAuthResponse(auth);
+    await loadServerHomes();
+    state.sheet = null;
+  }
+
+  function applyAuthResponse(auth) {
+    state.token = auth.token;
+    state.user = normalizeUser(auth.user);
+    persistSession();
+  }
+
   async function loadServerHomes() {
     const homes = await apiRequest("GET", "/homes");
     const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
@@ -1185,6 +1315,10 @@
         contentType: document.contentType ?? document.content_type ?? null,
       })),
       purchaseDate: raw.purchaseDate ?? raw.purchase_date ?? null,
+      serialNumber: raw.serialNumber ?? raw.serial_number ?? null,
+      modelNumber: raw.modelNumber ?? raw.model_number ?? null,
+      warrantyExpiresDate: raw.warrantyExpiresDate ?? raw.warranty_expires_date ?? null,
+      estimatedValueCents: raw.estimatedValueCents ?? raw.estimated_value_cents ?? null,
       sortOrder: raw.sortOrder ?? raw.sort_order ?? 0,
       createdBy: raw.createdBy ?? raw.created_by ?? "",
     };
@@ -1212,6 +1346,10 @@
         content_type: document.contentType || null,
       })),
       purchase_date: item.purchaseDate || null,
+      serial_number: item.serialNumber || null,
+      model_number: item.modelNumber || null,
+      warranty_expires_date: item.warrantyExpiresDate || null,
+      estimated_value_cents: Number.isInteger(item.estimatedValueCents) ? item.estimatedValueCents : null,
     };
   }
 
@@ -1289,6 +1427,10 @@
       photoUrls: [],
       documents: [],
       purchaseDate: null,
+      serialNumber: null,
+      modelNumber: null,
+      warrantyExpiresDate: null,
+      estimatedValueCents: null,
       sortOrder,
       createdBy: state.user?.id || "local",
     };
@@ -1454,7 +1596,11 @@
       })),
       photoUrls: state.sheet?.draft?.photoUrls || formItem?.photoUrls || [],
       documents: state.sheet?.draft?.documents || formItem?.documents || [],
-      purchaseDate: state.sheet?.draft?.purchaseDate || formItem?.purchaseDate || null,
+      purchaseDate: form.elements.purchaseDate.value || null,
+      serialNumber: form.elements.serialNumber.value.trim() || null,
+      modelNumber: form.elements.modelNumber.value.trim() || null,
+      warrantyExpiresDate: form.elements.warrantyExpiresDate.value || null,
+      estimatedValueCents: centsFromDollars(form.elements.estimatedValue.value),
       sortOrder: formItem?.sortOrder || 0,
     };
   }
@@ -1675,11 +1821,13 @@
     if (action === "dev-sign-in") {
       await runMutation(async () => {
         const auth = await apiRequest("POST", "/auth/dev", { email: "dev@stufftracker.local", name: "Local Dev" });
-        state.token = auth.token;
-        state.user = normalizeUser(auth.user);
-        persistSession();
+        applyAuthResponse(auth);
         await loadServerHomes();
       }, "Signed in");
+      return;
+    }
+    if (action === "apple-sign-in") {
+      await runMutation(signInWithApple, "Signed in");
       return;
     }
     if (action === "reload-server") {
@@ -1692,6 +1840,16 @@
       persistSession();
       state.sheet = null;
       render();
+      return;
+    }
+    if (action === "logout-all") {
+      await runMutation(async () => {
+        await apiRequest("POST", "/auth/logout-all");
+        state.token = "";
+        state.user = null;
+        persistSession();
+        state.sheet = null;
+      }, "Signed out everywhere");
       return;
     }
     if (action === "use-demo-data") {
@@ -1751,6 +1909,7 @@
       state.apiBaseUrl = nextUrl || DEFAULT_API_BASE_URL;
       persistSession();
       showToast("API URL saved");
+      void loadAuthConfig();
       render();
       return;
     }
@@ -1799,6 +1958,7 @@
   window.addEventListener("resize", updateBreadcrumb);
 
   render();
+  void loadAuthConfig();
 
   if (state.token) {
     void runMutation(loadServerHomes);

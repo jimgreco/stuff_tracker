@@ -47,6 +47,31 @@ test('app serves the mobile web shell at root and /web', async (t) => {
   }
 });
 
+test('auth config exposes public web sign-in client ids only', async (t) => {
+  const previousGoogleWebClientId = process.env.GOOGLE_WEB_CLIENT_ID;
+  const previousAppleWebClientId = process.env.APPLE_WEB_CLIENT_ID;
+  process.env.GOOGLE_WEB_CLIENT_ID = 'web-google-client-id.apps.googleusercontent.com';
+  process.env.APPLE_WEB_CLIENT_ID = 'com.example.stuff.web';
+
+  const server = await listen();
+  t.after(() => {
+    process.env.GOOGLE_WEB_CLIENT_ID = previousGoogleWebClientId;
+    process.env.APPLE_WEB_CLIENT_ID = previousAppleWebClientId;
+    return close(server);
+  });
+
+  const response = await fetch(`${serverBaseUrl(server)}/auth/config`);
+  const body = await response.json() as {
+    google_client_id: string | null;
+    apple_client_id: string | null;
+  };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.google_client_id, 'web-google-client-id.apps.googleusercontent.com');
+  assert.equal(body.apple_client_id, 'com.example.stuff.web');
+  assert.equal('jwt_secret' in body, false);
+});
+
 async function listen(): Promise<http.Server> {
   const app = createApp();
   const server = app.listen(0, '127.0.0.1');

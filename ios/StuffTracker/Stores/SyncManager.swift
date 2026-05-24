@@ -28,6 +28,7 @@ final class SyncManager: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var syncError: String?
     @Published var pendingSyncCount: Int = 0
+    @Published var deferredServerChangeCount: Int = 0
 
     private let api = APIClient.shared
     private let local = LocalDataManager.shared
@@ -75,17 +76,19 @@ final class SyncManager: ObservableObject {
 
     private func pullFromServer() async {
         do {
+            var mergeResult = ServerMergeResult()
             let serverHomes = try await api.listHomes()
-            local.mergeFromServer(homes: serverHomes)
+            mergeResult.add(local.mergeFromServer(homes: serverHomes))
 
             for home in serverHomes {
                 do {
                     let detail = try await api.getHome(home.id)
-                    local.mergeHomeDetail(homeDetail: detail)
+                    mergeResult.add(local.mergeHomeDetail(homeDetail: detail))
                 } catch {
                     // Skip individual failures
                 }
             }
+            deferredServerChangeCount = mergeResult.deferred
         } catch {
             syncError = "Pull failed: \(error.localizedDescription)"
         }
@@ -460,7 +463,11 @@ final class SyncManager: ObservableObject {
             properties: item.properties,
             photoUrls: item.photoUrls,
             documents: item.documents,
-            purchaseDate: item.purchaseDate
+            purchaseDate: item.purchaseDate,
+            serialNumber: item.serialNumber,
+            modelNumber: item.modelNumber,
+            warrantyExpiresDate: item.warrantyExpiresDate,
+            estimatedValueCents: item.estimatedValueCents
         )
     }
 

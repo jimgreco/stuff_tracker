@@ -47,6 +47,11 @@ test('item sync validation allows missing legacy fields and explicit root locati
 test('item validation keeps ordered properties and document metadata', () => {
   const parsed = ItemSchema.parse({
     name: 'Warranty folder',
+    purchase_date: '2026-05-24',
+    serial_number: 'SERIAL-1',
+    model_number: 'MODEL-1',
+    warranty_expires_date: '2027-05-24',
+    estimated_value_cents: 4999,
     properties: [
       { id: 'prop-1', key: 'Location', value: 'Garage' },
       { id: 'prop-2', key: 'Category', value: 'Tools' },
@@ -79,6 +84,11 @@ test('item validation keeps ordered properties and document metadata', () => {
     'https://cdn.example.com/chair-side.jpg',
   ]);
   assert.equal(parsed.documents?.length, 2);
+  assert.equal(parsed.purchase_date, '2026-05-24');
+  assert.equal(parsed.serial_number, 'SERIAL-1');
+  assert.equal(parsed.model_number, 'MODEL-1');
+  assert.equal(parsed.warranty_expires_date, '2027-05-24');
+  assert.equal(parsed.estimated_value_cents, 4999);
 });
 
 test('item upload validation accepts photos and documents', () => {
@@ -140,4 +150,7 @@ test('fresh database schema allows floor locations', () => {
   assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT/);
   assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT/);
   assert.match(schemaSql, /ALTER TABLE items ADD COLUMN IF NOT EXISTS icon TEXT/);
+  assert.match(schemaSql, /serial_number TEXT/);
+  assert.match(schemaSql, /warranty_expires_date DATE/);
+  assert.match(schemaSql, /estimated_value_cents INTEGER/);
 });

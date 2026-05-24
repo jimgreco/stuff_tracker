@@ -58,15 +58,30 @@ test('location schema validates parent ids and sort order', () => {
 });
 
 test('item schema rejects invalid quantities and urls', () => {
-  const parsed = ItemSchema.parse({ name: 'Keys', quantity: 1, icon: 'key.fill' });
+  const parsed = ItemSchema.parse({
+    name: 'Keys',
+    quantity: 1,
+    icon: 'key.fill',
+    purchase_date: '2026-05-24',
+    serial_number: 'SN-123',
+    model_number: 'MX-1',
+    warranty_expires_date: '2027-05-24',
+    estimated_value_cents: 12999,
+  });
   assert.equal(parsed.quantity, 1);
   assert.equal(parsed.icon, 'key.fill');
+  assert.equal(parsed.serial_number, 'SN-123');
+  assert.equal(parsed.model_number, 'MX-1');
+  assert.equal(parsed.warranty_expires_date, '2027-05-24');
+  assert.equal(parsed.estimated_value_cents, 12999);
 
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 0 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 1.5 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', photo_urls: ['not-a-url'] }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', properties: [{ id: 'prop-1', key: '', value: 'Brass' }] }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', icon: '' }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', purchase_date: '05/24/2026' }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', estimated_value_cents: -1 }));
 });
 
 test('item schema accepts generated S3 object keys as document ids', () => {

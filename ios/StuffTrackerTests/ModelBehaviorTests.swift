@@ -23,6 +23,10 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(item.properties, [])
         XCTAssertEqual(item.photoUrls, [])
         XCTAssertEqual(item.documents, [])
+        XCTAssertNil(item.serialNumber)
+        XCTAssertNil(item.modelNumber)
+        XCTAssertNil(item.warrantyExpiresDate)
+        XCTAssertNil(item.estimatedValueCents)
         XCTAssertEqual(item.sortOrder, 0)
         XCTAssertEqual(item.createdBy, "")
         XCTAssertFalse(item.needsSync)
@@ -84,6 +88,10 @@ final class ModelBehaviorTests: XCTestCase {
             locationId: "loc-1",
             name: "Couch",
             quantity: 2,
+            serialNumber: "SN-1",
+            modelNumber: "MOD-1",
+            warrantyExpiresDate: "2027-05-24",
+            estimatedValueCents: 25000,
             createdBy: "owner-1",
             needsSync: false
         )
@@ -106,6 +114,10 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(apiHome.role, "admin")
         XCTAssertEqual(activeLocation.toLocation().type, .floor)
         XCTAssertEqual(activeItem.toItem().quantity, 2)
+        XCTAssertEqual(activeItem.toItem().serialNumber, "SN-1")
+        XCTAssertEqual(activeItem.toItem().modelNumber, "MOD-1")
+        XCTAssertEqual(activeItem.toItem().warrantyExpiresDate, "2027-05-24")
+        XCTAssertEqual(activeItem.toItem().estimatedValueCents, 25000)
         XCTAssertEqual(detail.locations.map(\.id), ["loc-1"])
         XCTAssertEqual(detail.items.map(\.id), ["item-1"])
     }

@@ -102,4 +102,12 @@ final class SyncUploadPlannerTests: XCTestCase {
         XCTAssertFalse(ServerMergePolicy.shouldApplyServerRecord(needsSync: false, isDeleted: true))
         XCTAssertTrue(ServerMergePolicy.shouldApplyServerRecord(needsSync: false, isDeleted: false))
     }
+
+    func testServerMergeResultAccumulatesAppliedAndDeferredCounts() {
+        var result = ServerMergeResult(applied: 1, deferred: 2)
+        result.add(ServerMergeResult(applied: 3, deferred: 4))
+
+        XCTAssertEqual(result.applied, 4)
+        XCTAssertEqual(result.deferred, 6)
+    }
 }
