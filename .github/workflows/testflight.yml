@@ -179,10 +179,7 @@ jobs:
       - name: Compute CI build number
         run: |
           set -euo pipefail
-          commit_count=$(git rev-list HEAD --count)
-          run_number="${{ github.run_number }}"
-          run_attempt="${{ github.run_attempt }}"
-          build_number=$((run_number * 1000000 + commit_count * 100 + run_attempt))
+          build_number=$(git rev-list HEAD --count)
           echo "CI_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
           echo "Build number: $build_number"
 

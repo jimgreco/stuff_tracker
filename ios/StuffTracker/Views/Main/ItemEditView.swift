@@ -1178,8 +1178,12 @@ private struct OptionalDatePickerRow: View {
 
     var body: some View {
         HStack {
-            DatePicker(title, selection: selection, displayedComponents: .date)
-                .disabled(date == nil)
+            if date == nil {
+                Text(title)
+                Spacer()
+            } else {
+                DatePicker(title, selection: selection, displayedComponents: .date)
+            }
             Button(date == nil ? "Add" : "Clear") {
                 if date == nil {
                     date = Date()
