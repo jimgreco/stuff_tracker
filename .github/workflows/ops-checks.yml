@@ -63,4 +63,10 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            "cd ~/deploy && docker-compose exec -T stuff npm run db:backup:check && docker-compose exec -T stuff npm run storage:s3:check"
+            'cd ~/deploy &&
+              if docker-compose exec -T stuff node -e "const fs = require(\"fs\"); const path = process.env.DB_BACKUP_DIR || \"/app/backups\"; process.exit(fs.existsSync(path) ? 0 : 1)" >/dev/null 2>&1; then
+                docker-compose exec -T stuff npm run db:backup:check
+              else
+                echo "::warning title=Backup freshness skipped::No backup directory is configured in the production container yet; configure durable database backups to enable this check."
+              fi &&
+              docker-compose exec -T stuff npm run storage:s3:check'

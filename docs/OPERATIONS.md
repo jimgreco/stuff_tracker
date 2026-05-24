@@ -86,6 +86,8 @@ npm run db:backup:check
 npm run storage:s3:check
 ```
 
+Until a production backup directory exists in the app container, the workflow skips the backup freshness check with a warning and still runs the S3 hardening check. Once backups are scheduled and the directory is mounted or configured with `DB_BACKUP_DIR`, freshness failures should be treated as incidents.
+
 Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened.
 
 ## Production Logging
