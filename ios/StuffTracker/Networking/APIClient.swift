@@ -34,7 +34,10 @@ final class APIClient {
         set { SecureTokenStore.token = newValue }
     }
 
-    var hasToken: Bool { token != nil }
+    var hasToken: Bool {
+        SecureTokenStore.migrateLegacyTokenIfNeeded()
+        return token != nil
+    }
     
     func setToken(_ t: String?) { token = t }
 

@@ -2,8 +2,39 @@ import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
 
+enum LoginViewMode {
+    case initial
+    case reconnect
+
+    var icon: String {
+        switch self {
+        case .initial: return "archivebox.fill"
+        case .reconnect: return "person.crop.circle.badge.exclamationmark"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .initial: return "Stuff Tracker"
+        case .reconnect: return "Sign In Required"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .initial: return "Know where everything is."
+        case .reconnect: return "This device was signed in before. Sign in again to keep syncing."
+        }
+    }
+}
+
 struct LoginView: View {
     @EnvironmentObject var authStore: AuthStore
+    let mode: LoginViewMode
+
+    init(mode: LoginViewMode = .initial) {
+        self.mode = mode
+    }
 
     var body: some View {
         ZStack {
@@ -14,16 +45,18 @@ struct LoginView: View {
 
                 // Logo / title
                 VStack(spacing: 12) {
-                    Image(systemName: "archivebox.fill")
+                    Image(systemName: mode.icon)
                         .font(.system(size: 64))
                         .foregroundStyle(.primary)
 
-                    Text("Stuff Tracker")
+                    Text(mode.title)
                         .font(.largeTitle.bold())
 
-                    Text("Know where everything is.")
+                    Text(mode.subtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
 
                 Spacer()

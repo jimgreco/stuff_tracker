@@ -25,6 +25,19 @@ struct ContentView: View {
     @State private var breadcrumbPath: [String] = []
 
     var body: some View {
+        if authStore.isRestoringSession {
+            ProgressView("Checking account...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        } else if authStore.requiresSignIn {
+            LoginView(mode: .reconnect)
+                .environmentObject(authStore)
+        } else {
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 if homeStore.isLoading && homeStore.homeDetails.isEmpty {
