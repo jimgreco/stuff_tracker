@@ -49,12 +49,28 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
             set -euo pipefail
             cd ~/deploy
-            set -a
-            . ./.env
-            set +a
 
-            backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}"
-            retention_days="${STUFF_DB_BACKUP_RETENTION_DAYS:-30}"
+            read_env() {
+              key="$1"
+              line="$(grep -E "^${key}=" .env | tail -n 1 || true)"
+              value="${line#*=}"
+              value="${value%\"}"
+              value="${value#\"}"
+              value="${value%\'}"
+              value="${value#\'}"
+              printf '%s' "$value"
+            }
+
+            DB_PASSWORD="$(read_env DB_PASSWORD)"
+            if [ -z "$DB_PASSWORD" ]; then
+              echo "::error title=Production backup failed::DB_PASSWORD is missing from ~/deploy/.env"
+              exit 1
+            fi
+
+            backup_dir="$(read_env STUFF_DB_BACKUP_DIR)"
+            backup_dir="${backup_dir:-$HOME/deploy/backups/stuff}"
+            retention_days="$(read_env STUFF_DB_BACKUP_RETENTION_DAYS)"
+            retention_days="${retention_days:-30}"
             mkdir -p "$backup_dir"
 
             stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"

@@ -48,11 +48,20 @@ jobs:
           set -euo pipefail
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
             'cd ~/deploy &&
-              set -a &&
-              . ./.env &&
-              set +a &&
-              backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}" &&
-              max_age_hours="${DB_BACKUP_MAX_AGE_HOURS:-26}" &&
+              read_env() {
+                key="$1"
+                line="$(grep -E "^${key}=" .env | tail -n 1 || true)"
+                value="${line#*=}"
+                value="${value%\"}"
+                value="${value#\"}"
+                value="${value%\047}"
+                value="${value#\047}"
+                printf "%s" "$value"
+              } &&
+              backup_dir="$(read_env STUFF_DB_BACKUP_DIR)" &&
+              backup_dir="${backup_dir:-$HOME/deploy/backups/stuff}" &&
+              max_age_hours="$(read_env DB_BACKUP_MAX_AGE_HOURS)" &&
+              max_age_hours="${max_age_hours:-26}" &&
               if [ ! -d "$backup_dir" ]; then
                 echo "::error title=Backup freshness failed::Backup directory is missing: $backup_dir"
                 exit 1

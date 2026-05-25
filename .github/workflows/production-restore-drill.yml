@@ -47,11 +47,26 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
             set -euo pipefail
             cd ~/deploy
-            set -a
-            . ./.env
-            set +a
 
-            backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}"
+            read_env() {
+              key="$1"
+              line="$(grep -E "^${key}=" .env | tail -n 1 || true)"
+              value="${line#*=}"
+              value="${value%\"}"
+              value="${value#\"}"
+              value="${value%\'}"
+              value="${value#\'}"
+              printf '%s' "$value"
+            }
+
+            DB_PASSWORD="$(read_env DB_PASSWORD)"
+            if [ -z "$DB_PASSWORD" ]; then
+              echo "::error title=Restore drill failed::DB_PASSWORD is missing from ~/deploy/.env"
+              exit 1
+            fi
+
+            backup_dir="$(read_env STUFF_DB_BACKUP_DIR)"
+            backup_dir="${backup_dir:-$HOME/deploy/backups/stuff}"
             newest="$(find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -size +0c -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d ' ' -f 2-)"
             if [ -z "$newest" ]; then
               echo "::error title=Restore drill failed::No non-empty backup found in $backup_dir"
