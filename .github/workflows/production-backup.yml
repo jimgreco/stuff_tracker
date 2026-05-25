@@ -77,7 +77,8 @@ jobs:
             tmp_path="$backup_dir/stuff-tracker-$stamp.sql.gz.tmp"
             final_path="${tmp_path%.tmp}"
 
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db pg_dump -U admin -d stuff | gzip -c > "$tmp_path"
+            rm -f "$tmp_path"
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db pg_dump -U admin -d stuff < /dev/null | gzip -c > "$tmp_path"
             test -s "$tmp_path"
             mv "$tmp_path" "$final_path"
             chmod 600 "$final_path"

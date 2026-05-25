@@ -77,17 +77,17 @@ jobs:
             started_at="$(date -u +%s)"
 
             cleanup() {
-              docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db dropdb -U admin --if-exists "$restore_db" >/dev/null 2>&1 || true
+              docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db dropdb -U admin --if-exists "$restore_db" < /dev/null >/dev/null 2>&1 || true
             }
             trap cleanup EXIT
 
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db createdb -U admin "$restore_db"
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db createdb -U admin "$restore_db" < /dev/null
             gzip -dc "$newest" | docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -v ON_ERROR_STOP=1
 
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from schema_migrations;'
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from users;'
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from homes;'
-            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from items;'
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from schema_migrations;' < /dev/null
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from users;' < /dev/null
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from homes;' < /dev/null
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from items;' < /dev/null
 
             finished_at="$(date -u +%s)"
             elapsed_seconds="$((finished_at - started_at))"
