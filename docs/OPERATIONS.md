@@ -189,6 +189,15 @@ Backups created by `npm run db:backup` are gzipped plain SQL dumps. Restore into
 
 The `Production Restore Drill` GitHub Actions workflow can be started manually. It finds the newest production backup, restores it into a temporary database inside the production Postgres container, checks key table counts, reports elapsed time, and drops the temporary database on exit.
 
+Latest recorded restore drill:
+
+- Date: 2026-05-25 11:20 UTC.
+- Backup: `stuff-tracker-2026-05-25T11-18-51Z.sql.gz`.
+- Restore target: temporary production-host database `stuff_restore_drill_20260525112033`, dropped automatically.
+- Verification: `schema_migrations=4`, `users=2`, `homes=2`, `items=62`.
+- Restore elapsed time: 1 second.
+- Observed recovery point: backup was about 2 minutes old at restore time.
+
 Prerequisites:
 
 - Access to the backup file.

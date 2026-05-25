@@ -40,18 +40,18 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add optional production webhook alerts for unhandled backend errors.
 - [x] Add a manual production restore-drill workflow that restores the newest backup into a temporary database and verifies key tables.
 - [x] Add optional operations webhook alerts for deploy, health, backup, ops-check, and restore-drill workflow failures.
+- [x] Run a production backup restore drill and record actual restore time and recovery point.
 
 ## Next
 
 - [ ] Add refresh tokens or a reauth flow for shorter-lived sessions.
 - [ ] Add error-rate alerts.
-- [ ] Run a production backup restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
 ## Suggested Order
 
-1. Backup restore drill.
-2. Observability and deploy alerts.
-3. JWT revocation and refresh-token design.
-4. Database role separation and SSL enforcement.
+1. Error-rate alerts.
+2. JWT revocation and refresh-token design.
+3. Database role separation and SSL enforcement.
+4. Full operational drill.
