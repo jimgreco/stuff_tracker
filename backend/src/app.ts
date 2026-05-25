@@ -16,6 +16,7 @@ import itemsRouter from './routes/items';
 import { authRateLimit } from './lib/rateLimits';
 import { getCsvEnv, isProduction } from './lib/env';
 import { sendOperationalAlert } from './lib/alerts';
+import { createErrorRateAlertMiddleware } from './lib/errorRateAlerts';
 
 export function createApp() {
   const app = express();
@@ -36,6 +37,7 @@ export function createApp() {
   app.use(cors(corsOptions()));
   app.use(assignRequestId);
   app.use(httpLogger());
+  app.use(createErrorRateAlertMiddleware());
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/health/live', (_req, res) => res.json({ ok: true }));

@@ -98,6 +98,8 @@ Unhandled production errors are logged as JSON lines with `event=unhandled_error
 
 Set `OPERATIONS_ALERT_WEBHOOK_URL` to post unhandled production backend errors to an operations channel. The payload includes `service`, `event`, `level`, `message`, `request_id`, `timestamp`, and the serialized error. `OPERATIONS_ALERT_TIMEOUT_MS` controls the webhook timeout and defaults to 3000 ms.
 
+The backend also posts `http_error_rate` alerts when production 5xx responses cross the rolling threshold. Defaults are `ERROR_RATE_ALERT_WINDOW_MS=300000`, `ERROR_RATE_ALERT_MIN_REQUESTS=20`, `ERROR_RATE_ALERT_MIN_5XX=5`, `ERROR_RATE_ALERT_5XX_PERCENT=20`, and `ERROR_RATE_ALERT_COOLDOWN_MS=900000`. Tune these values if normal low-traffic behavior creates noise.
+
 The same `OPERATIONS_ALERT_WEBHOOK_URL` GitHub secret enables workflow failure alerts for deploy, production health, production backup, production ops checks, and restore drills. If the secret is unset, those workflows emit a notice and continue without sending an alert.
 
 ## Credential Rotation

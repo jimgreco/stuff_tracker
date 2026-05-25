@@ -1,6 +1,6 @@
 import { getIntegerEnv } from './env';
 
-interface OperationalAlert {
+export interface OperationalAlert {
   level: 'error' | 'warning' | 'info';
   event: string;
   message: string;
