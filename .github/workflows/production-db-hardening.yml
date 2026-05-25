@@ -56,8 +56,11 @@ jobs:
         if: steps.config.outputs.configured == 'true'
         run: |
           set -euo pipefail
+          remote_script="/tmp/stuff-db-hardening-${GITHUB_RUN_ID}.sh"
+          scp -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts \
+            scripts/harden-production-db.sh "$EC2_USER@$EC2_HOST:$remote_script"
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            "STUFF_DB_HARDENING_MODE='${{ inputs.mode }}' bash -s" < scripts/harden-production-db.sh
+            "set -euo pipefail; trap 'rm -f \"$remote_script\"' EXIT; chmod 700 \"$remote_script\"; STUFF_DB_HARDENING_MODE='${{ inputs.mode }}' bash \"$remote_script\""
 
   notify-failure:
     if: ${{ always() && (needs.db-hardening.result == 'failure' || needs.db-hardening.result == 'cancelled') }}
