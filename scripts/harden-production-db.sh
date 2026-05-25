@@ -39,14 +39,14 @@ write_env() {
 
 random_password() {
   if command -v openssl >/dev/null 2>&1; then
-    openssl rand -base64 36 | tr -d '\n'
+    openssl rand -hex 32
   else
-    LC_ALL=C tr -dc 'A-Za-z0-9_+=' < /dev/urandom | head -c 48
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
   fi
 }
 
 urlencode_password() {
-  node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1"
+  printf '%s' "$1"
 }
 
 psql_admin() {
