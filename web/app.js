@@ -11,14 +11,14 @@
   };
 
   const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
+  const STORED_TOKEN = localStorage.getItem(STORAGE.token) || "";
   const app = document.getElementById("app");
 
   const state = {
     apiBaseUrl: localStorage.getItem(STORAGE.apiBaseUrl) || DEFAULT_API_BASE_URL,
-    token: localStorage.getItem(STORAGE.token) || "",
-    user: readJson(STORAGE.user, null),
-    homes: readJson(STORAGE.homes, null) || demoHomes(),
-    deletedItems: readJson(STORAGE.deletedItems, []),
+    token: STORED_TOKEN,
+    user: STORED_TOKEN ? readJson(STORAGE.user, null) : null,
+    homes: STORED_TOKEN ? readJson(STORAGE.homes, []) : [],
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
     isLoading: false,
@@ -30,6 +30,14 @@
     googleClientId: "",
     appleClientId: "",
   };
+
+  if (!STORED_TOKEN) {
+    state.collapsed = new Set();
+    localStorage.removeItem(STORAGE.user);
+    localStorage.removeItem(STORAGE.homes);
+    localStorage.removeItem(STORAGE.deletedItems);
+    localStorage.removeItem(STORAGE.collapsed);
+  }
 
   const ICON_PATHS = {
     archive: '<path d="M4 7h16v13H4z"/><path d="M3 4h18v3H3z"/><path d="M9 11h6"/>',
@@ -145,11 +153,22 @@
 
   function persistData() {
     writeJson(STORAGE.homes, state.homes);
-    writeJson(STORAGE.deletedItems, state.deletedItems);
+  }
+
+  function clearCachedData() {
+    state.homes = [];
+    state.collapsed = new Set();
+    localStorage.removeItem(STORAGE.homes);
+    localStorage.removeItem(STORAGE.deletedItems);
+    localStorage.removeItem(STORAGE.collapsed);
   }
 
   function persistCollapsed() {
     writeJson(STORAGE.collapsed, Array.from(state.collapsed));
+  }
+
+  function isLocalHost() {
+    return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
   }
 
   function showToast(message) {
@@ -247,159 +266,6 @@
     return ICON_SECTIONS.flatMap((section) => section.icons.map(([name, label]) => ({ ...section, name, label })));
   }
 
-  function demoHomes() {
-    return [
-      {
-        id: "11111111-1111-4111-8111-111111111111",
-        name: "Apartment",
-        ownerId: "demo-user",
-        role: "owner",
-        icon: "house.fill",
-        locations: [
-          {
-            id: "22222222-2222-4222-8222-222222222201",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            parentId: null,
-            name: "Main Floor",
-            type: "floor",
-            sortOrder: 0,
-            icon: "building.2",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222202",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            parentId: "22222222-2222-4222-8222-222222222201",
-            name: "Kitchen",
-            type: "room",
-            sortOrder: 0,
-            icon: "door.left.hand.closed",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222203",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            parentId: "22222222-2222-4222-8222-222222222202",
-            name: "Utensil Drawer",
-            type: "container",
-            sortOrder: 0,
-            icon: "rectangle.split.3x1.fill",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222204",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            parentId: "22222222-2222-4222-8222-222222222201",
-            name: "Office",
-            type: "room",
-            sortOrder: 1,
-            icon: "desktopcomputer",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222205",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            parentId: "22222222-2222-4222-8222-222222222204",
-            name: "Desk Cabinet",
-            type: "container",
-            sortOrder: 0,
-            icon: "cabinet.fill",
-          },
-        ],
-        items: [
-          {
-            id: "33333333-3333-4333-8333-333333333301",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            locationId: "22222222-2222-4222-8222-222222222203",
-            name: "Measuring spoons",
-            icon: "circle.fill",
-            notes: "Nested inside the small divider.",
-            quantity: 2,
-            properties: [{ id: "prop-1", key: "Set", value: "Stainless" }],
-            photoUrls: [],
-            documents: [],
-            purchaseDate: null,
-            sortOrder: 0,
-            createdBy: "demo-user",
-          },
-          {
-            id: "33333333-3333-4333-8333-333333333302",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            locationId: "22222222-2222-4222-8222-222222222205",
-            name: "USB-C hub",
-            icon: "desktopcomputer",
-            notes: "Anker hub for the travel monitor.",
-            quantity: 1,
-            properties: [
-              { id: "prop-2", key: "Ports", value: "HDMI, Ethernet, USB-A" },
-              { id: "prop-3", key: "Color", value: "Space gray" },
-            ],
-            photoUrls: [],
-            documents: [],
-            purchaseDate: null,
-            sortOrder: 0,
-            createdBy: "demo-user",
-          },
-          {
-            id: "33333333-3333-4333-8333-333333333303",
-            homeId: "11111111-1111-4111-8111-111111111111",
-            locationId: null,
-            name: "Spare keys",
-            icon: "tag.fill",
-            notes: "",
-            quantity: 1,
-            properties: [],
-            photoUrls: [],
-            documents: [],
-            purchaseDate: null,
-            sortOrder: 0,
-            createdBy: "demo-user",
-          },
-        ],
-      },
-      {
-        id: "11111111-1111-4111-8111-111111111112",
-        name: "Garage",
-        ownerId: "demo-user",
-        role: "owner",
-        icon: "building.2",
-        locations: [
-          {
-            id: "22222222-2222-4222-8222-222222222206",
-            homeId: "11111111-1111-4111-8111-111111111112",
-            parentId: null,
-            name: "Tool Wall",
-            type: "room",
-            sortOrder: 0,
-            icon: "wrench.fill",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222207",
-            homeId: "11111111-1111-4111-8111-111111111112",
-            parentId: "22222222-2222-4222-8222-222222222206",
-            name: "Blue Bin",
-            type: "container",
-            sortOrder: 0,
-            icon: "shippingbox.fill",
-          },
-        ],
-        items: [
-          {
-            id: "33333333-3333-4333-8333-333333333304",
-            homeId: "11111111-1111-4111-8111-111111111112",
-            locationId: "22222222-2222-4222-8222-222222222207",
-            name: "Bike pump",
-            icon: "car.fill",
-            notes: "Floor pump with pressure gauge.",
-            quantity: 1,
-            properties: [{ id: "prop-4", key: "Valve", value: "Presta and Schrader" }],
-            photoUrls: [],
-            documents: [],
-            purchaseDate: null,
-            sortOrder: 0,
-            createdBy: "demo-user",
-          },
-        ],
-      },
-    ];
-  }
-
   function render() {
     const active = document.activeElement;
     const activeId = active && active.id;
@@ -428,6 +294,10 @@
   }
 
   function renderApp() {
+    if (!state.token) {
+      return renderSignedOutApp();
+    }
+
     const homes = filteredHomes();
     const isSearching = state.search.trim().length > 0;
     return `
@@ -458,7 +328,6 @@
                   : renderEmptyState()
           }
           ${!state.isLoading && !isSearching ? renderAddHomeArea() : ""}
-          ${!state.isLoading && state.deletedItems.length ? renderTrashBin() : ""}
         </main>
         ${renderSheet()}
         ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
@@ -466,19 +335,74 @@
     `;
   }
 
+  function renderSignedOutApp() {
+    return `
+      <div class="mobile-shell">
+        <header class="top-bar">
+          <div class="nav-row">
+            <div class="nav-spacer" aria-hidden="true"></div>
+            <div class="nav-title">Stuff Tracker</div>
+            <button type="button" class="icon-button avatar-button" data-action="open-account" aria-label="Account settings">
+              ${svgIcon("cloud")}
+            </button>
+          </div>
+        </header>
+        <main class="content auth-content">
+          ${renderAccountRequired()}
+        </main>
+        ${renderSheet()}
+        ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function renderAccountRequired() {
+    return `
+      <section class="empty-state auth-required">
+        <div class="empty-panel">
+          <img src="./assets/app-icon.png" alt="">
+          <h2>Sign in to use Stuff Tracker on the web</h2>
+          <p>Create or connect an account to sync your homes, rooms, and items.</p>
+          <div class="auth-actions">
+            ${renderAuthControls()}
+          </div>
+          <button type="button" class="secondary-button" data-action="open-account">
+            ${svgIcon("cloud")} API settings
+          </button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAuthControls() {
+    const controls = [];
+    if (state.googleClientId) {
+      controls.push(`<div class="provider-button-host" data-google-sign-in-host></div>`);
+    }
+    if (state.appleClientId) {
+      controls.push(`<button type="button" class="row-button provider-apple" data-action="apple-sign-in">Sign in with Apple</button>`);
+    }
+    if (isLocalHost()) {
+      controls.push(`<button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>`);
+    }
+    if (!controls.length) {
+      controls.push(`<div class="auth-unavailable">Sign-in providers are not configured for this API URL.</div>`);
+    }
+    return controls.join("");
+  }
+
   function renderAvatar() {
     if (state.user && state.user.avatarUrl) {
       return `<img class="avatar-image" src="${escapeAttr(state.user.avatarUrl)}" alt="">`;
     }
-    return svgIcon(state.token ? "person" : "person.crop.circle");
+    return svgIcon("person");
   }
 
   function renderStatus() {
-    const connected = Boolean(state.token);
     return `
       <div class="status-strip">
-        <span class="status-dot ${connected ? "connected" : "demo"}"></span>
-        <span>${connected ? "Connected to backend sync" : "Local demo data"}</span>
+        <span class="status-dot connected"></span>
+        <span>Connected to backend sync</span>
       </div>
     `;
   }
@@ -522,27 +446,6 @@
       <button type="button" class="page-command" data-action="start-add" data-add-kind="home">
         ${svgIcon("plus")} <span>Add home</span>
       </button>
-    `;
-  }
-
-  function renderTrashBin() {
-    return `
-      <section class="form-section">
-        <h2 class="section-title">Recently Deleted</h2>
-        <div class="form-list">
-          ${state.deletedItems.map((entry) => `
-            <div class="property-row">
-              <div class="property-fields">
-                <input readonly value="${escapeAttr(entry.item.name)}">
-                <input readonly value="${escapeAttr(entry.homeName)}">
-              </div>
-              <button type="button" class="property-delete" data-action="restore-item" data-item-id="${escapeAttr(entry.item.id)}" aria-label="Restore ${escapeAttr(entry.item.name)}">
-                ${svgIcon("refresh")}
-              </button>
-            </div>
-          `).join("")}
-        </div>
-      </section>
     `;
   }
 
@@ -701,7 +604,7 @@
 
   function renderAccountSheet() {
     const connected = Boolean(state.token);
-    const userName = state.user ? state.user.name : "Local data";
+    const userName = state.user ? state.user.name : "Not signed in";
     const userEmail = state.user ? state.user.email : "Not signed in";
     const body = `
       <section class="form-section">
@@ -723,22 +626,19 @@
             <input name="apiBaseUrl" value="${escapeAttr(state.apiBaseUrl)}" inputmode="url" autocomplete="url">
           </label>
           <button type="submit" class="row-button">${svgIcon("check")} Save API URL</button>
-          ${!connected && state.googleClientId ? `<div id="google-sign-in-button" class="provider-button-host"></div>` : ""}
-          ${!connected && state.appleClientId ? `<button type="button" class="row-button provider-apple" data-action="apple-sign-in">Sign in with Apple</button>` : ""}
-          <button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>
+          ${!connected ? renderAuthControls() : ""}
           ${connected ? `<button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>` : ""}
         </div>
       </form>
       <section class="form-section">
-        <h2 class="section-title">Local</h2>
+        <h2 class="section-title">Account</h2>
         <div class="form-list">
-          <button type="button" class="row-button" data-action="use-demo-data">${svgIcon("archivebox.fill")} Use Demo Data</button>
-          <button type="button" class="row-button" data-action="reset-demo-data">${svgIcon("refresh")} Reset Demo Data</button>
           ${connected ? `<button type="button" class="row-button danger" data-action="logout-all">${svgIcon("x")} Sign Out Everywhere</button>` : ""}
           ${connected ? `<button type="button" class="row-button danger" data-action="sign-out">${svgIcon("x")} Sign Out</button>` : ""}
+          ${!connected ? `<div class="auth-unavailable">Sign in to create and sync inventory data on the web.</div>` : ""}
         </div>
       </section>
-      <p class="footnote">Version web prototype.</p>
+      <p class="footnote">Version web.</p>
     `;
     return sheetChrome("Account", body);
   }
@@ -758,12 +658,10 @@
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { addKind: "location", locationType: "room" }));
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { addKind: "item" }));
       rows.push(actionButton("sort-children", "sort", "Order Rooms by Name"));
-      rows.push(actionButton("sort-items", "sort", "Order Items by Name"));
     } else {
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Container", { addKind: "location", locationType: "container" }));
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { addKind: "item" }));
       rows.push(actionButton("sort-children", "sort", "Order Containers by Name"));
-      rows.push(actionButton("sort-items", "sort", "Order Items by Name"));
     }
     rows.push(actionButton("open-delete", "trash", "Delete", {}, true));
     return sheetChrome(title, `<div class="action-list">${rows.join("")}</div>`);
@@ -1196,25 +1094,24 @@
   }
 
   function renderProviderSignInButtons() {
-    const container = document.getElementById("google-sign-in-button");
-    if (
-      container &&
-      state.googleClientId &&
-      window.google?.accounts?.id &&
-      container.dataset.clientId !== state.googleClientId
-    ) {
+    const containers = Array.from(document.querySelectorAll("[data-google-sign-in-host]"));
+    if (!state.googleClientId || !window.google?.accounts?.id || !containers.length) return;
+
+    window.google.accounts.id.initialize({
+      client_id: state.googleClientId,
+      callback: handleGoogleCredentialResponse,
+    });
+
+    containers.forEach((container) => {
+      if (container.dataset.clientId === state.googleClientId) return;
       container.innerHTML = "";
-      window.google.accounts.id.initialize({
-        client_id: state.googleClientId,
-        callback: handleGoogleCredentialResponse,
-      });
       window.google.accounts.id.renderButton(container, {
         theme: "outline",
         size: "large",
         width: Math.max(container.clientWidth || 280, 240),
       });
       container.dataset.clientId = state.googleClientId;
-    }
+    });
   }
 
   function handleGoogleCredentialResponse(response) {
@@ -1269,7 +1166,6 @@
     const homes = await apiRequest("GET", "/homes");
     const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
     state.homes = details.map(normalizeHomeDetail);
-    state.deletedItems = [];
     persistData();
   }
 
@@ -1367,48 +1263,22 @@
   }
 
   async function createHome(name) {
-    if (state.token) {
-      await apiRequest("POST", "/homes", { name, icon: null });
-      await loadServerHomes();
-      return;
-    }
-    state.homes.push({
-      id: id(),
-      name,
-      ownerId: "local",
-      role: "owner",
-      icon: "house.fill",
-      locations: [],
-      items: [],
-    });
-    persistData();
+    await apiRequest("POST", "/homes", { name, icon: null });
+    await loadServerHomes();
   }
 
   async function createLocation(homeId, name, parentId, type) {
     const home = findHome(homeId);
     if (!home) return;
     const sortOrder = childLocations(home, parentId).length;
-    if (state.token) {
-      await apiRequest("POST", `/homes/${homeId}/locations`, {
-        name,
-        parent_id: parentId || null,
-        type,
-        sort_order: sortOrder,
-        icon: null,
-      });
-      await loadServerHomes();
-      return;
-    }
-    home.locations.push({
-      id: id(),
-      homeId,
-      parentId: parentId || null,
+    await apiRequest("POST", `/homes/${homeId}/locations`, {
       name,
+      parent_id: parentId || null,
       type,
-      sortOrder,
+      sort_order: sortOrder,
       icon: null,
     });
-    persistData();
+    await loadServerHomes();
   }
 
   async function createItem(homeId, name, locationId) {
@@ -1434,37 +1304,22 @@
       sortOrder,
       createdBy: state.user?.id || "local",
     };
-    if (state.token) {
-      await apiRequest("POST", `/homes/${homeId}/items`, itemPayload(item));
-      await loadServerHomes();
-      return;
-    }
-    home.items.push(item);
-    persistData();
+    await apiRequest("POST", `/homes/${homeId}/items`, itemPayload(item));
+    await loadServerHomes();
   }
 
   async function renameTarget(name) {
     const target = targetForSheet();
     if (!target) return;
     if (state.sheet.kind === "home") {
-      if (state.token) {
-        await apiRequest("PATCH", `/homes/${target.home.id}`, { name, icon: target.home.icon || null });
-        await loadServerHomes();
-      } else {
-        target.home.name = name;
-        persistData();
-      }
+      await apiRequest("PATCH", `/homes/${target.home.id}`, { name, icon: target.home.icon || null });
+      await loadServerHomes();
       return;
     }
 
     if (target.location) {
-      if (state.token) {
-        await apiRequest("PATCH", `/homes/${target.home.id}/locations/${target.location.id}`, { name });
-        await loadServerHomes();
-      } else {
-        target.location.name = name;
-        persistData();
-      }
+      await apiRequest("PATCH", `/homes/${target.home.id}/locations/${target.location.id}`, { name });
+      await loadServerHomes();
     }
   }
 
@@ -1473,23 +1328,13 @@
     if (!target) return;
     const nextIcon = icon || null;
     if (state.sheet.kind === "home") {
-      if (state.token) {
-        await apiRequest("PATCH", `/homes/${target.home.id}`, { name: target.home.name, icon: nextIcon });
-        await loadServerHomes();
-      } else {
-        target.home.icon = nextIcon;
-        persistData();
-      }
+      await apiRequest("PATCH", `/homes/${target.home.id}`, { name: target.home.name, icon: nextIcon });
+      await loadServerHomes();
       return;
     }
     if (target.location) {
-      if (state.token) {
-        await apiRequest("PATCH", `/homes/${target.home.id}/locations/${target.location.id}`, { icon: nextIcon });
-        await loadServerHomes();
-      } else {
-        target.location.icon = nextIcon;
-        persistData();
-      }
+      await apiRequest("PATCH", `/homes/${target.home.id}/locations/${target.location.id}`, { icon: nextIcon });
+      await loadServerHomes();
     }
   }
 
@@ -1504,38 +1349,14 @@
     const target = targetForSheet();
     if (!target) return;
     if (sheet.kind === "home") {
-      if (state.token) {
-        await apiRequest("DELETE", `/homes/${target.home.id}`);
-        await loadServerHomes();
-      } else {
-        state.homes = state.homes.filter((home) => home.id !== target.home.id);
-        persistData();
-      }
+      await apiRequest("DELETE", `/homes/${target.home.id}`);
+      await loadServerHomes();
       return;
     }
 
     if (target.location) {
-      if (state.token) {
-        await apiRequest("DELETE", `/homes/${target.home.id}/locations/${target.location.id}`);
-        await loadServerHomes();
-      } else {
-        const descendantIds = new Set([target.location.id]);
-        let changed = true;
-        while (changed) {
-          changed = false;
-          target.home.locations.forEach((location) => {
-            if (location.parentId && descendantIds.has(location.parentId) && !descendantIds.has(location.id)) {
-              descendantIds.add(location.id);
-              changed = true;
-            }
-          });
-        }
-        target.home.locations = target.home.locations.filter((location) => !descendantIds.has(location.id));
-        target.home.items.forEach((item) => {
-          if (item.locationId && descendantIds.has(item.locationId)) item.locationId = null;
-        });
-        persistData();
-      }
+      await apiRequest("DELETE", `/homes/${target.home.id}/locations/${target.location.id}`);
+      await loadServerHomes();
     }
   }
 
@@ -1543,15 +1364,8 @@
     const home = findHome(homeId);
     const item = findItem(homeId, itemId);
     if (!home || !item) return;
-    if (state.token) {
-      await apiRequest("DELETE", `/homes/${homeId}/items/${itemId}`);
-      await loadServerHomes();
-      return;
-    }
-    home.items = home.items.filter((candidate) => candidate.id !== itemId);
-    state.deletedItems.unshift({ item, homeName: home.name });
-    state.deletedItems = state.deletedItems.slice(0, 12);
-    persistData();
+    await apiRequest("DELETE", `/homes/${homeId}/items/${itemId}`);
+    await loadServerHomes();
   }
 
   async function saveItemFromForm(form) {
@@ -1572,13 +1386,8 @@
         }))
         .filter((property) => property.key),
     };
-    if (state.token) {
-      await apiRequest("PATCH", `/homes/${home.id}/items/${item.id}`, itemPayload(saved));
-      await loadServerHomes();
-      return;
-    }
-    Object.assign(item, saved);
-    persistData();
+    await apiRequest("PATCH", `/homes/${home.id}/items/${item.id}`, itemPayload(saved));
+    await loadServerHomes();
   }
 
   function readItemDraftFromForm(form) {
@@ -1605,45 +1414,13 @@
     };
   }
 
-  async function sortItemsForTarget() {
-    const target = targetForSheet();
-    if (!target) return;
-    const locationId = target.location ? target.location.id : null;
-    const sorted = itemsIn(target.home, locationId).sort((a, b) => a.name.localeCompare(b.name));
-    sorted.forEach((item, index) => {
-      item.sortOrder = index;
-    });
-    persistData();
-    if (state.token) {
-      showToast("Sorted locally. The current REST API does not persist item sort order yet.");
-    }
-  }
-
   async function sortChildrenForTarget() {
     const target = targetForSheet();
     if (!target) return;
     const parentId = target.location ? target.location.id : null;
     const sorted = childLocations(target.home, parentId).sort((a, b) => a.name.localeCompare(b.name));
-    if (state.token) {
-      await Promise.all(sorted.map((location, index) => apiRequest("PATCH", `/homes/${target.home.id}/locations/${location.id}`, { sort_order: index })));
-      await loadServerHomes();
-      return;
-    }
-    sorted.forEach((location, index) => {
-      location.sortOrder = index;
-    });
-    persistData();
-  }
-
-  function restoreItem(itemId) {
-    const index = state.deletedItems.findIndex((entry) => entry.item.id === itemId);
-    if (index < 0) return;
-    const [entry] = state.deletedItems.splice(index, 1);
-    const home = findHome(entry.item.homeId);
-    if (home) {
-      home.items.push(entry.item);
-    }
-    persistData();
+    await Promise.all(sorted.map((location, index) => apiRequest("PATCH", `/homes/${target.home.id}/locations/${location.id}`, { sort_order: index })));
+    await loadServerHomes();
   }
 
   function updateBreadcrumb() {
@@ -1799,13 +1576,6 @@
       }
       return;
     }
-    if (action === "sort-items") {
-      await runMutation(async () => {
-        await sortItemsForTarget();
-        state.sheet = null;
-      }, state.token ? "" : "Items sorted");
-      return;
-    }
     if (action === "sort-children") {
       await runMutation(async () => {
         await sortChildrenForTarget();
@@ -1813,12 +1583,12 @@
       }, "Locations sorted");
       return;
     }
-    if (action === "restore-item") {
-      restoreItem(element.dataset.itemId);
-      render();
-      return;
-    }
     if (action === "dev-sign-in") {
+      if (!isLocalHost()) {
+        showToast("Dev sign-in is only available locally");
+        render();
+        return;
+      }
       await runMutation(async () => {
         const auth = await apiRequest("POST", "/auth/dev", { email: "dev@stufftracker.local", name: "Local Dev" });
         applyAuthResponse(auth);
@@ -1837,6 +1607,7 @@
     if (action === "sign-out") {
       state.token = "";
       state.user = null;
+      clearCachedData();
       persistSession();
       state.sheet = null;
       render();
@@ -1847,32 +1618,11 @@
         await apiRequest("POST", "/auth/logout-all");
         state.token = "";
         state.user = null;
+        clearCachedData();
         persistSession();
         state.sheet = null;
       }, "Signed out everywhere");
       return;
-    }
-    if (action === "use-demo-data") {
-      state.token = "";
-      state.user = null;
-      state.homes = readJson(STORAGE.homes, null) || demoHomes();
-      state.deletedItems = readJson(STORAGE.deletedItems, []);
-      persistSession();
-      state.sheet = null;
-      render();
-      return;
-    }
-    if (action === "reset-demo-data") {
-      state.token = "";
-      state.user = null;
-      state.homes = demoHomes();
-      state.deletedItems = [];
-      state.collapsed = new Set();
-      persistSession();
-      persistData();
-      persistCollapsed();
-      state.sheet = null;
-      render();
     }
   }
 
@@ -1956,6 +1706,7 @@
   document.addEventListener("input", handleInput);
   window.addEventListener("scroll", updateBreadcrumb, { passive: true });
   window.addEventListener("resize", updateBreadcrumb);
+  window.addEventListener("load", () => requestAnimationFrame(renderProviderSignInButtons));
 
   render();
   void loadAuthConfig();

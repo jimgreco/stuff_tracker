@@ -240,10 +240,6 @@ button:disabled {
   background: var(--success);
 }
 
-.status-dot.demo {
-  background: var(--warning);
-}
-
 .home-list {
   display: grid;
   gap: 10px;
@@ -551,6 +547,35 @@ button:disabled {
   margin: 0;
   color: var(--secondary);
   line-height: 1.4;
+}
+
+.auth-content {
+  min-height: calc(100vh - 64px);
+}
+
+.auth-required {
+  min-height: calc(100vh - 120px);
+}
+
+.auth-actions {
+  display: grid;
+  width: min(100%, 320px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.auth-actions:empty {
+  display: none;
+}
+
+.auth-unavailable {
+  padding: 14px 16px;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .primary-button,
