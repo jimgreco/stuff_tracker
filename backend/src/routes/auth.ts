@@ -9,6 +9,7 @@ import { upsertUser, UserIdentityConflictError } from '../lib/users';
 import {
   createAuthSession,
   listAuthSessions,
+  refreshAuthSession,
   revokeAllAuthSessions,
   revokeAuthSession,
 } from '../lib/sessions';
@@ -45,8 +46,18 @@ async function issueAuthResponse(req: Request, user: { id: string; email: string
       sessionId: session.sessionId,
       jti: session.tokenId,
     }),
+    refreshToken: session.refreshToken,
     user,
   };
+}
+
+function issueSessionToken(session: { sessionId: string; tokenId: string }, user: { id: string; email: string }) {
+  return signToken({
+    userId: user.id,
+    email: user.email,
+    sessionId: session.sessionId,
+    jti: session.tokenId,
+  });
 }
 
 async function verifyAppleIdentityToken(identityToken: string) {
@@ -73,6 +84,26 @@ router.get('/config', (_req: Request, res: Response) => {
   res.json({
     google_client_id: webGoogleClientId() ?? null,
     apple_client_id: webAppleClientId() ?? null,
+  });
+});
+
+router.post('/refresh', async (req: Request, res: Response) => {
+  const refreshToken = readAuthString(req.body, 'refreshToken', 'refresh_token');
+  if (!refreshToken) {
+    res.status(400).json({ error: 'refreshToken required' });
+    return;
+  }
+
+  const session = await refreshAuthSession(refreshToken, req);
+  if (!session) {
+    res.status(401).json({ error: 'Invalid or expired refresh token' });
+    return;
+  }
+
+  res.json({
+    token: issueSessionToken(session, session.user),
+    refreshToken: session.refreshToken,
+    user: session.user,
   });
 });
 

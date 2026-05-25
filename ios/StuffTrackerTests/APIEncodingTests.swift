@@ -109,6 +109,15 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertFalse(json.keys.contains("id_token"))
     }
 
+    func testRefreshBodyKeepsBackendCamelCaseTokenKey() throws {
+        let body = APIClient.RefreshBody(refreshToken: "refresh-token")
+
+        let json = try encodedJSON(body, keyEncodingStrategy: .useDefaultKeys)
+
+        XCTAssertEqual(json["refreshToken"] as? String, "refresh-token")
+        XCTAssertFalse(json.keys.contains("refresh_token"))
+    }
+
     func testAppleSignInBodyKeepsBackendCamelCaseTokenAndNameKeys() throws {
         var name = PersonNameComponents()
         name.givenName = "Jane"

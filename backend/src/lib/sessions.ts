@@ -1,11 +1,28 @@
 import { Request } from 'express';
+import { createHash, randomBytes } from 'node:crypto';
 import { pool } from '../db/pool';
+import { getIntegerEnv } from './env';
 
 const MAX_USER_AGENT_LENGTH = 500;
+const REFRESH_TOKEN_BYTES = 32;
+const DEFAULT_REFRESH_TOKEN_DAYS = 90;
 
 export interface CreatedAuthSession {
   sessionId: string;
   tokenId: string;
+  refreshToken: string;
+}
+
+export interface RefreshedAuthSession {
+  sessionId: string;
+  tokenId: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    avatar_url: string | null;
+  };
 }
 
 export interface AuthSessionSummary {
@@ -18,16 +35,70 @@ export interface AuthSessionSummary {
 }
 
 export async function createAuthSession(userId: string, req: Request): Promise<CreatedAuthSession> {
+  const refreshToken = generateRefreshToken();
   const { rows } = await pool.query(
-    `INSERT INTO auth_sessions (user_id, user_agent, ip_address)
-     VALUES ($1, $2, $3)
+    `INSERT INTO auth_sessions (user_id, user_agent, ip_address, refresh_token_hash, refresh_token_expires_at)
+     VALUES ($1, $2, $3, $4, NOW() + ($5::text || ' days')::interval)
      RETURNING id, token_id`,
-    [userId, cleanUserAgent(req.get('user-agent')), requestIp(req)]
+    [
+      userId,
+      cleanUserAgent(req.get('user-agent')),
+      requestIp(req),
+      hashRefreshToken(refreshToken),
+      refreshTokenDays(),
+    ]
   );
 
   return {
     sessionId: rows[0].id,
     tokenId: rows[0].token_id,
+    refreshToken,
+  };
+}
+
+export async function refreshAuthSession(
+  refreshToken: string,
+  req: Request
+): Promise<RefreshedAuthSession | undefined> {
+  const nextRefreshToken = generateRefreshToken();
+  const { rows } = await pool.query(
+    `UPDATE auth_sessions AS s
+     SET token_id = gen_random_uuid(),
+         refresh_token_hash = $2,
+         refresh_token_expires_at = NOW() + ($3::text || ' days')::interval,
+         user_agent = $4,
+         ip_address = $5,
+         last_seen_at = NOW()
+     FROM users AS u
+     WHERE s.user_id = u.id
+       AND s.refresh_token_hash = $1
+       AND s.revoked_at IS NULL
+       AND s.refresh_token_expires_at > NOW()
+     RETURNING s.id, s.token_id, u.id AS user_id, u.email, u.name, u.avatar_url`,
+    [
+      hashRefreshToken(refreshToken),
+      hashRefreshToken(nextRefreshToken),
+      refreshTokenDays(),
+      cleanUserAgent(req.get('user-agent')),
+      requestIp(req),
+    ]
+  );
+
+  const row = rows[0];
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    sessionId: row.id,
+    tokenId: row.token_id,
+    refreshToken: nextRefreshToken,
+    user: {
+      id: row.user_id,
+      email: row.email,
+      name: row.name,
+      avatar_url: row.avatar_url,
+    },
   };
 }
 
@@ -108,4 +179,16 @@ function cleanUserAgent(value: string | undefined): string | null {
 
 function requestIp(req: Request): string | null {
   return req.ip || req.socket.remoteAddress || null;
+}
+
+function generateRefreshToken(): string {
+  return randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
+}
+
+function hashRefreshToken(refreshToken: string): string {
+  return createHash('sha256').update(refreshToken).digest('hex');
+}
+
+function refreshTokenDays(): number {
+  return getIntegerEnv('REFRESH_TOKEN_EXPIRES_IN_DAYS', DEFAULT_REFRESH_TOKEN_DAYS);
 }

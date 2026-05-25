@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { assertStrongJwtSecret, getRequiredEnv } from './env';
 
-const DEFAULT_EXPIRES_IN = '90d';
+const DEFAULT_EXPIRES_IN = '30m';
 
 export interface JwtPayload {
   userId: string;

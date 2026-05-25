@@ -80,7 +80,8 @@ jobs:
                 exit 1
               fi &&
               echo "Newest backup is fresh: $newest" &&
-              docker-compose exec -T stuff npm run storage:s3:check'
+              docker-compose exec -T stuff npm run storage:s3:check &&
+              docker-compose exec -T -e DB_EXPECTED_APP_ROLE="${STUFF_DB_APP_ROLE:-stuff_app}" stuff npm run db:hardening:check'
 
   notify-failure:
     if: ${{ always() && (needs.ops-checks.result == 'failure' || needs.ops-checks.result == 'cancelled') }}

@@ -18,4 +18,4 @@ COPY backend/src/db/schema.sql ./dist/db/schema.sql
 COPY backend/src/db/migrations ./dist/db/migrations
 COPY web ./web
 EXPOSE 3002
-CMD ["sh", "-c", "npm run db:migrate && node dist/index.js"]
+CMD ["sh", "-c", "if [ -n \"${MIGRATION_DATABASE_URL:-}\" ]; then DATABASE_URL=\"$MIGRATION_DATABASE_URL\" npm run db:migrate; else npm run db:migrate; fi && node dist/index.js"]

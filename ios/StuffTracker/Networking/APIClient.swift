@@ -34,12 +34,25 @@ final class APIClient {
         set { SecureTokenStore.token = newValue }
     }
 
+    private var refreshToken: String? {
+        get { SecureTokenStore.refreshToken }
+        set { SecureTokenStore.refreshToken = newValue }
+    }
+
     var hasToken: Bool {
         SecureTokenStore.migrateLegacyTokenIfNeeded()
-        return token != nil
+        return token != nil || refreshToken != nil
     }
     
     func setToken(_ t: String?) { token = t }
+    func setAuthTokens(token: String?, refreshToken: String?) {
+        self.token = token
+        self.refreshToken = refreshToken
+    }
+
+    func clearAuthTokens() {
+        SecureTokenStore.clearTokens()
+    }
 
     #if DEBUG
     private static func debugBaseURL() -> String {
@@ -150,27 +163,14 @@ final class APIClient {
         body: (some Encodable)? = nil as String?,
         keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
     ) async throws -> T {
-        guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
-        var req = URLRequest(url: url)
-        req.httpMethod = method
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        if let body {
-            req.httpBody = try encodeBody(body, keyEncodingStrategy: keyEncodingStrategy)
-        }
-
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await URLSession.shared.data(for: req)
-        } catch {
-            throw APIError.networkError(error)
-        }
-
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            let msg = Self.errorMessage(from: data)
-            throw APIError.httpError(status, msg)
-        }
+        let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+        let data = try await performRequest(
+            method,
+            path: path,
+            bodyData: bodyData,
+            allowRefresh: true,
+            errorFallback: "Unknown error"
+        )
 
         do {
             return try decoder.decode(T.self, from: data)
@@ -185,14 +185,29 @@ final class APIClient {
         body: (some Encodable)? = nil as String?,
         keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
     ) async throws {
+        let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+        _ = try await performRequest(
+            method,
+            path: path,
+            bodyData: bodyData,
+            allowRefresh: true,
+            errorFallback: "Request failed"
+        )
+    }
+
+    private func performRequest(
+        _ method: String,
+        path: String,
+        bodyData: Data?,
+        allowRefresh: Bool,
+        errorFallback: String
+    ) async throws -> Data {
         guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        if let body {
-            req.httpBody = try encodeBody(body, keyEncodingStrategy: keyEncodingStrategy)
-        }
+        req.httpBody = bodyData
 
         let (data, response): (Data, URLResponse)
         do {
@@ -202,9 +217,36 @@ final class APIClient {
         }
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if !(200..<300).contains(status) {
-            let msg = Self.errorMessage(from: data, fallback: "Request failed")
+        if status == 401, allowRefresh, path != "/auth/refresh", await refreshAccessTokenIfPossible() {
+            return try await performRequest(
+                method,
+                path: path,
+                bodyData: bodyData,
+                allowRefresh: false,
+                errorFallback: errorFallback
+            )
+        }
+
+        guard (200..<300).contains(status) else {
+            let msg = Self.errorMessage(from: data, fallback: errorFallback)
             throw APIError.httpError(status, msg)
+        }
+
+        return data
+    }
+
+    private func refreshAccessTokenIfPossible() async -> Bool {
+        guard let refreshToken else {
+            return false
+        }
+
+        do {
+            let response = try await refreshSession(refreshToken: refreshToken)
+            setAuthTokens(token: response.token, refreshToken: response.refreshToken)
+            return true
+        } catch {
+            clearAuthTokens()
+            return false
         }
     }
 
@@ -212,6 +254,10 @@ final class APIClient {
 
     struct GoogleSignInBody: Encodable {
         let idToken: String
+    }
+
+    struct RefreshBody: Encodable {
+        let refreshToken: String
     }
 
     struct AppleSignInBody: Encodable {
@@ -262,6 +308,33 @@ final class APIClient {
             body: body,
             keyEncodingStrategy: .useDefaultKeys
         )
+    }
+
+    private func refreshSession(refreshToken: String) async throws -> AuthResponse {
+        guard let url = URL(string: baseURL + "/auth/refresh") else { throw APIError.invalidURL }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try encodeBody(RefreshBody(refreshToken: refreshToken), keyEncodingStrategy: .useDefaultKeys)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.networkError(error)
+        }
+
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let msg = Self.errorMessage(from: data, fallback: "Session refresh failed")
+            throw APIError.httpError(status, msg)
+        }
+
+        do {
+            return try decoder.decode(AuthResponse.self, from: data)
+        } catch {
+            throw APIError.decodingError(error)
+        }
     }
 
     func logoutAll() async throws {
@@ -504,5 +577,6 @@ final class APIClient {
 
 struct AuthResponse: Codable {
     let token: String
+    let refreshToken: String?
     let user: User
 }

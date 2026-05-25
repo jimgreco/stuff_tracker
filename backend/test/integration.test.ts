@@ -41,9 +41,10 @@ test('dev auth and homes API work against a real database', { skip: !runDatabase
     name: 'Integration User',
   });
   assert.equal(auth.status, 200);
-  const authBody = await auth.json() as { token: string; user: { email: string } };
+  const authBody = await auth.json() as { token: string; refreshToken: string; user: { email: string } };
   assert.equal(authBody.user.email, 'integration@example.com');
   assert.ok(authBody.token);
+  assert.ok(authBody.refreshToken);
 
   const created = await postJson(
     `${baseUrl}/homes`,
@@ -62,8 +63,33 @@ test('dev auth and homes API work against a real database', { skip: !runDatabase
   const homeRows = await homes.json() as Array<{ id: string; name: string }>;
   assert.deepEqual(homeRows.map((home) => home.name), ['Integration Home']);
 
-  const sessions = await fetch(`${baseUrl}/auth/sessions`, {
+  const refresh = await postJson(`${baseUrl}/auth/refresh`, {
+    refreshToken: authBody.refreshToken,
+  });
+  assert.equal(refresh.status, 200);
+  const refreshedAuthBody = await refresh.json() as { token: string; refreshToken: string; user: { email: string } };
+  assert.equal(refreshedAuthBody.user.email, 'integration@example.com');
+  assert.ok(refreshedAuthBody.token);
+  assert.ok(refreshedAuthBody.refreshToken);
+  assert.notEqual(refreshedAuthBody.refreshToken, authBody.refreshToken);
+
+  const reusedRefresh = await postJson(`${baseUrl}/auth/refresh`, {
+    refreshToken: authBody.refreshToken,
+  });
+  assert.equal(reusedRefresh.status, 401);
+
+  const rotatedAccessToken = await fetch(`${baseUrl}/homes`, {
     headers: { Authorization: `Bearer ${authBody.token}` },
+  });
+  assert.equal(rotatedAccessToken.status, 401);
+
+  const refreshedHomes = await fetch(`${baseUrl}/homes`, {
+    headers: { Authorization: `Bearer ${refreshedAuthBody.token}` },
+  });
+  assert.equal(refreshedHomes.status, 200);
+
+  const sessions = await fetch(`${baseUrl}/auth/sessions`, {
+    headers: { Authorization: `Bearer ${refreshedAuthBody.token}` },
   });
   assert.equal(sessions.status, 200);
   const sessionRows = await sessions.json() as Array<{ id: string; current_session: boolean }>;
@@ -93,7 +119,7 @@ test('dev auth and homes API work against a real database', { skip: !runDatabase
   assert.equal(revokePrevious.status, 204);
 
   const revokedPreviousHomes = await fetch(`${baseUrl}/homes`, {
-    headers: { Authorization: `Bearer ${authBody.token}` },
+    headers: { Authorization: `Bearer ${refreshedAuthBody.token}` },
   });
   assert.equal(revokedPreviousHomes.status, 401);
 

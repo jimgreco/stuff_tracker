@@ -1,0 +1,75 @@
+name: Production DB Hardening
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Validate or apply production database role hardening.
+        required: true
+        default: validate
+        type: choice
+        options:
+          - validate
+          - apply
+
+permissions:
+  contents: read
+
+jobs:
+  db-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Check whether production SSH is configured
+        id: config
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EC2_HOST:-}" ] || [ -z "${EC2_USER:-}" ] || [ -z "${EC2_SSH_KEY:-}" ] || [ -z "${EC2_SSH_KNOWN_HOSTS:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Production DB hardening skipped::Set EC2_HOST, EC2_USER, EC2_SSH_KEY, and EC2_SSH_KNOWN_HOSTS to enable DB hardening."
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          printf '%s' "$EC2_SSH_KEY" > key.pem
+          chmod 600 key.pem
+          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
+          chmod 600 known_hosts
+          test -s known_hosts
+
+      - name: Run database hardening
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
+            "STUFF_DB_HARDENING_MODE='${{ inputs.mode }}' bash -s" < scripts/harden-production-db.sh
+
+  notify-failure:
+    if: ${{ always() && (needs.db-hardening.result == 'failure' || needs.db-hardening.result == 'cancelled') }}
+    needs: db-hardening
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Production DB hardening failed
+          summary: db-hardening=${{ needs.db-hardening.result }}

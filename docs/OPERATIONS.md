@@ -129,9 +129,9 @@ High-value credentials:
 
 ## Session Tokens
 
-Backend auth tokens are signed with `JWT_SECRET`. `JWT_EXPIRES_IN` controls the token lifetime using the `jsonwebtoken` duration format, and defaults to `90d` when unset.
+Backend auth tokens are signed with `JWT_SECRET`. `JWT_EXPIRES_IN` controls the access-token lifetime using the `jsonwebtoken` duration format, and defaults to `30m` when unset. `REFRESH_TOKEN_EXPIRES_IN_DAYS` controls refresh-token lifetime and defaults to `90`.
 
-Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Server-side logout-all revocation is available through `POST /auth/logout-all`. New sign-ins also create server-side auth sessions, `GET /auth/sessions` lists active sessions for the current user, and `DELETE /auth/sessions/:sessionId` revokes one session. Refresh tokens and reauth UX are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
+Production should set explicit values and review them during release hardening. Access tokens can be short-lived because `POST /auth/refresh` rotates an opaque refresh token and returns a new access token for the same server-side session. Server-side logout-all revocation is available through `POST /auth/logout-all`. New sign-ins also create server-side auth sessions, `GET /auth/sessions` lists active sessions for the current user, and `DELETE /auth/sessions/:sessionId` revokes one session.
 
 ## GitHub Security Monitoring
 
@@ -157,6 +157,28 @@ Migrations live in `backend/src/db/migrations` and are applied once in lexical o
 ```sh
 cd backend
 npm run db:migrate
+```
+
+Production can set `MIGRATION_DATABASE_URL` separately from `DATABASE_URL`. When present, the container runs migrations with `MIGRATION_DATABASE_URL` and then starts the API with `DATABASE_URL`, allowing the app runtime to use a lower-privilege role than the migration role.
+
+## Database Access Hardening
+
+The `Production DB Hardening` workflow can validate or apply Stuff database role hardening on the production host. In apply mode it:
+
+- Creates or rotates separate `stuff_app` and `stuff_migrator` roles.
+- Grants the app role table DML privileges without schema ownership or create privileges.
+- Transfers existing public-schema objects to the migration role.
+- Sets role and database connection limits.
+- Writes `STUFF_DATABASE_URL` and `STUFF_MIGRATION_DATABASE_URL` into `~/deploy/.env`.
+- Restarts the Stuff container, waits for `/health`, runs `npm run db:hardening:check`, and runs deploy smoke tests.
+
+The current production database is reachable only over the private Docker network. The generated Stuff database URLs use `sslmode=disable` for that internal connection; require SSL before moving Postgres onto a network path outside the private host/container boundary. Set `DB_REQUIRE_SSL=true` for the runtime DB hardening check when SSL is enabled.
+
+Manual validation:
+
+```sh
+cd backend
+DB_EXPECTED_APP_ROLE=stuff_app npm run db:hardening:check
 ```
 
 ## Database Backups

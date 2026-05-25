@@ -109,7 +109,7 @@ final class AuthStore: ObservableObject {
     }
 
     func signOut() {
-        APIClient.shared.setToken(nil)
+        APIClient.shared.clearAuthTokens()
         currentUser = nil
     }
 
@@ -126,7 +126,7 @@ final class AuthStore: ObservableObject {
     }
 
     private func completeSignIn(with response: AuthResponse) {
-        APIClient.shared.setToken(response.token)
+        APIClient.shared.setAuthTokens(token: response.token, refreshToken: response.refreshToken)
         Self.markAuthenticationCompleted()
         hasCompletedAuthentication = true
         currentUser = response.user
@@ -144,7 +144,7 @@ final class AuthStore: ObservableObject {
             errorMessage = nil
         } catch {
             if Self.shouldClearStoredSession(after: error) {
-                APIClient.shared.setToken(nil)
+                APIClient.shared.clearAuthTokens()
                 errorMessage = "Your session expired. Sign in again to keep syncing."
             }
         }
