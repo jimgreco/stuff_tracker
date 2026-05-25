@@ -71,9 +71,9 @@ struct LoginView: View {
                     } onCompletion: { result in
                         handleApple(result)
                     }
-                    .signInWithAppleButtonStyle(.whiteOutline)
-                    .frame(height: 50)
-                    .cornerRadius(10)
+                    .signInWithAppleButtonStyle(.white)
+                    .authProviderButtonChrome()
+                    .disabled(authStore.isLoading)
 
                     #if DEBUG
                     LocalDevSignInButton()
@@ -154,14 +154,7 @@ struct LocalDevSignInButton: View {
                 Text("Dev Sign In")
                     .font(.body.weight(.medium))
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color(.secondarySystemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.separator), lineWidth: 1)
-            )
-            .cornerRadius(10)
+            .authProviderButtonChrome(background: Color(.secondarySystemBackground))
         }
         .foregroundStyle(.primary)
         .disabled(authStore.isLoading)
@@ -186,16 +179,10 @@ struct GoogleSignInButton: View {
                 Text("Sign in with Google")
                     .font(.body.weight(.medium))
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color(.systemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.separator), lineWidth: 1)
-            )
-            .cornerRadius(10)
+            .authProviderButtonChrome()
         }
         .foregroundStyle(.primary)
+        .disabled(authStore.isLoading)
         .buttonStyle(.plain)
     }
 
@@ -238,5 +225,39 @@ struct GoogleSignInButton: View {
             }
             Task { await authStore.signInWithGoogle(idToken: idToken) }
         }
+    }
+}
+
+private enum AuthProviderButtonMetrics {
+    static let height: CGFloat = 50
+    static let cornerRadius: CGFloat = 10
+}
+
+private struct AuthProviderButtonChrome: ViewModifier {
+    let background: Color
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: AuthProviderButtonMetrics.cornerRadius,
+            style: .continuous
+        )
+
+        content
+            .frame(maxWidth: .infinity)
+            .frame(height: AuthProviderButtonMetrics.height)
+            .background(background)
+            .clipShape(shape)
+            .overlay {
+                shape
+                    .stroke(Color(.separator), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(shape)
+    }
+}
+
+private extension View {
+    func authProviderButtonChrome(background: Color = Color(.systemBackground)) -> some View {
+        modifier(AuthProviderButtonChrome(background: background))
     }
 }
