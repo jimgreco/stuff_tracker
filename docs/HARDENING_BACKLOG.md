@@ -42,15 +42,14 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add optional operations webhook alerts for deploy, health, backup, ops-check, and restore-drill workflow failures.
 - [x] Run a production backup restore drill and record actual restore time and recovery point.
 - [x] Add optional rolling 5xx error-rate alerts for production HTTP responses.
+- [x] Add rotating refresh tokens with shorter-lived access tokens and iOS automatic refresh.
+- [x] Harden database access with separate app and migration DB roles, least privilege grants, connection limits, app DB credential rotation, and runtime DB role checks.
+- [x] Run an operational drill covering the documented deploy rollback path, production DB credential rotation, production smoke verification, ops checks, and backup restore verification.
 
 ## Next
 
-- [ ] Add refresh tokens or a reauth flow for shorter-lived sessions.
-- [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
-- [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
+- No open hardening backlog items are currently tracked.
 
 ## Suggested Order
 
-1. JWT revocation and refresh-token design.
-2. Database role separation and SSL enforcement.
-3. Full operational drill.
+- All currently tracked hardening items are complete.

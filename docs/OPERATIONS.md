@@ -79,16 +79,17 @@ Treat a failing scheduled health run as an availability incident and follow the 
 
 ## Production Ops Checks
 
-The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host and runs these read-only checks inside the `stuff` container:
+The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host and runs these read-only checks:
 
 ```sh
-npm run db:backup:check
+# Host backup freshness check against ~/deploy/backups/stuff by default.
 npm run storage:s3:check
+npm run db:hardening:check
 ```
 
 The backup freshness check reads host backups from `~/deploy/backups/stuff` by default. Override that path on the production host with `STUFF_DB_BACKUP_DIR` in `~/deploy/.env`. Freshness failures should be treated as incidents.
 
-Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened.
+Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
 
 ## Production Logging
 
@@ -120,7 +121,9 @@ High-value credentials:
 
 - `EC2_SSH_KEY`
 - `EC2_SSH_KNOWN_HOSTS`
-- `DATABASE_URL`
+- `DB_PASSWORD`
+- `STUFF_DATABASE_URL`
+- `STUFF_MIGRATION_DATABASE_URL`
 - `JWT_SECRET`
 - `GOOGLE_CLIENT_ID`
 - Apple Sign In configuration for `APPLE_BUNDLE_ID`
@@ -174,6 +177,16 @@ The `Production DB Hardening` workflow can validate or apply Stuff database role
 
 The current production database is reachable only over the private Docker network. The generated Stuff database URLs use `sslmode=disable` for that internal connection; require SSL before moving Postgres onto a network path outside the private host/container boundary. Set `DB_REQUIRE_SSL=true` for the runtime DB hardening check when SSL is enabled.
 
+Latest recorded production DB hardening apply:
+
+- Date: 2026-05-25 17:24 UTC.
+- Workflow run: `Production DB Hardening` run `26412219942`, commit `da9ddd89d3ddd45f30f74deba4bf7bf3a17cfe07`.
+- Result: rotated `stuff_app` and `stuff_migrator` passwords, wrote `STUFF_DATABASE_URL` and `STUFF_MIGRATION_DATABASE_URL`, restarted the Stuff container, and confirmed `/health`.
+- Role verification: `stuff_app` and `stuff_migrator` exist; database connection limit is `16`; role connection limits are `stuff_app=10` and `stuff_migrator=2`; both roles are non-superuser, no-createdb, and no-createrole.
+- Runtime verification: `npm run db:hardening:check` confirmed the app connects as `stuff_app` to database `stuff`; SSL is currently `off` for the private Docker-network connection.
+- Smoke verification: `npm run smoke:deploy` passed.
+- Follow-up ops check: `Production Ops Checks` run `26412243579` confirmed the backup is fresh, S3 hardening passed, and the runtime DB role check still passes after rotation.
+
 Manual validation:
 
 ```sh
@@ -215,12 +228,13 @@ The `Production Restore Drill` GitHub Actions workflow can be started manually. 
 
 Latest recorded restore drill:
 
-- Date: 2026-05-25 11:20 UTC.
+- Date: 2026-05-25 17:22 UTC.
 - Backup: `stuff-tracker-2026-05-25T11-18-51Z.sql.gz`.
-- Restore target: temporary production-host database `stuff_restore_drill_20260525112033`, dropped automatically.
+- Workflow run: `Production Restore Drill` run `26412147708`.
+- Restore target: temporary production-host database `stuff_restore_drill_20260525172220`, dropped automatically.
 - Verification: `schema_migrations=4`, `users=2`, `homes=2`, `items=62`.
 - Restore elapsed time: 1 second.
-- Observed recovery point: backup was about 2 minutes old at restore time.
+- Observed recovery point: backup was about 6 hours old at restore time.
 
 Prerequisites:
 
@@ -252,10 +266,21 @@ Restore drill checklist:
 - Point a staging or local backend at the restored database and check `/health`.
 - Record elapsed restore time and the backup timestamp.
 
-Current recovery expectations until a real drill is recorded:
+Current recovery expectations:
 
 - RTO target: restore service within 30 minutes after backup access is available.
-- RPO target: no better than the configured backup schedule; this remains undefined until backups are scheduled.
+- RPO target: no better than the configured backup schedule.
+
+## Operational Drill Log
+
+Latest recorded hardening drill:
+
+- Date: 2026-05-25 17:21-17:25 UTC.
+- Deploy and rollback path: `Deploy to EC2` run `26412217910` passed after the hardening workflow fix. The rollback path remains the documented revert or forward-fix through `main`; no intentional production rollback was performed during this drill.
+- Credential rotation: `Production DB Hardening` run `26412219942` rotated app and migration DB role passwords, restarted Stuff, validated the runtime DB role, and passed deploy smoke tests.
+- Restore verification: `Production Restore Drill` run `26412147708` restored the newest backup into a temporary database and verified key table counts.
+- Follow-up monitoring: `Production Ops Checks` run `26412243579` passed backup freshness, S3 hardening, and runtime DB hardening checks.
+- Remaining note: production DB SSL is intentionally off while Postgres is only reachable over the private Docker network; enable database SSL and `DB_REQUIRE_SSL=true` before moving Postgres outside that boundary.
 
 ## Attachment Cleanup
 
