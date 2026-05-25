@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JwtPayload } from '../lib/jwt';
 import { pool } from '../db/pool';
+import { isAuthSessionRevoked, markAuthSessionSeen } from '../lib/sessions';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -54,12 +55,29 @@ async function isRevoked(payload: JwtPayload): Promise<boolean> {
   }
 
   if (!user.tokens_revoked_before) {
-    return false;
+    return isSessionRevoked(payload);
   }
 
   if (!payload.iat) {
     return true;
   }
 
-  return payload.iat * 1000 <= new Date(user.tokens_revoked_before).getTime();
+  if (payload.iat * 1000 <= new Date(user.tokens_revoked_before).getTime()) {
+    return true;
+  }
+
+  return isSessionRevoked(payload);
+}
+
+async function isSessionRevoked(payload: JwtPayload): Promise<boolean> {
+  if (!payload.sessionId) {
+    return false;
+  }
+
+  if (await isAuthSessionRevoked(payload.userId, payload.sessionId, payload.jti)) {
+    return true;
+  }
+
+  await markAuthSessionSeen(payload.userId, payload.sessionId);
+  return false;
 }

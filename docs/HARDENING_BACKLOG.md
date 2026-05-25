@@ -34,20 +34,24 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Add a read-only S3 hardening check for public access, policy status, encryption, and lifecycle review.
 - [x] Add a scheduled production health check workflow for `/health/live` and `/health`.
 - [x] Add a scheduled production ops check workflow for backup freshness and S3 hardening verification.
+- [x] Make S3 fully private: block public access, remove the public-read bucket policy, rely on least-privilege EC2 IAM, require encrypted uploads, confirm bucket default encryption, and keep the lifecycle rule.
+- [x] Add a scheduled production database backup workflow that writes durable host backups and make ops checks fail when no fresh backup exists.
+- [x] Add server-side auth sessions with device/session listing and per-session revocation.
+- [x] Add optional production webhook alerts for unhandled backend errors.
+- [x] Add a manual production restore-drill workflow that restores the newest backup into a temporary database and verifies key tables.
+- [x] Add optional operations webhook alerts for deploy, health, backup, ops-check, and restore-drill workflow failures.
 
 ## Next
 
-- [ ] Make S3 fully private: apply block public access, use least-privilege IAM, enforce server-side encryption, and finalize bucket lifecycle policy.
-- [ ] Add session hardening: refresh tokens or reauth flow and device/session listing.
-- [ ] Add production observability: app error reporting, deploy alerts, and error-rate alerts.
-- [ ] Confirm production database backups are scheduled, keep the scheduled freshness alert green, and run a restore drill; record actual restore time and recovery point.
+- [ ] Add refresh tokens or a reauth flow for shorter-lived sessions.
+- [ ] Add error-rate alerts.
+- [ ] Run a production backup restore drill; record actual restore time and recovery point.
 - [ ] Harden database access: separate app and migration DB roles, least privilege, SSL enforcement, connection limits, and secret rotation.
 - [ ] Run an operational drill covering failed deploy rollback, credential rotation, and database restore.
 
 ## Suggested Order
 
-1. S3 private-by-default policy and IAM cleanup.
-2. Backup schedule confirmation plus restore drill.
-3. Observability and deploy alerts.
-4. JWT revocation and refresh-token design.
-5. Database role separation and SSL enforcement.
+1. Backup restore drill.
+2. Observability and deploy alerts.
+3. JWT revocation and refresh-token design.
+4. Database role separation and SSL enforcement.

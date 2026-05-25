@@ -9,6 +9,7 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache gzip postgresql16-client
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
 COPY backend/scripts ./scripts

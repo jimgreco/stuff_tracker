@@ -64,3 +64,18 @@ jobs:
 
           check_json "/health/live" "false"
           check_json "/health" "true"
+
+  notify-failure:
+    if: ${{ always() && (needs.health.result == 'failure' || needs.health.result == 'cancelled') }}
+    needs: health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Production health check failed
+          summary: health=${{ needs.health.result }}

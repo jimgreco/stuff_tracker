@@ -1,0 +1,86 @@
+name: Production Backup
+
+on:
+  schedule:
+    - cron: "17 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+
+    steps:
+      - name: Check whether production SSH is configured
+        id: config
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EC2_HOST:-}" ] || [ -z "${EC2_USER:-}" ] || [ -z "${EC2_SSH_KEY:-}" ] || [ -z "${EC2_SSH_KNOWN_HOSTS:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Production backup skipped::Set EC2_HOST, EC2_USER, EC2_SSH_KEY, and EC2_SSH_KNOWN_HOSTS to enable scheduled production backups."
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          printf '%s' "$EC2_SSH_KEY" > key.pem
+          chmod 600 key.pem
+          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
+          chmod 600 known_hosts
+          test -s known_hosts
+
+      - name: Back up production database
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
+            set -euo pipefail
+            cd ~/deploy
+            set -a
+            . ./.env
+            set +a
+
+            backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}"
+            retention_days="${STUFF_DB_BACKUP_RETENTION_DAYS:-30}"
+            mkdir -p "$backup_dir"
+
+            stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+            tmp_path="$backup_dir/stuff-tracker-$stamp.sql.gz.tmp"
+            final_path="${tmp_path%.tmp}"
+
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db pg_dump -U admin -d stuff | gzip -c > "$tmp_path"
+            test -s "$tmp_path"
+            mv "$tmp_path" "$final_path"
+            chmod 600 "$final_path"
+
+            find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -mtime +"$retention_days" -delete
+            echo "Backup written to $final_path"
+          REMOTE
+
+  notify-failure:
+    if: ${{ always() && (needs.backup.result == 'failure' || needs.backup.result == 'cancelled') }}
+    needs: backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Production backup failed
+          summary: backup=${{ needs.backup.result }}

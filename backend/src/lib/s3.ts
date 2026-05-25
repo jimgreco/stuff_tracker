@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import type { PutObjectCommandInput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getIntegerEnv } from './env';
 
@@ -80,6 +81,21 @@ export function maxUploadBytes(kind: ItemUploadKind): number {
     : getIntegerEnv('MAX_DOCUMENT_UPLOAD_BYTES', 25 * 1024 * 1024);
 }
 
+export function requiredUploadHeaders(contentType: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': contentType };
+  const encryption = uploadServerSideEncryption();
+  if (encryption) {
+    headers['x-amz-server-side-encryption'] = encryption;
+  }
+
+  const kmsKeyId = process.env.S3_UPLOAD_KMS_KEY_ID?.trim();
+  if (kmsKeyId && encryption?.startsWith('aws:kms')) {
+    headers['x-amz-server-side-encryption-aws-kms-key-id'] = kmsKeyId;
+  }
+
+  return headers;
+}
+
 function client(): S3Client {
   if (!s3Client) {
     s3Client = new S3Client({ region: s3Region() });
@@ -119,14 +135,24 @@ export async function createItemAttachmentUpload(request: UploadRequest): Promis
   const region = s3Region();
   const fileName = safeFileName(request.fileName, request.kind);
   const key = `homes/${request.homeId}/items/${request.kind}s/${randomUUID()}-${fileName}`;
-  const headers = { 'Content-Type': request.contentType };
+  const headers = requiredUploadHeaders(request.contentType);
 
-  const command = new PutObjectCommand({
+  const commandInput: PutObjectCommandInput = {
     Bucket: bucket,
     Key: key,
     ContentType: request.contentType,
     ContentLength: request.sizeBytes,
-  });
+  };
+  const encryption = uploadServerSideEncryption();
+  if (encryption) {
+    commandInput.ServerSideEncryption = encryption;
+  }
+  const kmsKeyId = process.env.S3_UPLOAD_KMS_KEY_ID?.trim();
+  if (kmsKeyId && encryption?.startsWith('aws:kms')) {
+    commandInput.SSEKMSKeyId = kmsKeyId;
+  }
+
+  const command = new PutObjectCommand(commandInput);
 
   return {
     uploadUrl: await getSignedUrl(client(), command, { expiresIn: 5 * 60 }),
@@ -266,6 +292,21 @@ export function stableAttachmentUrlForKey(key: string): string {
 
 function decodeKeyPath(path: string): string {
   return path.split('/').map(decodeURIComponent).join('/');
+}
+
+function uploadServerSideEncryption(): PutObjectCommandInput['ServerSideEncryption'] | undefined {
+  const raw = process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION?.trim() || 'AES256';
+  if (raw.toLowerCase() === 'none') {
+    return undefined;
+  }
+
+  if (raw !== 'AES256' && raw !== 'aws:kms' && raw !== 'aws:kms:dsse') {
+    throw new S3ConfigurationError(
+      'S3_UPLOAD_SERVER_SIDE_ENCRYPTION must be AES256, aws:kms, aws:kms:dsse, or none'
+    );
+  }
+
+  return raw;
 }
 
 async function readObjectPrefix(key: string): Promise<Uint8Array> {

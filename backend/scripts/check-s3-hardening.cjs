@@ -74,7 +74,6 @@ async function checkPolicyStatus(failures, warnings) {
     }
   } catch (err) {
     if (err.name === 'NoSuchBucketPolicy') {
-      warnings.push('Bucket has no policy; verify app access is granted through least-privilege IAM instead');
       return;
     }
     failures.push(`Could not read bucket policy status: ${describeAwsError(err)}`);

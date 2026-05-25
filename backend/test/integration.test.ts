@@ -62,18 +62,53 @@ test('dev auth and homes API work against a real database', { skip: !runDatabase
   const homeRows = await homes.json() as Array<{ id: string; name: string }>;
   assert.deepEqual(homeRows.map((home) => home.name), ['Integration Home']);
 
+  const sessions = await fetch(`${baseUrl}/auth/sessions`, {
+    headers: { Authorization: `Bearer ${authBody.token}` },
+  });
+  assert.equal(sessions.status, 200);
+  const sessionRows = await sessions.json() as Array<{ id: string; current_session: boolean }>;
+  assert.equal(sessionRows.length, 1);
+  assert.equal(sessionRows[0].current_session, true);
+
+  const secondAuth = await postJson(`${baseUrl}/auth/dev`, {
+    email: 'integration@example.com',
+    name: 'Integration User',
+  });
+  assert.equal(secondAuth.status, 200);
+  const secondAuthBody = await secondAuth.json() as { token: string };
+
+  const twoSessions = await fetch(`${baseUrl}/auth/sessions`, {
+    headers: { Authorization: `Bearer ${secondAuthBody.token}` },
+  });
+  assert.equal(twoSessions.status, 200);
+  const twoSessionRows = await twoSessions.json() as Array<{ id: string; current_session: boolean }>;
+  assert.equal(twoSessionRows.length, 2);
+  const previousSession = twoSessionRows.find((session) => !session.current_session);
+  assert.ok(previousSession);
+
+  const revokePrevious = await fetch(`${baseUrl}/auth/sessions/${previousSession.id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${secondAuthBody.token}` },
+  });
+  assert.equal(revokePrevious.status, 204);
+
+  const revokedPreviousHomes = await fetch(`${baseUrl}/homes`, {
+    headers: { Authorization: `Bearer ${authBody.token}` },
+  });
+  assert.equal(revokedPreviousHomes.status, 401);
+
   const health = await fetch(`${baseUrl}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true, db: true });
 
   const logoutAll = await fetch(`${baseUrl}/auth/logout-all`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${authBody.token}` },
+    headers: { Authorization: `Bearer ${secondAuthBody.token}` },
   });
   assert.equal(logoutAll.status, 204);
 
   const revokedHomes = await fetch(`${baseUrl}/homes`, {
-    headers: { Authorization: `Bearer ${authBody.token}` },
+    headers: { Authorization: `Bearer ${secondAuthBody.token}` },
   });
   assert.equal(revokedHomes.status, 401);
 });

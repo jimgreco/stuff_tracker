@@ -1,0 +1,95 @@
+name: Production Restore Drill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+
+    steps:
+      - name: Check whether production SSH is configured
+        id: config
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EC2_HOST:-}" ] || [ -z "${EC2_USER:-}" ] || [ -z "${EC2_SSH_KEY:-}" ] || [ -z "${EC2_SSH_KNOWN_HOSTS:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Restore drill skipped::Set EC2_HOST, EC2_USER, EC2_SSH_KEY, and EC2_SSH_KNOWN_HOSTS to enable restore drills."
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          printf '%s' "$EC2_SSH_KEY" > key.pem
+          chmod 600 key.pem
+          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
+          chmod 600 known_hosts
+          test -s known_hosts
+
+      - name: Restore latest backup into a temporary database
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
+            set -euo pipefail
+            cd ~/deploy
+            set -a
+            . ./.env
+            set +a
+
+            backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}"
+            newest="$(find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -size +0c -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d ' ' -f 2-)"
+            if [ -z "$newest" ]; then
+              echo "::error title=Restore drill failed::No non-empty backup found in $backup_dir"
+              exit 1
+            fi
+
+            restore_db="stuff_restore_drill_$(date -u +%Y%m%d%H%M%S)"
+            started_at="$(date -u +%s)"
+
+            cleanup() {
+              docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db dropdb -U admin --if-exists "$restore_db" >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT
+
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db createdb -U admin "$restore_db"
+            gzip -dc "$newest" | docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -v ON_ERROR_STOP=1
+
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from schema_migrations;'
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from users;'
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from homes;'
+            docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db psql -U admin -d "$restore_db" -Atc 'select count(*) from items;'
+
+            finished_at="$(date -u +%s)"
+            elapsed_seconds="$((finished_at - started_at))"
+            echo "Restore drill succeeded from $newest into $restore_db in ${elapsed_seconds}s"
+          REMOTE
+
+  notify-failure:
+    if: ${{ always() && (needs.restore-drill.result == 'failure' || needs.restore-drill.result == 'cancelled') }}
+    needs: restore-drill
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Production restore drill failed
+          summary: restore-drill=${{ needs.restore-drill.result }}

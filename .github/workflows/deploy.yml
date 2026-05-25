@@ -165,3 +165,18 @@ jobs:
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
             "cd ~/deploy && docker-compose exec -T stuff npm run smoke:deploy || (docker-compose ps stuff && docker-compose logs --tail=100 stuff && false)"
+
+  notify-failure:
+    if: ${{ always() && github.event_name == 'push' && (needs.verify.result == 'failure' || needs.verify.result == 'cancelled' || needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled') }}
+    needs: [verify, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Deploy to EC2 failed
+          summary: verify=${{ needs.verify.result }}, deploy=${{ needs.deploy.result }}

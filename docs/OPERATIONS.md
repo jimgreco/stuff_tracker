@@ -86,7 +86,7 @@ npm run db:backup:check
 npm run storage:s3:check
 ```
 
-Until a production backup directory exists in the app container, the workflow skips the backup freshness check with a warning and still runs the S3 hardening check. Once backups are scheduled and the directory is mounted or configured with `DB_BACKUP_DIR`, freshness failures should be treated as incidents.
+The backup freshness check reads host backups from `~/deploy/backups/stuff` by default. Override that path on the production host with `STUFF_DB_BACKUP_DIR` in `~/deploy/.env`. Freshness failures should be treated as incidents.
 
 Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened.
 
@@ -95,6 +95,10 @@ Treat a failing scheduled ops check as an operational incident. Backup freshness
 Production HTTP access logs are JSON lines with `event=http_request`, `request_id`, method, path, status, duration, response length, remote address, and user agent. The API accepts a valid `x-request-id` header or generates one, then echoes it on the response so app logs and client-side reports can be correlated.
 
 Unhandled production errors are logged as JSON lines with `event=unhandled_error` and the same `request_id` when one is available.
+
+Set `OPERATIONS_ALERT_WEBHOOK_URL` to post unhandled production backend errors to an operations channel. The payload includes `service`, `event`, `level`, `message`, `request_id`, `timestamp`, and the serialized error. `OPERATIONS_ALERT_TIMEOUT_MS` controls the webhook timeout and defaults to 3000 ms.
+
+The same `OPERATIONS_ALERT_WEBHOOK_URL` GitHub secret enables workflow failure alerts for deploy, production health, production backup, production ops checks, and restore drills. If the secret is unset, those workflows emit a notice and continue without sending an alert.
 
 ## Credential Rotation
 
@@ -125,7 +129,7 @@ High-value credentials:
 
 Backend auth tokens are signed with `JWT_SECRET`. `JWT_EXPIRES_IN` controls the token lifetime using the `jsonwebtoken` duration format, and defaults to `90d` when unset.
 
-Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Server-side logout-all revocation is available through `POST /auth/logout-all`; refresh tokens, reauth UX, and device/session listing are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
+Production should set an explicit value and review it during release hardening. A shorter lifetime such as `14d` or `30d` limits exposure from a copied token while keeping the current mobile sign-in flow usable. Server-side logout-all revocation is available through `POST /auth/logout-all`. New sign-ins also create server-side auth sessions, `GET /auth/sessions` lists active sessions for the current user, and `DELETE /auth/sessions/:sessionId` revokes one session. Refresh tokens and reauth UX are not implemented yet, so do not set a very short lifetime until the clients can reauthenticate cleanly.
 
 ## GitHub Security Monitoring
 
@@ -155,7 +159,15 @@ npm run db:migrate
 
 ## Database Backups
 
-The backup script writes a gzipped `pg_dump` to `DB_BACKUP_DIR`.
+The `Production Backup` GitHub Actions workflow runs daily and can also be started manually. It SSHes to the production host, runs `pg_dump` from the Postgres container, writes a gzipped backup to `~/deploy/backups/stuff`, and deletes backups older than `STUFF_DB_BACKUP_RETENTION_DAYS` days. The default retention is 30 days.
+
+Production backup host settings:
+
+- `STUFF_DB_BACKUP_DIR`: optional host backup directory, defaulting to `~/deploy/backups/stuff`.
+- `STUFF_DB_BACKUP_RETENTION_DAYS`: optional retention window, defaulting to `30`.
+- `DB_BACKUP_MAX_AGE_HOURS`: freshness threshold used by `Production Ops Checks`, defaulting to `26`.
+
+The backend image also includes `pg_dump` and `gzip`, so the app backup script can be used in environments where `DB_BACKUP_DIR` points at durable storage. The script writes a gzipped `pg_dump` to `DB_BACKUP_DIR`.
 
 ```sh
 cd backend
@@ -174,6 +186,8 @@ npm run db:backup:check
 ## Database Restore
 
 Backups created by `npm run db:backup` are gzipped plain SQL dumps. Restore into a new database first, verify the result, then decide whether to promote it. Do not restore directly over production unless you have explicitly accepted the data-loss window.
+
+The `Production Restore Drill` GitHub Actions workflow can be started manually. It finds the newest production backup, restores it into a temporary database inside the production Postgres container, checks key table counts, reports elapsed time, and drops the temporary database on exit.
 
 Prerequisites:
 
@@ -219,7 +233,16 @@ cd backend
 npm run storage:s3:check
 ```
 
-The check fails if public access block is incomplete, the bucket policy is public, or default server-side encryption is missing. It warns when no bucket policy or lifecycle configuration is present because those require an operator decision about least-privilege IAM and retention policy.
+The check fails if public access block is incomplete, the bucket policy is public, or default server-side encryption is missing. It warns when lifecycle configuration is missing. A missing bucket policy is acceptable for the production bucket because attachment access is granted through the EC2 instance role only.
+
+Production S3 posture:
+
+- Public access block: all four settings enabled.
+- Bucket policy: none.
+- EC2 instance role policy: `s3:GetObject`, `s3:PutObject`, and `s3:AbortMultipartUpload` on the attachment bucket objects, plus `s3:GetBucketLocation` on the bucket.
+- Default bucket encryption: AES256.
+- Direct uploads: the backend includes `x-amz-server-side-encryption` in the required signed-upload headers, defaulting to `AES256`.
+- Lifecycle: abort incomplete multipart uploads after 7 days.
 
 Run a dry cleanup first:
 

@@ -48,9 +48,42 @@ jobs:
           set -euo pipefail
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
             'cd ~/deploy &&
-              if docker-compose exec -T stuff node -e "const fs = require(\"fs\"); const path = process.env.DB_BACKUP_DIR || \"/app/backups\"; process.exit(fs.existsSync(path) ? 0 : 1)" >/dev/null 2>&1; then
-                docker-compose exec -T stuff npm run db:backup:check
-              else
-                echo "::warning title=Backup freshness skipped::No backup directory is configured in the production container yet; configure durable database backups to enable this check."
+              set -a &&
+              . ./.env &&
+              set +a &&
+              backup_dir="${STUFF_DB_BACKUP_DIR:-$HOME/deploy/backups/stuff}" &&
+              max_age_hours="${DB_BACKUP_MAX_AGE_HOURS:-26}" &&
+              if [ ! -d "$backup_dir" ]; then
+                echo "::error title=Backup freshness failed::Backup directory is missing: $backup_dir"
+                exit 1
               fi &&
+              newest="$(find "$backup_dir" -type f -name "stuff-tracker-*.sql.gz" -size +0c -printf "%T@ %p\n" | sort -nr | head -n 1 | cut -d " " -f 2-)" &&
+              if [ -z "$newest" ]; then
+                echo "::error title=Backup freshness failed::No non-empty stuff-tracker backups found in $backup_dir"
+                exit 1
+              fi &&
+              newest_epoch="$(stat -c %Y "$newest")" &&
+              now_epoch="$(date +%s)" &&
+              max_age_seconds="$((max_age_hours * 3600))" &&
+              age_seconds="$((now_epoch - newest_epoch))" &&
+              if [ "$age_seconds" -gt "$max_age_seconds" ]; then
+                echo "::error title=Backup freshness failed::Newest backup is older than ${max_age_hours}h: $newest"
+                exit 1
+              fi &&
+              echo "Newest backup is fresh: $newest" &&
               docker-compose exec -T stuff npm run storage:s3:check'
+
+  notify-failure:
+    if: ${{ always() && (needs.ops-checks.result == 'failure' || needs.ops-checks.result == 'cancelled') }}
+    needs: ops-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Notify operations
+        uses: ./.github/actions/notify-operations
+        with:
+          webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
+          title: Production ops check failed
+          summary: ops-checks=${{ needs.ops-checks.result }}

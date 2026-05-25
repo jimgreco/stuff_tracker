@@ -4,6 +4,8 @@ import {
   assertAllowedAttachmentBytes,
   attachmentKeyFromUrl,
   maxUploadBytes,
+  requiredUploadHeaders,
+  S3ConfigurationError,
   UploadValidationError,
 } from '../src/lib/s3';
 
@@ -27,6 +29,54 @@ test('attachment key parser accepts stable S3, CDN, signed, and raw key values',
 test('upload size limits are configurable per attachment kind', () => {
   assert.equal(maxUploadBytes('photo'), 1234);
   assert.equal(maxUploadBytes('document'), 5678);
+});
+
+test('upload headers require server-side encryption by default', () => {
+  const previous = process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION;
+  delete process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION;
+
+  try {
+    assert.deepEqual(requiredUploadHeaders('image/jpeg'), {
+      'Content-Type': 'image/jpeg',
+      'x-amz-server-side-encryption': 'AES256',
+    });
+  } finally {
+    restoreEnv('S3_UPLOAD_SERVER_SIDE_ENCRYPTION', previous);
+  }
+});
+
+test('upload encryption can use KMS or be explicitly disabled', () => {
+  const previousEncryption = process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION;
+  const previousKmsKey = process.env.S3_UPLOAD_KMS_KEY_ID;
+
+  try {
+    process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION = 'aws:kms';
+    process.env.S3_UPLOAD_KMS_KEY_ID = 'alias/stuff-uploads';
+    assert.deepEqual(requiredUploadHeaders('application/pdf'), {
+      'Content-Type': 'application/pdf',
+      'x-amz-server-side-encryption': 'aws:kms',
+      'x-amz-server-side-encryption-aws-kms-key-id': 'alias/stuff-uploads',
+    });
+
+    process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION = 'none';
+    assert.deepEqual(requiredUploadHeaders('application/pdf'), {
+      'Content-Type': 'application/pdf',
+    });
+  } finally {
+    restoreEnv('S3_UPLOAD_SERVER_SIDE_ENCRYPTION', previousEncryption);
+    restoreEnv('S3_UPLOAD_KMS_KEY_ID', previousKmsKey);
+  }
+});
+
+test('upload encryption rejects unsupported algorithms', () => {
+  const previous = process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION;
+  process.env.S3_UPLOAD_SERVER_SIDE_ENCRYPTION = 'DES';
+
+  try {
+    assert.throws(() => requiredUploadHeaders('image/jpeg'), S3ConfigurationError);
+  } finally {
+    restoreEnv('S3_UPLOAD_SERVER_SIDE_ENCRYPTION', previous);
+  }
 });
 
 test('attachment byte validation accepts supported photos and documents', () => {
@@ -60,4 +110,13 @@ function bytes(values: number[]): Uint8Array {
 
 function ascii(value: string): Uint8Array {
   return Buffer.from(value, 'ascii');
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
 }

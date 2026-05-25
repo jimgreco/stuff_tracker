@@ -6,6 +6,12 @@ import { readAppleFullName, readAuthString } from '../lib/authPayload';
 import { signToken } from '../lib/jwt';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { upsertUser, UserIdentityConflictError } from '../lib/users';
+import {
+  createAuthSession,
+  listAuthSessions,
+  revokeAllAuthSessions,
+  revokeAuthSession,
+} from '../lib/sessions';
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -28,6 +34,19 @@ function appleAudiences(): string[] {
 
 function webAppleClientId(): string | undefined {
   return process.env.APPLE_WEB_CLIENT_ID?.trim();
+}
+
+async function issueAuthResponse(req: Request, user: { id: string; email: string }) {
+  const session = await createAuthSession(user.id, req);
+  return {
+    token: signToken({
+      userId: user.id,
+      email: user.email,
+      sessionId: session.sessionId,
+      jti: session.tokenId,
+    }),
+    user,
+  };
 }
 
 async function verifyAppleIdentityToken(identityToken: string) {
@@ -72,7 +91,7 @@ router.post('/dev', async (req: Request, res: Response) => {
     : 'Local Dev';
 
   const user = await upsertUser({ email, name });
-  res.json({ token: signToken({ userId: user.id, email: user.email }), user });
+  res.json(await issueAuthResponse(req, user));
 });
 
 // ── Google Sign-In (iOS sends the ID token directly) ──────────────────────────
@@ -96,7 +115,7 @@ router.post('/google', async (req: Request, res: Response) => {
 
     const { sub: googleId, email, name = email, picture } = payload;
     const user = await upsertUser({ googleId, email, name, avatarUrl: picture });
-    res.json({ token: signToken({ userId: user.id, email: user.email }), user });
+    res.json(await issueAuthResponse(req, user));
   } catch (err: any) {
     if (err instanceof UserIdentityConflictError) {
       res.status(409).json({ error: err.message });
@@ -132,7 +151,7 @@ router.post('/apple', async (req: Request, res: Response) => {
     const name = providedName || email;
 
     const user = await upsertUser({ appleId, email, name, emailIsFallback });
-    res.json({ token: signToken({ userId: user.id, email: user.email }), user });
+    res.json(await issueAuthResponse(req, user));
   } catch (err: any) {
     if (err instanceof UserIdentityConflictError) {
       res.status(409).json({ error: err.message });
@@ -156,11 +175,26 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   res.json(rows[0]);
 });
 
+router.get('/sessions', requireAuth, async (req: AuthRequest, res: Response) => {
+  res.json(await listAuthSessions(req.user!.userId, req.user!.sessionId));
+});
+
+router.delete('/sessions/:sessionId', requireAuth, async (req: AuthRequest, res: Response) => {
+  const revoked = await revokeAuthSession(req.user!.userId, req.params.sessionId);
+  if (!revoked) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  res.status(204).send();
+});
+
 router.post('/logout-all', requireAuth, async (req: AuthRequest, res: Response) => {
   await pool.query(
     'UPDATE users SET tokens_revoked_before = NOW(), updated_at = NOW() WHERE id = $1',
     [req.user!.userId]
   );
+  await revokeAllAuthSessions(req.user!.userId);
   res.status(204).send();
 });
 

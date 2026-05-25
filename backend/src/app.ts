@@ -15,6 +15,7 @@ import locationsRouter from './routes/locations';
 import itemsRouter from './routes/items';
 import { authRateLimit } from './lib/rateLimits';
 import { getCsvEnv, isProduction } from './lib/env';
+import { sendOperationalAlert } from './lib/alerts';
 
 export function createApp() {
   const app = express();
@@ -141,13 +142,22 @@ function logError(err: unknown, requestId: string | undefined): void {
     ? { name: err.name, message: err.message, stack: err.stack }
     : { name: 'UnknownError', message: String(err) };
 
-  console.error(JSON.stringify({
+  const event = {
     timestamp: new Date().toISOString(),
     level: 'error',
     event: 'unhandled_error',
     request_id: requestId,
     error,
-  }));
+  };
+
+  console.error(JSON.stringify(event));
+  void sendOperationalAlert({
+    level: 'error',
+    event: 'unhandled_error',
+    request_id: requestId,
+    message: error.message,
+    error,
+  });
 }
 
 function corsOptions(): CorsOptions {

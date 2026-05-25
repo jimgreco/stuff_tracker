@@ -12,11 +12,18 @@ const { signToken, verifyToken } = requireModule('../src/lib/jwt') as typeof imp
 const { requireAuth } = requireModule('../src/middleware/auth') as typeof import('../src/middleware/auth');
 
 test('JWT helper signs and verifies auth payloads', () => {
-  const token = signToken({ userId: 'user-1', email: 'user@example.com' });
+  const token = signToken({
+    userId: 'user-1',
+    email: 'user@example.com',
+    sessionId: 'session-1',
+    jti: 'token-1',
+  });
   const payload = verifyToken(token);
 
   assert.equal(payload.userId, 'user-1');
   assert.equal(payload.email, 'user@example.com');
+  assert.equal(payload.sessionId, 'session-1');
+  assert.equal(payload.jti, 'token-1');
 });
 
 test('JWT helper honors configurable token lifetime', () => {

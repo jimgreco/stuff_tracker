@@ -6,6 +6,8 @@ const DEFAULT_EXPIRES_IN = '90d';
 export interface JwtPayload {
   userId: string;
   email: string;
+  sessionId?: string;
+  jti?: string;
   iat?: number;
 }
 
