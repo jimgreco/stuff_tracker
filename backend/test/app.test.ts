@@ -43,7 +43,7 @@ test('app serves the mobile web shell at root and /web', async (t) => {
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
-    assert.match(body, /<title>Stuff Tracker<\/title>/);
+    assert.match(body, /<title>Stuff Tracker \| Home Inventory App<\/title>/);
   }
 });
 
