@@ -26,9 +26,7 @@ struct ContentView: View {
 
     var body: some View {
         if authStore.isRestoringSession {
-            ProgressView("Checking account...")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            StartupPhotoLoadingView(message: "Checking account...")
         } else if authStore.requiresSignIn {
             LoginView(mode: .reconnect)
                 .environmentObject(authStore)
@@ -41,8 +39,7 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if homeStore.isLoading && homeStore.homeDetails.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    StartupPhotoLoadingView(message: "Loading your stuff...")
                 } else {
                     let filtered = filteredHomes
                     if !searchText.isEmpty && filtered.isEmpty {
@@ -271,6 +268,50 @@ struct ContentView: View {
                 .map { CollapsibleTreeNode.location($0.id) }
         )
         return nodes
+    }
+}
+
+private struct StartupPhotoLoadingView: View {
+    let message: String
+
+    var body: some View {
+        ZStack {
+            Image("AppLaunchPhoto")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.08),
+                    Color.black.opacity(0.42),
+                    Color.black.opacity(0.18),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                Text("Stuff Tracker")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                ProgressView(message)
+                    .progressViewStyle(.circular)
+                    .tint(.white)
+                    .foregroundStyle(.white.opacity(0.88))
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.white.opacity(0.24), lineWidth: 0.75)
+            }
+            .shadow(color: .black.opacity(0.16), radius: 24, y: 12)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

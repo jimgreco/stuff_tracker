@@ -27,6 +27,7 @@
     sheet: null,
     adding: null,
     iconSearch: "",
+    authConfigLoaded: false,
     googleClientId: "",
     appleClientId: "",
   };
@@ -337,22 +338,127 @@
 
   function renderSignedOutApp() {
     return `
-      <div class="mobile-shell">
-        <header class="top-bar">
-          <div class="nav-row">
-            <div class="nav-spacer" aria-hidden="true"></div>
-            <div class="nav-title">Stuff Tracker</div>
-            <button type="button" class="icon-button avatar-button" data-action="open-account" aria-label="Account settings">
-              ${svgIcon("cloud")}
-            </button>
-          </div>
+      <div class="marketing-page">
+        <header class="marketing-nav">
+          <a class="marketing-brand" href="#top" aria-label="Stuff Tracker home">
+            <img src="./assets/app-icon.png" width="34" height="34" alt="">
+            <span>Stuff Tracker</span>
+          </a>
+          <nav class="marketing-links" aria-label="Landing page">
+            <a href="#features">Features</a>
+            <a href="#details">Details</a>
+            <a href="#access">Access</a>
+          </nav>
+          <button type="button" class="marketing-sign-in" data-action="open-account">Sign in</button>
         </header>
-        <main class="content auth-content">
-          ${renderAccountRequired()}
+        <main id="top" class="marketing-main">
+          <section class="marketing-hero">
+            <div class="marketing-hero-copy">
+              <p class="marketing-kicker">Home inventory that follows the way you actually store things</p>
+              <h1>Stuff Tracker</h1>
+              <p class="marketing-lede">Map homes, rooms, containers, and loose items. Keep photos, documents, serial numbers, warranties, and values close to the things they belong to.</p>
+              <div class="marketing-actions">
+                <button type="button" class="marketing-primary" data-action="open-account">Start tracking</button>
+                <a class="marketing-secondary" href="#features">See features</a>
+              </div>
+              <dl class="marketing-proof">
+                <div>
+                  <dt>Homes</dt>
+                  <dd>Shared spaces</dd>
+                </div>
+                <div>
+                  <dt>Items</dt>
+                  <dd>Photos and docs</dd>
+                </div>
+                <div>
+                  <dt>Search</dt>
+                  <dd>Room to serial</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+          ${renderMarketingFeatures()}
+          ${renderMarketingDetails()}
+          ${renderMarketingAccess()}
         </main>
         ${renderSheet()}
         ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
       </div>
+    `;
+  }
+
+  function renderMarketingFeatures() {
+    const features = [
+      ["house.fill", "Mirror your real storage", "Build a tree of homes, floors, rooms, bins, shelves, drawers, and loose items without flattening everything into one list."],
+      ["search", "Find by any clue", "Search item names, notes, rooms, serial numbers, model numbers, and custom properties when you only remember part of the answer."],
+      ["photo.fill", "Attach the evidence", "Keep photos, documents, warranty dates, purchase dates, values, and notes with the item they describe."],
+      ["share", "Use it with your household", "Share a home so the people who live with the stuff can keep the inventory current together."],
+    ];
+    return `
+      <section id="features" class="marketing-section">
+        <div class="marketing-section-heading">
+          <p>Built around where things live</p>
+          <h2>Inventory that keeps the room, container, and item together.</h2>
+        </div>
+        <div class="marketing-feature-grid">
+          ${features.map(([icon, title, copy]) => `
+            <article class="marketing-feature-card">
+              <span class="marketing-feature-icon">${svgIcon(icon)}</span>
+              <h3>${escapeHtml(title)}</h3>
+              <p>${escapeHtml(copy)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderMarketingDetails() {
+    return `
+      <section id="details" class="marketing-section marketing-detail-band">
+        <div class="marketing-section-heading">
+          <p>Less guessing when it matters</p>
+          <h2>Useful details stay attached to the thing, not buried in a folder.</h2>
+        </div>
+        <div class="marketing-detail-list">
+          <div class="marketing-detail-row">
+            ${svgIcon("tag")}
+            <div>
+              <h3>Custom fields for the odd details</h3>
+              <p>Add the property you need, from filter size to paint color to access code.</p>
+            </div>
+          </div>
+          <div class="marketing-detail-row">
+            ${svgIcon("doc")}
+            <div>
+              <h3>Documents beside the item</h3>
+              <p>Store receipts, manuals, warranty paperwork, and reference files where future you will look first.</p>
+            </div>
+          </div>
+          <div class="marketing-detail-row">
+            ${svgIcon("cloud")}
+            <div>
+              <h3>Synced from the start</h3>
+              <p>Sign in once and keep the same inventory available from the web and the app.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderMarketingAccess() {
+    return `
+      <section id="access" class="marketing-section marketing-access">
+        <div class="marketing-section-heading">
+          <p>Ready when you are</p>
+          <h2>Start with the spaces you already know, then fill in the details over time.</h2>
+        </div>
+        <div class="marketing-access-actions">
+          <button type="button" class="marketing-primary" data-action="open-account">Sign in or create account</button>
+          <button type="button" class="marketing-secondary button-reset" data-action="open-account">${svgIcon("cloud")} API settings</button>
+        </div>
+      </section>
     `;
   }
 
@@ -1090,6 +1196,7 @@
       state.googleClientId = "";
       state.appleClientId = "";
     }
+    state.authConfigLoaded = true;
     render();
   }
 
@@ -1452,6 +1559,9 @@
     if (action === "open-account") {
       state.sheet = { type: "account" };
       render();
+      if (!state.token && !state.authConfigLoaded) {
+        void loadAuthConfig();
+      }
       return;
     }
     if (action === "close-sheet") {
@@ -1657,6 +1767,7 @@
     if (kind === "account-settings") {
       const nextUrl = form.elements.apiBaseUrl.value.trim().replace(/\/$/, "");
       state.apiBaseUrl = nextUrl || DEFAULT_API_BASE_URL;
+      state.authConfigLoaded = false;
       persistSession();
       showToast("API URL saved");
       void loadAuthConfig();
@@ -1709,7 +1820,6 @@
   window.addEventListener("load", () => requestAnimationFrame(renderProviderSignInButtons));
 
   render();
-  void loadAuthConfig();
 
   if (state.token) {
     void runMutation(loadServerHomes);
