@@ -17,7 +17,6 @@
 		A008 /* HomeBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A108 /* HomeBoxView.swift */; };
 		A009 /* ItemListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A109 /* ItemListView.swift */; };
 		A010 /* ItemEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A110 /* ItemEditView.swift */; };
-		A011 /* SearchBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A111 /* SearchBar.swift */; };
 		A012 /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A112 /* SharingView.swift */; };
 		A013 /* InlineAddField.swift in Sources */ = {isa = PBXBuildFile; fileRef = A113 /* InlineAddField.swift */; };
 		A014 /* LocalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A114 /* LocalModels.swift */; };
@@ -63,7 +62,6 @@
 		A108 /* HomeBoxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeBoxView.swift; sourceTree = "<group>"; };
 		A109 /* ItemListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemListView.swift; sourceTree = "<group>"; };
 		A110 /* ItemEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemEditView.swift; sourceTree = "<group>"; };
-		A111 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		A112 /* SharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingView.swift; sourceTree = "<group>"; };
 		A113 /* InlineAddField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineAddField.swift; sourceTree = "<group>"; };
 		A114 /* LocalModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalModels.swift; sourceTree = "<group>"; };
@@ -143,7 +141,6 @@
 				A108 /* HomeBoxView.swift */,
 				A109 /* ItemListView.swift */,
 				A110 /* ItemEditView.swift */,
-				A111 /* SearchBar.swift */,
 				A120 /* TrashBinView.swift */,
 				A121 /* PendingChangesView.swift */,
 			);
@@ -384,7 +381,6 @@
 				A008 /* HomeBoxView.swift in Sources */,
 				A009 /* ItemListView.swift in Sources */,
 				A010 /* ItemEditView.swift in Sources */,
-				A011 /* SearchBar.swift in Sources */,
 				A012 /* SharingView.swift in Sources */,
 				A013 /* InlineAddField.swift in Sources */,
 				A014 /* LocalModels.swift in Sources */,

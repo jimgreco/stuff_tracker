@@ -42,11 +42,6 @@ struct ContentView: View {
                 if homeStore.isLoading && homeStore.homeDetails.isEmpty {
                     StartupPhotoLoadingView(message: "Loading your stuff...")
                 } else {
-                    SearchBar(text: $searchText, showsFlaggedOnly: $showFlaggedOnly)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 8)
-                        .padding(.bottom, 8)
-
                     let filtered = filteredHomes
                     if isFiltering && filtered.isEmpty {
                         ContentUnavailableView(
@@ -114,10 +109,16 @@ struct ContentView: View {
             .overlay(alignment: .top) {
                 BreadcrumbBar(path: breadcrumbPath)
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                BottomSearchControls(
+                    searchText: $searchText,
+                    showFlaggedOnly: $showFlaggedOnly
+                )
+            }
             .overlay(alignment: .bottom) {
                 DragTrashZone(homeStore: homeStore)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 76)
             }
             .navigationTitle("Stuff Tracker")
             .navigationBarTitleDisplayMode(.inline)
@@ -299,6 +300,128 @@ struct ContentView: View {
                 .map { CollapsibleTreeNode.location($0.id) }
         )
         return nodes
+    }
+}
+
+private struct BottomSearchControls: View {
+    @Binding var searchText: String
+    @Binding var showFlaggedOnly: Bool
+    @FocusState private var isSearchFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TextField("Search stuff...", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .focused($isSearchFocused)
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .padding(.horizontal, 13)
+            .bottomSearchFieldSurface(isFocused: isSearchFocused)
+
+            BottomFlagFilterButton(isOn: $showFlaggedOnly)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+    }
+}
+
+private struct BottomFlagFilterButton: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            Image(systemName: isOn ? "flag.fill" : "flag")
+                .font(.body.weight(.semibold))
+                .symbolRenderingMode(.monochrome)
+                .frame(width: 48, height: 48)
+        }
+        .foregroundStyle(isOn ? .orange : .secondary)
+        .bottomFlagFilterSurface(isOn: isOn)
+        .accessibilityLabel(isOn ? "Showing flagged items" : "Show flagged items")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+private struct BottomSearchFieldSurfaceModifier: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(Color(.systemBackground).opacity(isFocused ? 0.22 : 0.16), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(isFocused ? 0.28 : 0.16), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(isFocused ? 0.16 : 0.10), radius: isFocused ? 18 : 12, y: 6)
+        } else {
+            content
+                .background(.thinMaterial, in: shape)
+                .overlay(shape.stroke(Color(.separator).opacity(isFocused ? 0.24 : 0.16), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+        }
+    }
+}
+
+private struct BottomFlagFilterSurfaceModifier: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            if isOn {
+                content
+                    .background(Color.orange.opacity(0.14), in: shape)
+                    .glassEffect(.regular.tint(.orange).interactive(), in: shape)
+                    .overlay(shape.stroke(Color.orange.opacity(0.28), lineWidth: 0.75))
+                    .shadow(color: Color.orange.opacity(0.18), radius: 12, y: 5)
+            } else {
+                content
+                    .background(Color(.systemBackground).opacity(0.16), in: shape)
+                    .glassEffect(.regular.interactive(), in: shape)
+                    .overlay(shape.stroke(Color.white.opacity(0.16), lineWidth: 0.75))
+                    .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+            }
+        } else {
+            content
+                .background(isOn ? Color.orange.opacity(0.14) : Color(.secondarySystemGroupedBackground), in: shape)
+                .overlay(shape.stroke(isOn ? Color.orange.opacity(0.32) : Color(.separator).opacity(0.16), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+        }
+    }
+}
+
+private extension View {
+    func bottomSearchFieldSurface(isFocused: Bool) -> some View {
+        modifier(BottomSearchFieldSurfaceModifier(isFocused: isFocused))
+    }
+
+    func bottomFlagFilterSurface(isOn: Bool) -> some View {
+        modifier(BottomFlagFilterSurfaceModifier(isOn: isOn))
     }
 }
 
