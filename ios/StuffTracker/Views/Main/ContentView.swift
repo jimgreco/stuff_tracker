@@ -51,10 +51,6 @@ struct ContentView: View {
                             description: Text(emptyFilterDescription)
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            dismissSearchInput()
-                        }
                     } else {
                         ScrollView {
                             VStack(spacing: 8) {
@@ -108,17 +104,19 @@ struct ContentView: View {
                             updateBreadcrumbPath(from: anchors)
                         }
                         .scrollDismissesKeyboard(.interactively)
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                dismissSearchInput()
-                            }
-                        )
                     }
                 }
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .overlay(alignment: .top) {
                 BreadcrumbBar(path: breadcrumbPath)
+            }
+            .overlay {
+                if isSearchFocused {
+                    SearchDismissTapShield {
+                        dismissSearchInput()
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 BottomSearchControls(
@@ -137,8 +135,11 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        dismissSearchInput()
-                        showAccountSheet = true
+                        if isSearchFocused {
+                            dismissSearchInput()
+                        } else {
+                            showAccountSheet = true
+                        }
                     } label: {
                         if let avatarUrl = authStore.currentUser?.avatarUrl,
                            let url = URL(string: avatarUrl) {
@@ -318,6 +319,17 @@ struct ContentView: View {
                 .map { CollapsibleTreeNode.location($0.id) }
         )
         return nodes
+    }
+}
+
+private struct SearchDismissTapShield: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Color.black.opacity(0.001)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onDismiss)
+            .accessibilityHidden(true)
     }
 }
 
