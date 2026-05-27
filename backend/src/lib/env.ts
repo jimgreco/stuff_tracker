@@ -26,6 +26,25 @@ export function getIntegerEnv(name: string, fallback: number): number {
   return value;
 }
 
+export function getOptionalIntegerEnv(name: string): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return value;
+}
+
+export function getOptionalStringEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
 export function getBooleanEnv(name: string, fallback = false): boolean {
   const raw = process.env[name];
   if (!raw) {

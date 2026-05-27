@@ -18,6 +18,7 @@
     apiBaseUrl: localStorage.getItem(STORAGE.apiBaseUrl) || DEFAULT_API_BASE_URL,
     token: STORED_TOKEN,
     user: STORED_TOKEN ? readJson(STORAGE.user, null) : null,
+    accountPlan: null,
     homes: STORED_TOKEN ? readJson(STORAGE.homes, []) : [],
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
@@ -158,6 +159,7 @@
 
   function clearCachedData() {
     state.homes = [];
+    state.accountPlan = null;
     state.collapsed = new Set();
     localStorage.removeItem(STORAGE.homes);
     localStorage.removeItem(STORAGE.deletedItems);
@@ -724,6 +726,7 @@
           </div>
         </div>
       </section>
+      ${connected ? renderSubscriptionSection() : ""}
       <form class="form-section" data-form="account-settings">
         <h2 class="section-title">Backend</h2>
         <div class="form-list">
@@ -747,6 +750,43 @@
       <p class="footnote">Version web.</p>
     `;
     return sheetChrome("Account", body);
+  }
+
+  function renderSubscriptionSection() {
+    const plan = state.accountPlan;
+    if (!plan) {
+      return `
+        <section class="form-section">
+          <h2 class="section-title">Subscription</h2>
+          <div class="form-list">
+            <div class="form-row"><span>Plan</span><strong>Loading...</strong></div>
+          </div>
+        </section>
+      `;
+    }
+
+    const paid = Boolean(plan.isPaid);
+    const source = plan.entitlement?.source ? plan.entitlement.source.replaceAll("_", " ") : "";
+    return `
+      <section class="form-section">
+        <h2 class="section-title">Subscription</h2>
+        <div class="form-list">
+          <div class="form-row"><span>Plan</span><strong>${paid ? "Paid" : "Free"}</strong></div>
+          ${paid && source ? `<div class="form-row"><span>Source</span><strong>${escapeHtml(titleCase(source))}</strong></div>` : ""}
+          ${!paid ? renderQuotaRow("Containers + Items", plan.usage.totalContainersAndItems, plan.limits.totalContainersAndItems) : ""}
+          ${!paid ? renderQuotaRow("Images", plan.usage.images, plan.limits.images) : ""}
+          ${!paid ? renderQuotaRow("Documents", plan.usage.documents, plan.limits.documents) : ""}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderQuotaRow(label, used, limit) {
+    return `<div class="form-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(used)}/${escapeHtml(limit)}</strong></div>`;
+  }
+
+  function titleCase(value) {
+    return String(value || "").replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
   function renderActionsSheet() {
@@ -1270,7 +1310,11 @@
   }
 
   async function loadServerHomes() {
-    const homes = await apiRequest("GET", "/homes");
+    const [plan, homes] = await Promise.all([
+      apiRequest("GET", "/account/plan"),
+      apiRequest("GET", "/homes"),
+    ]);
+    state.accountPlan = plan;
     const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
     state.homes = details.map(normalizeHomeDetail);
     persistData();

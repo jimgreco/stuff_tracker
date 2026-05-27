@@ -80,3 +80,23 @@ export const InviteSchema = z.object({
 export const UpdateMemberRoleSchema = z.object({
   role: MemberRoleSchema,
 });
+
+export const AppStoreTransactionSyncSchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const body = value as Record<string, unknown>;
+  return {
+    ...body,
+    signed_transaction_info: body.signed_transaction_info ?? body.signedTransactionInfo,
+  };
+}, z.object({
+  signed_transaction_info: z.string().min(1).max(50_000),
+}));
+
+export const ManualEntitlementGrantSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  source: z.enum(['manual', 'promo', 'admin']).default('manual'),
+  expires_at: z.string().datetime().nullable().optional(),
+});

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   HomeNameSchema,
   InviteSchema,
+  AppStoreTransactionSyncSchema,
+  ManualEntitlementGrantSchema,
   ItemSchema,
   LocationSchema,
   MemberRoleSchema,
@@ -13,6 +15,34 @@ test('home name schema enforces non-empty names up to 100 chars', () => {
   assert.equal(HomeNameSchema.parse({ name: '33 Stratton Sq' }).name, '33 Stratton Sq');
   assert.throws(() => HomeNameSchema.parse({ name: '' }));
   assert.throws(() => HomeNameSchema.parse({ name: 'x'.repeat(101) }));
+});
+
+test('app store transaction sync schema accepts snake and camel case payloads', () => {
+  assert.deepEqual(
+    AppStoreTransactionSyncSchema.parse({ signed_transaction_info: 'signed-jws' }),
+    { signed_transaction_info: 'signed-jws' }
+  );
+  assert.deepEqual(
+    AppStoreTransactionSyncSchema.parse({ signedTransactionInfo: 'signed-jws' }),
+    { signed_transaction_info: 'signed-jws' }
+  );
+  assert.throws(() => AppStoreTransactionSyncSchema.parse({ signed_transaction_info: '' }));
+});
+
+test('manual entitlement grant schema normalizes email and supported sources', () => {
+  assert.deepEqual(
+    ManualEntitlementGrantSchema.parse({ email: ' Person@Example.com ' }),
+    { email: 'person@example.com', source: 'manual' }
+  );
+  assert.deepEqual(
+    ManualEntitlementGrantSchema.parse({
+      email: 'person@example.com',
+      source: 'promo',
+      expires_at: '2026-06-01T00:00:00.000Z',
+    }),
+    { email: 'person@example.com', source: 'promo', expires_at: '2026-06-01T00:00:00.000Z' }
+  );
+  assert.throws(() => ManualEntitlementGrantSchema.parse({ email: 'person@example.com', source: 'app_store' }));
 });
 
 test('member invite schemas accept supported roles and valid emails only', () => {

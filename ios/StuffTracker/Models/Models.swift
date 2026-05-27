@@ -10,6 +10,44 @@ struct User: Codable, Identifiable {
     let avatarUrl: String?
 }
 
+// MARK: - Account plan
+
+struct AccountPlan: Codable {
+    let tier: String
+    let isPaid: Bool
+    let entitlement: AccountEntitlement?
+    let limits: AccountQuotaLimits
+    let usage: AccountQuotaUsage
+    let remaining: AccountQuotaRemaining
+}
+
+struct AccountEntitlement: Codable {
+    let source: String
+    let productId: String?
+    let expiresAt: String?
+    let appStoreEnvironment: String?
+}
+
+struct AccountQuotaLimits: Codable {
+    let totalContainersAndItems: Int
+    let images: Int
+    let documents: Int
+}
+
+struct AccountQuotaUsage: Codable {
+    let containers: Int
+    let items: Int
+    let totalContainersAndItems: Int
+    let images: Int
+    let documents: Int
+}
+
+struct AccountQuotaRemaining: Codable {
+    let totalContainersAndItems: Int?
+    let images: Int?
+    let documents: Int?
+}
+
 // MARK: - Home
 
 struct Home: Codable, Identifiable {

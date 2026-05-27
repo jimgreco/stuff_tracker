@@ -10,6 +10,9 @@ import { ZodError } from 'zod';
 
 import { pool } from './db/pool';
 import authRouter from './routes/auth';
+import accountRouter from './routes/account';
+import adminRouter from './routes/admin';
+import appStoreRouter from './routes/appStore';
 import homesRouter from './routes/homes';
 import locationsRouter from './routes/locations';
 import itemsRouter from './routes/items';
@@ -51,6 +54,9 @@ export function createApp() {
   });
 
   app.use('/auth', authRateLimit, authRouter);
+  app.use('/account', accountRouter);
+  app.use('/admin', adminRouter);
+  app.use('/app-store', appStoreRouter);
   app.use('/homes', homesRouter);
   app.use('/homes/:homeId/locations', locationsRouter);
   app.use('/homes/:homeId/items', itemsRouter);

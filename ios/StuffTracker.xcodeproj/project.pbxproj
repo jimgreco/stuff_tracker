@@ -28,10 +28,11 @@
 		A019 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A119 /* AccountView.swift */; };
 		A020 /* TrashBinView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A120 /* TrashBinView.swift */; };
 		A021 /* PendingChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A121 /* PendingChangesView.swift */; };
-		A022 /* SyncUploadPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A122 /* SyncUploadPlanner.swift */; };
-		A023 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A123 /* PrivacyInfo.xcprivacy */; };
-		A024 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A124 /* SecureTokenStore.swift */; };
-		A026 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A126 /* LaunchScreen.storyboard */; };
+			A022 /* SyncUploadPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A122 /* SyncUploadPlanner.swift */; };
+			A023 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A123 /* PrivacyInfo.xcprivacy */; };
+			A024 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A124 /* SecureTokenStore.swift */; };
+			A025 /* SubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A125 /* SubscriptionStore.swift */; };
+			A026 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A126 /* LaunchScreen.storyboard */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
@@ -73,10 +74,11 @@
 		A119 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		A120 /* TrashBinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrashBinView.swift; sourceTree = "<group>"; };
 		A121 /* PendingChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingChangesView.swift; sourceTree = "<group>"; };
-		A122 /* SyncUploadPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlanner.swift; sourceTree = "<group>"; };
-		A123 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		A124 /* SecureTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureTokenStore.swift; sourceTree = "<group>"; };
-		A126 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+			A122 /* SyncUploadPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncUploadPlanner.swift; sourceTree = "<group>"; };
+			A123 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+			A124 /* SecureTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureTokenStore.swift; sourceTree = "<group>"; };
+			A125 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
+			A126 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B37719F62FAD719C004BBAEC /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -208,10 +210,11 @@
 			children = (
 				A104 /* AuthStore.swift */,
 				A105 /* HomeStore.swift */,
-				A115 /* LocalDataManager.swift */,
-				A118 /* SyncManager.swift */,
-				A122 /* SyncUploadPlanner.swift */,
-			);
+					A115 /* LocalDataManager.swift */,
+					A118 /* SyncManager.swift */,
+					A122 /* SyncUploadPlanner.swift */,
+					A125 /* SubscriptionStore.swift */,
+				);
 			path = Stores;
 			sourceTree = "<group>";
 		};
@@ -390,10 +393,11 @@
 				A018 /* SyncManager.swift in Sources */,
 				A019 /* AccountView.swift in Sources */,
 				A020 /* TrashBinView.swift in Sources */,
-				A021 /* PendingChangesView.swift in Sources */,
-				A022 /* SyncUploadPlanner.swift in Sources */,
-				A024 /* SecureTokenStore.swift in Sources */,
-			);
+					A021 /* PendingChangesView.swift in Sources */,
+					A022 /* SyncUploadPlanner.swift in Sources */,
+					A024 /* SecureTokenStore.swift in Sources */,
+					A025 /* SubscriptionStore.swift in Sources */,
+				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		TSRC /* Sources */ = {

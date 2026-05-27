@@ -3,6 +3,7 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
 import { LocationSchema } from '../lib/schemas';
+import { canCreateContainer, type QuotaDecision } from '../lib/entitlements';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -14,6 +15,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
   const { name, parent_id, type, sort_order, icon } = LocationSchema.parse(req.body);
+  if (type === 'container') {
+    const quota = await canCreateContainer(homeId);
+    if (quota) { sendQuota(res, quota); return; }
+  }
+
   if (parent_id) {
     const parent = await pool.query(
       'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
@@ -93,3 +99,7 @@ router.delete('/:locationId', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
+function sendQuota(res: Response, quota: QuotaDecision): void {
+  res.status(quota.status).json({ error: quota.error, code: quota.code, plan: quota.plan });
+}

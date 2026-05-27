@@ -153,4 +153,7 @@ test('fresh database schema allows floor locations', () => {
   assert.match(schemaSql, /serial_number TEXT/);
   assert.match(schemaSql, /warranty_expires_date DATE/);
   assert.match(schemaSql, /estimated_value_cents INTEGER/);
+  assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS user_entitlements/);
+  assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS app_store_transactions/);
+  assert.match(schemaSql, /idx_user_entitlements_app_store_original_transaction/);
 });

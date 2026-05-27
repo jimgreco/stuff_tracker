@@ -341,6 +341,47 @@ final class APIClient {
         try await requestEmpty("POST", path: "/auth/logout-all")
     }
 
+    // MARK: - Account plan
+
+    struct SubscriptionProductsResponse: Decodable {
+        let productIds: [String]
+    }
+
+    struct AppStoreTransactionBody: Encodable {
+        let signedTransactionInfo: String
+    }
+
+    struct AppStoreTransactionSyncResponse: Decodable {
+        struct Result: Decodable {
+            let applied: Bool
+            let status: String?
+            let productId: String?
+            let expiresAt: String?
+        }
+
+        let result: Result
+        let plan: AccountPlan
+    }
+
+    func getAccountPlan() async throws -> AccountPlan {
+        try await request("GET", path: "/account/plan")
+    }
+
+    func getSubscriptionProductIds() async throws -> [String] {
+        let response: SubscriptionProductsResponse = try await request("GET", path: "/account/subscription-products")
+        return response.productIds
+    }
+
+    func syncAppStoreTransaction(signedTransactionInfo: String) async throws -> AccountPlan {
+        let response: AppStoreTransactionSyncResponse = try await request(
+            "POST",
+            path: "/account/app-store/transactions",
+            body: AppStoreTransactionBody(signedTransactionInfo: signedTransactionInfo),
+            keyEncodingStrategy: .useDefaultKeys
+        )
+        return response.plan
+    }
+
     // MARK: - Homes
 
     func listHomes() async throws -> [Home] {

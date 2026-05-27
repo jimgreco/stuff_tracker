@@ -6,6 +6,7 @@ import GoogleSignIn
 struct StuffTrackerApp: App {
     @StateObject private var authStore = AuthStore()
     @StateObject private var syncManager = SyncManager.shared
+    @StateObject private var subscriptionStore = SubscriptionStore.shared
 
     init() {
         // Configure Google Sign-In with client ID from Info.plist
@@ -23,12 +24,14 @@ struct StuffTrackerApp: App {
             ContentView()
                 .environmentObject(authStore)
                 .environmentObject(syncManager)
+                .environmentObject(subscriptionStore)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }
                 .task {
                     // Sync when app launches if authenticated
                     if authStore.isAuthenticated {
+                        await subscriptionStore.refresh()
                         await syncManager.performFullSync()
                     }
                 }

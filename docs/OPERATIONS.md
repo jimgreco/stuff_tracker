@@ -69,6 +69,40 @@ The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production co
 
 The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
 
+## Subscription Operations
+
+The backend is the source of truth for account plans. Free owned homes are limited to 100 total containers plus items, 5 images, and 5 documents. Active App Store, manual, promo, or admin entitlements remove those limits. Sharing a home requires the home owner to have an active paid entitlement; invited free users can use that paid owner's home with the paid feature set while the owner remains paid.
+
+Configure App Store Connect with these auto-renewable subscription product IDs unless `APP_STORE_SUBSCRIPTION_PRODUCT_IDS` is changed:
+
+```sh
+com.jimgreco.stufftracker.pro.monthly
+com.jimgreco.stufftracker.pro.yearly
+```
+
+Point App Store Server Notifications V2 at the production backend:
+
+```text
+POST https://<backend-origin>/app-store/notifications
+```
+
+Production and sandbox App Store signed payload verification requires Apple root certificates on the backend host. Set either `APP_STORE_ROOT_CERTIFICATE_PATHS` to comma-separated certificate files or `APP_STORE_ROOT_CERTIFICATES_DIR` to a directory containing `.cer`, `.der`, or `.pem` files. Production also requires `APP_STORE_APP_APPLE_ID`. Keep `APP_STORE_BUNDLE_ID` aligned with the shipped iOS bundle identifier.
+
+In the production `../deploy` Compose stack, these are supplied to the Stuff container from `~/deploy/.env` as `STUFF_APP_STORE_APP_APPLE_ID` and `STUFF_ADMIN_API_TOKEN`. The product IDs and bundle ID have safe defaults in `docker-compose.yml`, and Apple root certificates are mounted from `~/deploy/apple-pki`.
+
+The iOS app sends verified StoreKit transactions to `POST /account/app-store/transactions`, using the authenticated user ID as the StoreKit app account token. On renewals, refunds, and revocations, App Store Server Notifications update the same entitlement row by original transaction ID.
+
+Web does not sell subscriptions. To enable an account from web or support without App Store purchase, set `ADMIN_API_TOKEN` and call:
+
+```sh
+curl -X POST "$API_ORIGIN/admin/entitlements" \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","source":"manual"}'
+```
+
+Use `source` values `manual`, `promo`, or `admin`. Add an ISO `expires_at` value for time-limited grants.
+
 ## Production Health Monitoring
 
 The `Production Health` GitHub Actions workflow checks `/health/live` and `/health` on an hourly schedule. Set the `PRODUCTION_BASE_URL` repository secret to the public backend origin, with no trailing slash, to enable the check.

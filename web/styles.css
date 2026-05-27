@@ -1175,6 +1175,13 @@ button:disabled {
   font-weight: 500;
 }
 
+.form-row > strong {
+  min-width: 0;
+  color: var(--secondary);
+  font-weight: 600;
+  text-align: right;
+}
+
 .form-row input,
 .form-row textarea,
 .form-row select,

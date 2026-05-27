@@ -1,11 +1,13 @@
 import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
+import StoreKit
 
 struct AccountView: View {
     @ObservedObject var homeStore: HomeStore
     @EnvironmentObject var authStore: AuthStore
     @EnvironmentObject var syncManager: SyncManager
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @Environment(\.dismiss) private var dismiss
     @State private var showMergeSheet = false
     @State private var serverHasData = false
@@ -17,6 +19,14 @@ struct AccountView: View {
     private var appBuildText: String {
         AccountBuildInfoPresentation.text(info: Bundle.main.infoDictionary)
     }
+
+    private static let fractionalISODateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoDateFormatter = ISO8601DateFormatter()
 
     var body: some View {
         NavigationStack {
@@ -37,7 +47,7 @@ struct AccountView: View {
                 }
             }
             .overlay {
-                if authStore.isLoading || syncManager.isSyncing {
+                if authStore.isLoading || syncManager.isSyncing || subscriptionStore.isLoading {
                     ProgressView()
                         .scaleEffect(1.5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,6 +64,11 @@ struct AccountView: View {
                     }
                 )
                 .environmentObject(syncManager)
+            }
+            .task(id: authStore.isAuthenticated) {
+                if authStore.isAuthenticated {
+                    await subscriptionStore.refresh()
+                }
             }
         }
     }
@@ -105,6 +120,8 @@ struct AccountView: View {
                 .padding(.vertical, 8)
             }
         }
+
+        subscriptionSection
 
         Section("Sync") {
             HStack {
@@ -168,6 +185,14 @@ struct AccountView: View {
             .disabled(syncManager.isSyncing)
         }
 
+        if let error = subscriptionStore.errorMessage {
+            Section("Subscription Error") {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+
         Section("Sharing") {
             if ownedHomes.isEmpty {
                 Text("No homes to share")
@@ -215,6 +240,107 @@ struct AccountView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        Section("Subscription") {
+            if let plan = subscriptionStore.plan {
+                HStack {
+                    Text("Plan")
+                    Spacer()
+                    Label(plan.isPaid ? "Paid" : "Free", systemImage: plan.isPaid ? "checkmark.seal.fill" : "circle")
+                        .foregroundStyle(plan.isPaid ? .green : .secondary)
+                }
+
+                if !plan.isPaid {
+                    quotaRow(
+                        title: "Containers + Items",
+                        used: plan.usage.totalContainersAndItems,
+                        limit: plan.limits.totalContainersAndItems
+                    )
+                    quotaRow(title: "Images", used: plan.usage.images, limit: plan.limits.images)
+                    quotaRow(title: "Documents", used: plan.usage.documents, limit: plan.limits.documents)
+
+                    if subscriptionStore.products.isEmpty {
+                        Text("Subscription products are not available.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(subscriptionStore.products, id: \.id) { product in
+                            Button {
+                                guard let userId = authStore.currentUser?.id else { return }
+                                Task { await subscriptionStore.purchase(product, userId: userId) }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(product.displayName)
+                                            .foregroundStyle(.primary)
+                                        if !product.description.isEmpty {
+                                            Text(product.description)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text(product.displayPrice)
+                                        .font(.body.weight(.semibold))
+                                }
+                            }
+                            .disabled(subscriptionStore.isLoading)
+                        }
+                    }
+                } else if let entitlement = plan.entitlement {
+                    if let expiresAt = entitlement.expiresAt.flatMap(dateFromISOString) {
+                        HStack {
+                            Text("Renews")
+                            Spacer()
+                            Text(expiresAt, style: .date)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if entitlement.source != "app_store" {
+                        HStack {
+                            Text("Source")
+                            Spacer()
+                            Text(entitlement.source.capitalized)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Button {
+                    Task { await subscriptionStore.restorePurchases() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("Restore Purchases")
+                        Spacer()
+                    }
+                }
+                .disabled(subscriptionStore.isLoading)
+            } else {
+                HStack {
+                    ProgressView()
+                    Text("Loading...")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func quotaRow(title: String, used: Int, limit: Int) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text("\(used)/\(limit)")
+                .foregroundStyle(used >= limit ? .orange : .secondary)
+        }
+    }
+
+    private func dateFromISOString(_ value: String) -> Date? {
+        Self.fractionalISODateFormatter.date(from: value) ?? Self.isoDateFormatter.date(from: value)
     }
 
     // MARK: - Unauthenticated

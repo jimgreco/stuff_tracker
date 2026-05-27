@@ -13,6 +13,12 @@ import {
 } from '../lib/s3';
 import { signItemAttachmentUrls, signItemsAttachmentUrls } from '../lib/attachmentResponses';
 import { uploadRateLimit } from '../lib/rateLimits';
+import {
+  canCreateItem,
+  canUpdateItemAttachments,
+  canUploadAttachment,
+  type QuotaDecision,
+} from '../lib/entitlements';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -28,6 +34,8 @@ router.post('/uploads', uploadRateLimit, async (req: AuthRequest, res: Response)
     res.status(400).json({ error: 'Photo uploads must use an image content type' });
     return;
   }
+  const quota = await canUploadAttachment(homeId, kind);
+  if (quota) { sendQuota(res, quota); return; }
   if (size_bytes !== undefined && size_bytes > maxUploadBytes(kind)) {
     res.status(413).json({ error: `${kind} upload exceeds the configured size limit` });
     return;
@@ -86,6 +94,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
   }
+  const quota = await canCreateItem(homeId, photo_urls?.length ?? 0, documents?.length ?? 0);
+  if (quota) { sendQuota(res, quota); return; }
   if (!await validateAttachmentsOrRespond(res, { photoUrls: photo_urls, documents })) {
     return;
   }
@@ -164,6 +174,19 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     }
   }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
+  const existingItem = await pool.query(
+    'SELECT photo_urls, documents FROM items WHERE id = $1 AND home_id = $2',
+    [itemId, homeId]
+  );
+  if (!existingItem.rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }
+  const quota = await canUpdateItemAttachments(
+    homeId,
+    attachmentCount(existingItem.rows[0].photo_urls),
+    updates.photo_urls?.length,
+    attachmentCount(existingItem.rows[0].documents),
+    updates.documents?.length
+  );
+  if (quota) { sendQuota(res, quota); return; }
   if (!await validateAttachmentsOrRespond(res, {
     photoUrls: updates.photo_urls,
     documents: updates.documents,
@@ -236,4 +259,12 @@ async function validateAttachmentsOrRespond(
     }
     throw err;
   }
+}
+
+function sendQuota(res: Response, quota: QuotaDecision): void {
+  res.status(quota.status).json({ error: quota.error, code: quota.code, plan: quota.plan });
+}
+
+function attachmentCount(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
 }

@@ -4,6 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canAdmin } from '../lib/access';
 import { HomeSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
 import { signItemsAttachmentUrls } from '../lib/attachmentResponses';
+import { canShareHome, type QuotaDecision } from '../lib/entitlements';
 
 const router = Router();
 router.use(requireAuth);
@@ -16,7 +17,18 @@ router.get('/', async (req: AuthRequest, res: Response) => {
             CASE WHEN h.owner_id = $1 THEN 'owner' ELSE hm.role END AS role
      FROM homes h
      LEFT JOIN home_members hm ON hm.home_id = h.id AND hm.user_id = $1
-     WHERE h.owner_id = $1 OR hm.user_id = $1
+     WHERE h.owner_id = $1
+        OR (
+          hm.user_id = $1
+          AND EXISTS (
+            SELECT 1
+            FROM user_entitlements ue
+            WHERE ue.user_id = h.owner_id
+              AND ue.status = 'active'
+              AND ue.revoked_at IS NULL
+              AND (ue.expires_at IS NULL OR ue.expires_at > NOW())
+          )
+        )
      ORDER BY h.name`,
     [userId]
   );
@@ -109,6 +121,8 @@ router.post('/:homeId/members', async (req: AuthRequest, res: Response) => {
   const { homeId } = req.params;
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
+  const quota = await canShareHome(homeId);
+  if (quota) { sendQuota(res, quota); return; }
 
   const { email, role: newRole } = InviteSchema.parse(req.body);
   const userRes = await pool.query(
@@ -139,6 +153,8 @@ router.patch('/:homeId/members/:userId', async (req: AuthRequest, res: Response)
   const { homeId, userId } = req.params;
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
+  const quota = await canShareHome(homeId);
+  if (quota) { sendQuota(res, quota); return; }
 
   const { role: newRole } = UpdateMemberRoleSchema.parse(req.body);
   await pool.query(
@@ -163,3 +179,7 @@ router.delete('/:homeId/members/:userId', async (req: AuthRequest, res: Response
 });
 
 export default router;
+
+function sendQuota(res: Response, quota: QuotaDecision): void {
+  res.status(quota.status).json({ error: quota.error, code: quota.code, plan: quota.plan });
+}
