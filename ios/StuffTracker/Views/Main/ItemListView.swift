@@ -287,6 +287,13 @@ struct ItemChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            if item.isFlagged {
+                Image(systemName: "flag.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("Flagged")
+            }
+
             Image(systemName: item.icon ?? "circle.fill")
                 .font(.caption2)
                 .foregroundStyle(item.icon != nil ? .primary : Color.accentColor.opacity(0.28))
@@ -294,13 +301,6 @@ struct ItemChip: View {
             Text(item.name)
                 .font(.subheadline)
                 .lineLimit(1)
-
-            if item.isFlagged {
-                Image(systemName: "flag.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.orange)
-                    .accessibilityLabel("Flagged")
-            }
 
             if item.quantity > 1 {
                 Text("\u{00d7}\(item.quantity)")
