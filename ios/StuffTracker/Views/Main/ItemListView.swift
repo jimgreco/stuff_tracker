@@ -14,6 +14,19 @@ extension UTType {
 struct DraggedItem: Transferable, Codable {
     let id: String
     let name: String
+    let homeId: String?
+    let itemIds: [String]
+
+    init(id: String, name: String, homeId: String? = nil, itemIds: [String]? = nil) {
+        self.id = id
+        self.name = name
+        self.homeId = homeId
+
+        let rawIds = itemIds ?? [id]
+        var seen = Set<String>()
+        let uniqueIds = rawIds.filter { seen.insert($0).inserted }
+        self.itemIds = uniqueIds.isEmpty ? [id] : uniqueIds
+    }
 
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .draggedItem)
@@ -38,6 +51,72 @@ struct DraggedHome: Transferable, Codable {
     }
 }
 
+@MainActor
+final class ItemSelectionController: ObservableObject {
+    @Published private(set) var isSelecting = false
+    @Published private(set) var selectedItemIds: [String] = []
+    @Published private(set) var selectedHomeId: String?
+
+    var selectedCount: Int {
+        selectedItemIds.count
+    }
+
+    func startSelecting() {
+        isSelecting = true
+        selectedItemIds = []
+        selectedHomeId = nil
+    }
+
+    func clearSelection() {
+        isSelecting = false
+        selectedItemIds = []
+        selectedHomeId = nil
+    }
+
+    func toggle(itemId: String, homeId: String) {
+        guard isSelecting else { return }
+
+        if selectedItemIds.contains(itemId) {
+            selectedItemIds.removeAll { $0 == itemId }
+            if selectedItemIds.isEmpty {
+                selectedHomeId = nil
+            }
+            return
+        }
+
+        if let selectedHomeId, selectedHomeId != homeId {
+            selectedItemIds = [itemId]
+            self.selectedHomeId = homeId
+            return
+        }
+
+        selectedHomeId = homeId
+        selectedItemIds.append(itemId)
+    }
+
+    func isSelected(_ itemId: String) -> Bool {
+        isSelecting && selectedItemIds.contains(itemId)
+    }
+
+    func dragItemIds(for itemId: String, homeId: String) -> [String] {
+        guard isSelecting,
+              selectedHomeId == homeId,
+              selectedItemIds.contains(itemId),
+              !selectedItemIds.isEmpty else {
+            return [itemId]
+        }
+
+        return selectedItemIds
+    }
+
+    func prune(validItemIds: Set<String>) {
+        selectedItemIds = selectedItemIds.filter { validItemIds.contains($0) }
+        if selectedItemIds.isEmpty {
+            selectedHomeId = nil
+        }
+    }
+}
+
 // MARK: - Flowing item chips
 
 struct ItemChipsView: View {
@@ -46,6 +125,7 @@ struct ItemChipsView: View {
     var homeId: String = ""
     let locationId: String?
     var onAddItem: (() -> Void)? = nil
+    @EnvironmentObject private var itemSelection: ItemSelectionController
 
     var body: some View {
         FlowLayout(spacing: 6) {
@@ -75,27 +155,33 @@ struct ItemChipsView: View {
 
     private func dropItem(_ dragged: DraggedItem, at insertionIndex: Int) -> Bool {
         guard !homeId.isEmpty else { return false }
+        guard dragged.homeId == nil || dragged.homeId == homeId else { return false }
 
-        let destination = adjustedDestination(for: dragged, insertionIndex: insertionIndex)
+        let movingIds = dragged.itemIds
+        let destination = adjustedDestination(for: movingIds, insertionIndex: insertionIndex)
 
         withAnimation(.easeInOut(duration: 0.18)) {
-            if items.contains(where: { $0.id == dragged.id }) {
-                homeStore.reorderItem(homeId: homeId, itemId: dragged.id, toIndex: destination)
+            if movingIds.count == 1,
+               let itemId = movingIds.first,
+               items.contains(where: { $0.id == itemId }) {
+                homeStore.reorderItem(homeId: homeId, itemId: itemId, toIndex: destination)
             } else {
-                homeStore.moveItem(homeId: homeId, itemId: dragged.id, toLocation: locationId)
-                homeStore.reorderItem(homeId: homeId, itemId: dragged.id, toIndex: insertionIndex)
+                homeStore.moveItems(homeId: homeId, itemIds: movingIds, toLocation: locationId, atIndex: destination)
             }
         }
+        itemSelection.clearSelection()
 
         return true
     }
 
-    private func adjustedDestination(for dragged: DraggedItem, insertionIndex: Int) -> Int {
-        guard let sourceIndex = items.firstIndex(where: { $0.id == dragged.id }) else {
-            return insertionIndex
-        }
+    private func adjustedDestination(for movingIds: [String], insertionIndex: Int) -> Int {
+        let movingSet = Set(movingIds)
+        let movedBeforeDestination = items
+            .prefix(insertionIndex)
+            .filter { movingSet.contains($0.id) }
+            .count
 
-        return sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex
+        return insertionIndex - movedBeforeDestination
     }
 }
 
@@ -279,10 +365,15 @@ struct ItemChip: View {
     @ObservedObject var homeStore: HomeStore
     var homeId: String = ""
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var showEdit = false
 
     private var showUnsyncedOutline: Bool {
         authStore.isAuthenticated && item.needsSync
+    }
+
+    private var isSelected: Bool {
+        itemSelection.isSelected(item.id)
     }
 
     var body: some View {
@@ -307,13 +398,33 @@ struct ItemChip: View {
                     .font(.caption2.bold())
                     .foregroundStyle(.secondary)
             }
+
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("Selected")
+            }
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
-        .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline)
+        .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline, isSelected: isSelected)
         .contentShape(Rectangle())
-        .onTapGesture { showEdit = true }
-        .draggable(DraggedItem(id: item.id, name: item.name))
+        .onTapGesture {
+            if itemSelection.isSelecting {
+                itemSelection.toggle(itemId: item.id, homeId: homeId)
+            } else {
+                showEdit = true
+            }
+        }
+        .draggable(
+            DraggedItem(
+                id: item.id,
+                name: item.name,
+                homeId: homeId,
+                itemIds: itemSelection.dragItemIds(for: item.id, homeId: homeId)
+            )
+        )
         .sheet(isPresented: $showEdit) {
             ItemEditView(item: item, homeStore: homeStore, homeId: homeId)
         }
@@ -322,13 +433,24 @@ struct ItemChip: View {
 
 private struct ItemChipSurfaceModifier: ViewModifier {
     let showUnsyncedOutline: Bool
+    let isSelected: Bool
 
     private var strokeStyle: StrokeStyle {
-        showUnsyncedOutline ? StrokeStyle(lineWidth: 1.5, dash: [4, 3]) : StrokeStyle(lineWidth: 0.5)
+        showUnsyncedOutline && !isSelected ? StrokeStyle(lineWidth: 1.5, dash: [4, 3]) : StrokeStyle(lineWidth: isSelected ? 1.25 : 0.5)
     }
 
     private var strokeColor: Color {
-        showUnsyncedOutline ? .orange : Color(.separator).opacity(0.18)
+        if isSelected {
+            return Color.accentColor
+        }
+        return showUnsyncedOutline ? .orange : Color(.separator).opacity(0.18)
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color.accentColor.opacity(0.16)
+        }
+        return Color(.systemBackground).opacity(0.72)
     }
 
     func body(content: Content) -> some View {
@@ -336,18 +458,18 @@ private struct ItemChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(Color(.systemBackground).opacity(0.52), in: shape)
+                .background(isSelected ? Color.accentColor.opacity(0.14) : Color(.systemBackground).opacity(0.52), in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         } else {
             content
-                .background(Color(.systemBackground).opacity(0.72), in: shape)
+                .background(backgroundColor, in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         }
     }
 }
 
 private extension View {
-    func itemChipSurface(showUnsyncedOutline: Bool) -> some View {
-        modifier(ItemChipSurfaceModifier(showUnsyncedOutline: showUnsyncedOutline))
+    func itemChipSurface(showUnsyncedOutline: Bool, isSelected: Bool) -> some View {
+        modifier(ItemChipSurfaceModifier(showUnsyncedOutline: showUnsyncedOutline, isSelected: isSelected))
     }
 }

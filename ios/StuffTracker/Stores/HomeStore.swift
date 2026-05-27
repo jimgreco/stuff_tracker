@@ -335,21 +335,57 @@ final class HomeStore: ObservableObject {
     }
 
     func moveItem(homeId: String, itemId: String, toLocation locationId: String?) {
-        guard let hIdx = detailIndex(for: homeId),
-              let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == itemId }) else { return }
+        moveItems(homeId: homeId, itemIds: [itemId], toLocation: locationId)
+    }
 
-        // Append at end of target location
-        let maxSort = homeDetails[hIdx].items
-            .filter { $0.locationId == locationId }
-            .map(\.sortOrder).max() ?? -1
+    func moveItems(homeId: String, itemIds: [String], toLocation locationId: String?, atIndex destination: Int? = nil) {
+        guard let hIdx = detailIndex(for: homeId) else { return }
 
-        homeDetails[hIdx].items[iIdx].locationId = locationId
-        homeDetails[hIdx].items[iIdx].sortOrder = maxSort + 1
+        var seen = Set<String>()
+        let uniqueIds = itemIds.filter { seen.insert($0).inserted }
+        guard !uniqueIds.isEmpty else { return }
 
-        if let localItem = local.fetchItem(id: itemId) {
-            localItem.locationId = locationId
-            localItem.sortOrder = maxSort + 1
-            local.updateItem(localItem)
+        let movingSet = Set(uniqueIds)
+        let movingItems = uniqueIds.compactMap { itemId in
+            homeDetails[hIdx].items.first(where: { $0.id == itemId })
+        }
+        guard !movingItems.isEmpty else { return }
+
+        var siblings = homeDetails[hIdx].items
+            .filter { $0.locationId == locationId && !movingSet.contains($0.id) }
+            .sorted { $0.sortOrder < $1.sortOrder }
+
+        let insertionIndex = destination.map { min(max($0, 0), siblings.count) } ?? siblings.count
+        siblings.insert(contentsOf: movingItems, at: insertionIndex)
+
+        for (sortOrder, item) in siblings.enumerated() {
+            if let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == item.id }) {
+                homeDetails[hIdx].items[iIdx].locationId = locationId
+                homeDetails[hIdx].items[iIdx].sortOrder = sortOrder
+            }
+            if let localItem = local.fetchItem(id: item.id) {
+                localItem.locationId = locationId
+                localItem.sortOrder = sortOrder
+                local.updateItem(localItem)
+            }
+        }
+
+        enqueueSyncIfNeeded()
+    }
+
+    func deleteItems(homeId: String, itemIds: [String]) {
+        var seen = Set<String>()
+        let uniqueIds = itemIds.filter { seen.insert($0).inserted }
+        guard !uniqueIds.isEmpty else { return }
+
+        for itemId in uniqueIds {
+            if let localItem = local.fetchItem(id: itemId) {
+                local.deleteItem(localItem)
+            }
+        }
+        if let idx = detailIndex(for: homeId) {
+            let deletedSet = Set(uniqueIds)
+            homeDetails[idx].items.removeAll { deletedSet.contains($0.id) }
         }
         enqueueSyncIfNeeded()
     }
@@ -416,13 +452,7 @@ final class HomeStore: ObservableObject {
     }
 
     func deleteItem(homeId: String, itemId: String) {
-        if let localItem = local.fetchItem(id: itemId) {
-            local.deleteItem(localItem)
-        }
-        if let idx = detailIndex(for: homeId) {
-            homeDetails[idx].items.removeAll { $0.id == itemId }
-        }
-        enqueueSyncIfNeeded()
+        deleteItems(homeId: homeId, itemIds: [itemId])
     }
 
     // MARK: - Trash bin

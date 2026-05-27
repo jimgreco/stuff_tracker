@@ -18,6 +18,7 @@ struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
     @StateObject private var homeStore = HomeStore()
     @StateObject private var collapseStore = HierarchyCollapseStore()
+    @StateObject private var itemSelection = ItemSelectionController()
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
     @State private var isAddingHome = false
@@ -133,6 +134,22 @@ struct ContentView: View {
             .navigationTitle("Stuff Tracker")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if itemSelection.isSelecting {
+                        Button {
+                            itemSelection.clearSelection()
+                        } label: {
+                            Text("Done")
+                        }
+                    } else {
+                        Button {
+                            dismissSearchInput()
+                            itemSelection.startSelecting()
+                        } label: {
+                            Text("Select")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         if isSearchFocused {
@@ -172,8 +189,10 @@ struct ContentView: View {
             .task { await homeStore.loadHomes() }
             .onReceive(homeStore.$homeDetails) { homes in
                 collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
+                itemSelection.prune(validItemIds: Set(homes.flatMap(\.items).map(\.id)))
             }
         }
+        .environmentObject(itemSelection)
     }
 
     private func dismissSearchInput() {
@@ -617,6 +636,7 @@ struct EmptyHomePrompt: View {
 
 struct DragTrashZone: View {
     @ObservedObject var homeStore: HomeStore
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var itemTargeted = false
     @State private var locationTargeted = false
     @State private var homeTargeted = false
@@ -652,9 +672,14 @@ struct DragTrashZone: View {
         .animation(.easeInOut(duration: 0.18), value: isTargeted)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            for home in homeStore.homeDetails where home.items.contains(where: { $0.id == dragged.id }) {
+            for home in homeStore.homeDetails {
+                let itemIds = dragged.itemIds.filter { itemId in
+                    home.items.contains(where: { $0.id == itemId })
+                }
+                guard !itemIds.isEmpty else { continue }
                 Task { @MainActor in
-                    homeStore.deleteItem(homeId: home.id, itemId: dragged.id)
+                    homeStore.deleteItems(homeId: home.id, itemIds: itemIds)
+                    itemSelection.clearSelection()
                 }
                 return true
             }

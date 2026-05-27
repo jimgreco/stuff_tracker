@@ -59,6 +59,37 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(home.items(in: nil).map(\.id), ["item-0"])
     }
 
+    func testDraggedItemPreservesUniqueGroupedIds() {
+        let dragged = DraggedItem(
+            id: "item-1",
+            name: "Keys",
+            homeId: "home-1",
+            itemIds: ["item-1", "item-2", "item-1"]
+        )
+
+        XCTAssertEqual(dragged.id, "item-1")
+        XCTAssertEqual(dragged.homeId, "home-1")
+        XCTAssertEqual(dragged.itemIds, ["item-1", "item-2"])
+    }
+
+    @MainActor
+    func testItemSelectionControllerGroupsItemsWithinOneHome() {
+        let controller = ItemSelectionController()
+
+        controller.startSelecting()
+        controller.toggle(itemId: "item-1", homeId: "home-1")
+        controller.toggle(itemId: "item-2", homeId: "home-1")
+
+        XCTAssertTrue(controller.isSelecting)
+        XCTAssertEqual(controller.selectedItemIds, ["item-1", "item-2"])
+        XCTAssertEqual(controller.dragItemIds(for: "item-1", homeId: "home-1"), ["item-1", "item-2"])
+
+        controller.toggle(itemId: "item-3", homeId: "home-2")
+
+        XCTAssertEqual(controller.selectedItemIds, ["item-3"])
+        XCTAssertEqual(controller.selectedHomeId, "home-2")
+    }
+
     func testLocalModelsConvertToApiModelsAndFilterDeletedChildren() {
         let home = LocalHome(
             id: "home-1",

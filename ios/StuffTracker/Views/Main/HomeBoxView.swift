@@ -293,6 +293,7 @@ struct HomeBoxView: View {
     @ObservedObject var homeStore: HomeStore
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var isAddingFloor = false
     @State private var isAddingRoom = false
     @State private var isAddingItem = false
@@ -490,7 +491,11 @@ struct HomeBoxView: View {
         .shadow(color: Color.black.opacity(0.045), radius: 14, y: 4)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: nil) }
+            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
+            Task { @MainActor in
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: nil)
+                itemSelection.clearSelection()
+            }
             return true
         } isTargeted: { isDropTargeted = $0 }
         .sheet(isPresented: $showIconPicker) {
@@ -520,6 +525,7 @@ struct FloorBoxView: View {
     @ObservedObject var homeStore: HomeStore
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var isAddingRoom = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -684,7 +690,11 @@ struct FloorBoxView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: floor.id) }
+            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
+            Task { @MainActor in
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: floor.id)
+                itemSelection.clearSelection()
+            }
             return true
         } isTargeted: { isDropTargeted = $0 }
         .sheet(isPresented: $showIconPicker) {
@@ -713,6 +723,7 @@ struct RoomBoxView: View {
     @ObservedObject var homeStore: HomeStore
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var isAddingContainer = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -867,7 +878,11 @@ struct RoomBoxView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: room.id) }
+            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
+            Task { @MainActor in
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: room.id)
+                itemSelection.clearSelection()
+            }
             return true
         } isTargeted: { isDropTargeted = $0 }
         .sheet(isPresented: $showIconPicker) {
@@ -896,6 +911,7 @@ struct ContainerBoxView: View {
     @ObservedObject var homeStore: HomeStore
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
+    @EnvironmentObject private var itemSelection: ItemSelectionController
     @State private var isAddingChild = false
     @State private var isAddingItem = false
     @State private var newName = ""
@@ -1038,7 +1054,11 @@ struct ContainerBoxView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(isDropTargeted ? Color.accentColor : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            Task { await homeStore.moveItem(homeId: home.id, itemId: dragged.id, toLocation: container.id) }
+            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
+            Task { @MainActor in
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: container.id)
+                itemSelection.clearSelection()
+            }
             return true
         } isTargeted: { isDropTargeted = $0 }
         .sheet(isPresented: $showIconPicker) {
