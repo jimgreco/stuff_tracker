@@ -295,6 +295,13 @@ struct ItemChip: View {
                 .font(.subheadline)
                 .lineLimit(1)
 
+            if item.isFlagged {
+                Image(systemName: "flag.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("Flagged")
+            }
+
             if item.quantity > 1 {
                 Text("\u{00d7}\(item.quantity)")
                     .font(.caption2.bold())

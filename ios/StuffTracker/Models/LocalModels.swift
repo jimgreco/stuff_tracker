@@ -151,6 +151,7 @@ final class LocalItem {
     var modelNumber: String?
     var warrantyExpiresDate: String?
     var estimatedValueCents: Int?
+    var isFlagged: Bool = false
     var sortOrder: Int = 0
     var createdBy: String?
     var needsSync: Bool
@@ -175,6 +176,7 @@ final class LocalItem {
          modelNumber: String? = nil,
          warrantyExpiresDate: String? = nil,
          estimatedValueCents: Int? = nil,
+         isFlagged: Bool = false,
          sortOrder: Int = 0,
          createdBy: String? = nil,
          needsSync: Bool = true,
@@ -194,6 +196,7 @@ final class LocalItem {
         self.modelNumber = modelNumber
         self.warrantyExpiresDate = warrantyExpiresDate
         self.estimatedValueCents = estimatedValueCents
+        self.isFlagged = isFlagged
         self.sortOrder = sortOrder
         self.createdBy = createdBy
         self.needsSync = needsSync
@@ -219,6 +222,7 @@ final class LocalItem {
             modelNumber: modelNumber,
             warrantyExpiresDate: warrantyExpiresDate,
             estimatedValueCents: estimatedValueCents,
+            isFlagged: isFlagged,
             sortOrder: sortOrder,
             createdBy: createdBy ?? "",
             needsSync: needsSync
@@ -239,6 +243,7 @@ final class LocalItem {
         self.modelNumber = item.modelNumber
         self.warrantyExpiresDate = item.warrantyExpiresDate
         self.estimatedValueCents = item.estimatedValueCents
+        self.isFlagged = item.isFlagged
         self.sortOrder = item.sortOrder
         self.needsSync = false
         self.updatedAt = Date()

@@ -571,9 +571,17 @@ button:disabled {
   object-fit: cover;
 }
 
+.search-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
 .search-wrap {
   position: relative;
-  margin-top: 8px;
+  min-width: 0;
 }
 
 .search-wrap .svg-icon {
@@ -604,6 +612,33 @@ button:disabled {
 .search-input:focus {
   border-color: rgba(10, 132, 255, 0.32);
   background: var(--surface);
+}
+
+.flag-filter {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0.75px solid rgba(255, 159, 10, 0.34);
+  border-radius: 10px;
+  background: rgba(118, 118, 128, 0.12);
+  color: var(--warning);
+}
+
+.flag-filter.is-active {
+  border-color: transparent;
+  background: var(--warning);
+  color: #ffffff;
+}
+
+.flag-filter .svg-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.flag-filter .svg-icon,
+.item-flag .svg-icon {
+  fill: currentColor;
 }
 
 .breadcrumb {
@@ -863,6 +898,20 @@ button:disabled {
   color: var(--secondary);
   font-size: 11px;
   font-weight: 700;
+}
+
+.item-flag {
+  display: inline-grid;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--warning);
+}
+
+.item-flag .svg-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .add-chip {
@@ -1193,6 +1242,13 @@ button:disabled {
   background: transparent;
   color: var(--text);
   text-align: right;
+}
+
+.form-row input[type="checkbox"] {
+  justify-self: end;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--warning);
 }
 
 .form-row textarea {

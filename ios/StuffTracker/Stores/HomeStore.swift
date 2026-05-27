@@ -322,6 +322,7 @@ final class HomeStore: ObservableObject {
             localItem.modelNumber = body.modelNumber
             localItem.warrantyExpiresDate = body.warrantyExpiresDate
             localItem.estimatedValueCents = body.estimatedValueCents
+            localItem.isFlagged = body.isFlagged ?? localItem.isFlagged
             local.updateItem(localItem)
 
             // Update in-memory

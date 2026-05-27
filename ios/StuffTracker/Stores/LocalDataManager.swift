@@ -514,6 +514,7 @@ final class LocalDataManager {
                     modelNumber: item.modelNumber,
                     warrantyExpiresDate: item.warrantyExpiresDate,
                     estimatedValueCents: item.estimatedValueCents,
+                    isFlagged: item.isFlagged,
                     createdBy: item.createdBy,
                     needsSync: false
                 )

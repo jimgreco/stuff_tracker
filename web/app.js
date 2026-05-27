@@ -22,6 +22,7 @@
     homes: STORED_TOKEN ? readJson(STORAGE.homes, []) : [],
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
+    flaggedOnly: false,
     isLoading: false,
     toast: "",
     toastTimer: null,
@@ -63,6 +64,7 @@
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 15h10l1-15"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>',
     star: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.9-5.4 2.9 1-6-4.4-4.3 6.1-.9z"/>',
+    flag: '<path d="M5 21V4"/><path d="M5 4h11l-1.5 4L16 12H5"/>',
     sort: '<path d="M7 7h10"/><path d="M7 12h7"/><path d="M7 17h4"/>',
     cloud: '<path d="M17.5 18H8a5 5 0 1 1 1.8-9.7A6 6 0 0 1 21 11a4 4 0 0 1-3.5 7z"/>',
     refresh: '<path d="M20 12a8 8 0 0 1-13.7 5.6"/><path d="M4 12A8 8 0 0 1 17.7 6.4"/><path d="M4 18v-5h5"/><path d="M20 6v5h-5"/>',
@@ -240,6 +242,7 @@
     if (value.includes("person")) return "person";
     if (value.includes("trash")) return "trash";
     if (value.includes("star")) return "star";
+    if (value.includes("flag")) return "flag";
     return value in ICON_PATHS ? value : "circle";
   }
 
@@ -302,7 +305,7 @@
     }
 
     const homes = filteredHomes();
-    const isSearching = state.search.trim().length > 0;
+    const isFiltering = state.search.trim().length > 0 || state.flaggedOnly;
     return `
       <div class="mobile-shell">
         <header class="top-bar">
@@ -313,9 +316,14 @@
               ${renderAvatar()}
             </button>
           </div>
-          <div class="search-wrap">
-            ${svgIcon("search")}
-            <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Search stuff..." value="${escapeAttr(state.search)}">
+          <div class="search-controls">
+            <div class="search-wrap">
+              ${svgIcon("search")}
+              <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Search stuff..." value="${escapeAttr(state.search)}">
+            </div>
+            <button type="button" class="flag-filter ${state.flaggedOnly ? "is-active" : ""}" data-action="toggle-flag-filter" aria-pressed="${state.flaggedOnly ? "true" : "false"}" aria-label="${state.flaggedOnly ? "Showing flagged items" : "Show flagged items"}">
+              ${svgIcon(state.flaggedOnly ? "flag.fill" : "flag")}
+            </button>
           </div>
         </header>
         <div id="breadcrumb" class="breadcrumb is-hidden" aria-hidden="true"></div>
@@ -325,12 +333,12 @@
             state.isLoading
               ? renderLoading()
               : homes.length
-                ? `<div class="home-list">${homes.map((home) => renderHome(home, isSearching)).join("")}</div>`
-                : isSearching
+                ? `<div class="home-list">${homes.map((home) => renderHome(home, isFiltering)).join("")}</div>`
+                : isFiltering
                   ? renderNoResults()
                   : renderEmptyState()
           }
-          ${!state.isLoading && !isSearching ? renderAddHomeArea() : ""}
+          ${!state.isLoading && !isFiltering ? renderAddHomeArea() : ""}
         </main>
         ${renderSheet()}
         ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
@@ -520,12 +528,20 @@
   }
 
   function renderNoResults() {
+    const query = state.search.trim();
+    const icon = state.flaggedOnly ? "flag" : "search";
+    const title = state.flaggedOnly ? "No flagged items" : "No results";
+    const copy = state.flaggedOnly && query
+      ? "No flagged items match this search."
+      : state.flaggedOnly
+        ? "Flag items to keep them close at hand."
+        : "Try another item, room, property, or note.";
     return `
       <div class="no-results">
         <div class="empty-panel">
-          ${svgIcon("search")}
-          <h2>No results</h2>
-          <p>Try another item, room, property, or note.</p>
+          ${svgIcon(icon)}
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(copy)}</p>
         </div>
       </div>
     `;
@@ -658,6 +674,7 @@
       <button type="button" class="item-chip" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
         ${svgIcon(item.icon || "circle.fill")}
         <span class="item-name">${escapeHtml(item.name)}</span>
+        ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
         ${item.quantity > 1 ? `<span class="quantity">x${escapeHtml(item.quantity)}</span>` : ""}
       </button>
     `;
@@ -932,6 +949,10 @@
               <input name="quantity" type="number" min="1" max="9999" inputmode="numeric" value="${escapeAttr(draft.quantity || 1)}">
             </label>
             <label class="form-row">
+              <span>Flagged</span>
+              <input name="isFlagged" type="checkbox" ${draft.isFlagged ? "checked" : ""}>
+            </label>
+            <label class="form-row">
               <span>Purchase Date</span>
               <input name="purchaseDate" type="date" value="${escapeAttr(draft.purchaseDate || "")}">
             </label>
@@ -1054,11 +1075,16 @@
 
   function filteredHomes() {
     const query = state.search.trim().toLowerCase();
-    if (!query) return state.homes;
+    const hasQuery = query.length > 0;
+    if (!hasQuery && !state.flaggedOnly) return state.homes;
 
     return state.homes.map((home) => {
-      const homeMatches = home.name.toLowerCase().includes(query);
-      const directMatchIds = new Set(home.locations.filter((loc) => loc.name.toLowerCase().includes(query)).map((loc) => loc.id));
+      const homeMatches = hasQuery && home.name.toLowerCase().includes(query);
+      const directMatchIds = new Set(
+        home.locations
+          .filter((loc) => hasQuery && loc.name.toLowerCase().includes(query))
+          .map((loc) => loc.id)
+      );
       const matchingLocationIds = new Set(directMatchIds);
       let toExpand = new Set(directMatchIds);
       while (toExpand.size) {
@@ -1068,6 +1094,7 @@
       }
 
       const matchingItems = home.items.filter((item) => {
+        if (!hasQuery) return true;
         const propertyText = item.properties.map((property) => `${property.key} ${property.value}`).join(" ");
         return [
           item.name,
@@ -1078,13 +1105,25 @@
         ].join(" ").toLowerCase().includes(query);
       });
 
-      if (!homeMatches && directMatchIds.size === 0 && matchingItems.length === 0) {
+      const visibleItems = home.items.filter((item) => {
+        if (state.flaggedOnly && !item.isFlagged) return false;
+        if (!hasQuery) return true;
+        if (homeMatches) return true;
+        if (matchingItems.some((match) => match.id === item.id)) return true;
+        return item.locationId ? matchingLocationIds.has(item.locationId) : false;
+      });
+
+      if (state.flaggedOnly && visibleItems.length === 0) {
         return null;
       }
-      if (homeMatches) return home;
+      if (homeMatches && !state.flaggedOnly) return home;
 
-      const neededLocationIds = new Set(matchingLocationIds);
-      matchingItems.forEach((item) => {
+      if (!homeMatches && directMatchIds.size === 0 && visibleItems.length === 0) {
+        return null;
+      }
+
+      const neededLocationIds = state.flaggedOnly ? new Set() : new Set(matchingLocationIds);
+      visibleItems.forEach((item) => {
         if (item.locationId) neededLocationIds.add(item.locationId);
       });
 
@@ -1100,10 +1139,7 @@
       return {
         ...home,
         locations: home.locations.filter((loc) => neededLocationIds.has(loc.id)),
-        items: home.items.filter((item) => {
-          if (matchingItems.some((match) => match.id === item.id)) return true;
-          return item.locationId ? matchingLocationIds.has(item.locationId) : false;
-        }),
+        items: visibleItems,
       };
     }).filter(Boolean);
   }
@@ -1366,6 +1402,7 @@
       modelNumber: raw.modelNumber ?? raw.model_number ?? null,
       warrantyExpiresDate: raw.warrantyExpiresDate ?? raw.warranty_expires_date ?? null,
       estimatedValueCents: raw.estimatedValueCents ?? raw.estimated_value_cents ?? null,
+      isFlagged: raw.isFlagged ?? raw.is_flagged ?? false,
       sortOrder: raw.sortOrder ?? raw.sort_order ?? 0,
       createdBy: raw.createdBy ?? raw.created_by ?? "",
     };
@@ -1397,6 +1434,7 @@
       model_number: item.modelNumber || null,
       warranty_expires_date: item.warrantyExpiresDate || null,
       estimated_value_cents: Number.isInteger(item.estimatedValueCents) ? item.estimatedValueCents : null,
+      is_flagged: Boolean(item.isFlagged),
     };
   }
 
@@ -1452,6 +1490,7 @@
       modelNumber: null,
       warrantyExpiresDate: null,
       estimatedValueCents: null,
+      isFlagged: false,
       sortOrder,
       createdBy: state.user?.id || "local",
     };
@@ -1561,6 +1600,7 @@
       modelNumber: form.elements.modelNumber.value.trim() || null,
       warrantyExpiresDate: form.elements.warrantyExpiresDate.value || null,
       estimatedValueCents: centsFromDollars(form.elements.estimatedValue.value),
+      isFlagged: Boolean(form.elements.isFlagged.checked),
       sortOrder: formItem?.sortOrder || 0,
     };
   }
@@ -1619,6 +1659,11 @@
       if (state.collapsed.has(key)) state.collapsed.delete(key);
       else state.collapsed.add(key);
       persistCollapsed();
+      render();
+      return;
+    }
+    if (action === "toggle-flag-filter") {
+      state.flaggedOnly = !state.flaggedOnly;
       render();
       return;
     }

@@ -510,11 +510,12 @@ final class APIClient {
         let modelNumber: String?
         let warrantyExpiresDate: String?
         let estimatedValueCents: Int?
+        let isFlagged: Bool?
 
         enum CodingKeys: String, CodingKey {
             case name, locationId, icon, notes, quantity, properties, photoUrls
             case documents, purchaseDate, serialNumber, modelNumber, warrantyExpiresDate
-            case estimatedValueCents
+            case estimatedValueCents, isFlagged
         }
 
         func encode(to encoder: Encoder) throws {
@@ -532,6 +533,7 @@ final class APIClient {
             try container.encodeIfPresent(modelNumber, forKey: .modelNumber)
             try container.encodeIfPresent(warrantyExpiresDate, forKey: .warrantyExpiresDate)
             try container.encodeIfPresent(estimatedValueCents, forKey: .estimatedValueCents)
+            try container.encodeIfPresent(isFlagged, forKey: .isFlagged)
         }
     }
 

@@ -467,7 +467,8 @@ final class SyncManager: ObservableObject {
             serialNumber: item.serialNumber,
             modelNumber: item.modelNumber,
             warrantyExpiresDate: item.warrantyExpiresDate,
-            estimatedValueCents: item.estimatedValueCents
+            estimatedValueCents: item.estimatedValueCents,
+            isFlagged: item.isFlagged
         )
     }
 

@@ -97,6 +97,7 @@ test('item schema rejects invalid quantities and urls', () => {
     model_number: 'MX-1',
     warranty_expires_date: '2027-05-24',
     estimated_value_cents: 12999,
+    is_flagged: false,
   });
   assert.equal(parsed.quantity, 1);
   assert.equal(parsed.icon, 'key.fill');
@@ -104,6 +105,7 @@ test('item schema rejects invalid quantities and urls', () => {
   assert.equal(parsed.model_number, 'MX-1');
   assert.equal(parsed.warranty_expires_date, '2027-05-24');
   assert.equal(parsed.estimated_value_cents, 12999);
+  assert.equal(parsed.is_flagged, false);
 
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 0 }));
   assert.throws(() => ItemSchema.parse({ name: 'Keys', quantity: 1.5 }));

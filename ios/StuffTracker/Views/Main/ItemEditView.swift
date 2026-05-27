@@ -234,6 +234,7 @@ struct ItemEditView: View {
     @State private var modelNumber: String
     @State private var warrantyExpiresDate: Date?
     @State private var estimatedValue: String
+    @State private var isFlagged: Bool
     @State private var selectedLocationId: String?
     @State private var isSaving = false
     @State private var selectedIcon: String
@@ -271,6 +272,7 @@ struct ItemEditView: View {
         _modelNumber = State(initialValue: item.modelNumber ?? "")
         _warrantyExpiresDate = State(initialValue: ItemDateCodec.parse(item.warrantyExpiresDate))
         _estimatedValue = State(initialValue: Self.formattedDollars(fromCents: item.estimatedValueCents))
+        _isFlagged = State(initialValue: item.isFlagged)
         _selectedLocationId = State(initialValue: item.locationId)
         _selectedIcon = State(initialValue: item.icon ?? "")
         _properties = State(initialValue: item.properties)
@@ -355,6 +357,11 @@ struct ItemEditView: View {
             }
 
             Stepper("Quantity: \(quantity)", value: $quantity, in: 1...9999)
+
+            Toggle(isOn: $isFlagged) {
+                Label("Flagged", systemImage: "flag.fill")
+            }
+            .tint(.orange)
 
             TextField("Notes", text: $notes, axis: .vertical)
                 .lineLimit(3...6)
@@ -971,7 +978,8 @@ struct ItemEditView: View {
                     serialNumber: normalizedText(serialNumber),
                     modelNumber: normalizedText(modelNumber),
                     warrantyExpiresDate: ItemDateCodec.string(from: warrantyExpiresDate),
-                    estimatedValueCents: try normalizedEstimatedValueCents()
+                    estimatedValueCents: try normalizedEstimatedValueCents(),
+                    isFlagged: isFlagged
                 )
 
                 homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)

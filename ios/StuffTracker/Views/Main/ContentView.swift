@@ -19,6 +19,7 @@ struct ContentView: View {
     @StateObject private var homeStore = HomeStore()
     @StateObject private var collapseStore = HierarchyCollapseStore()
     @State private var searchText = ""
+    @State private var showFlaggedOnly = false
     @State private var isAddingHome = false
     @State private var newHomeName = ""
     @State private var showAccountSheet = false
@@ -41,18 +42,23 @@ struct ContentView: View {
                 if homeStore.isLoading && homeStore.homeDetails.isEmpty {
                     StartupPhotoLoadingView(message: "Loading your stuff...")
                 } else {
+                    SearchBar(text: $searchText, showsFlaggedOnly: $showFlaggedOnly)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+
                     let filtered = filteredHomes
-                    if !searchText.isEmpty && filtered.isEmpty {
+                    if isFiltering && filtered.isEmpty {
                         ContentUnavailableView(
-                            "No Results",
-                            systemImage: "magnifyingglass",
-                            description: Text("No matches for \"\(searchText)\".")
+                            emptyFilterTitle,
+                            systemImage: showFlaggedOnly ? "flag" : "magnifyingglass",
+                            description: Text(emptyFilterDescription)
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
                             VStack(spacing: 8) {
-                                if searchText.isEmpty {
+                                if !isFiltering {
                                     HomeDropZone(insertionIndex: 0, homeStore: homeStore)
                                 }
                                 ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
@@ -60,14 +66,14 @@ struct ContentView: View {
                                         home: home,
                                         homeStore: homeStore,
                                         collapseStore: collapseStore,
-                                        isSearchActive: !searchText.isEmpty
+                                        isSearchActive: isFiltering
                                     )
-                                    if searchText.isEmpty {
+                                    if !isFiltering {
                                         HomeDropZone(insertionIndex: index + 1, homeStore: homeStore)
                                     }
                                 }
 
-                                if searchText.isEmpty {
+                                if !isFiltering {
                                     if isAddingHome {
                                         InlineAddField(placeholder: "Home name", text: $newHomeName) {
                                             let name = newHomeName
@@ -115,11 +121,6 @@ struct ContentView: View {
             }
             .navigationTitle("Stuff Tracker")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search stuff..."
-            )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -179,16 +180,17 @@ struct ContentView: View {
 
     private var filteredHomes: [HomeDetail] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return homeStore.homeDetails }
+        guard !query.isEmpty || showFlaggedOnly else { return homeStore.homeDetails }
 
         return homeStore.homeDetails.compactMap { home in
             let q = query.lowercased()
-            let homeMatches = home.name.localizedCaseInsensitiveContains(q)
+            let hasQuery = !q.isEmpty
+            let homeMatches = hasQuery && home.name.localizedCaseInsensitiveContains(q)
 
             // Find locations whose name matches
             let directMatchIds = Set(
                 home.locations
-                    .filter { $0.name.localizedCaseInsensitiveContains(q) }
+                    .filter { hasQuery && $0.name.localizedCaseInsensitiveContains(q) }
                     .map { $0.id }
             )
 
@@ -208,27 +210,43 @@ struct ContentView: View {
 
             // Find items that match by name/notes/properties
             let matchingItems = home.items.filter {
-                $0.name.localizedCaseInsensitiveContains(q) ||
+                guard hasQuery else { return true }
+                return $0.name.localizedCaseInsensitiveContains(q) ||
                 ($0.notes ?? "").localizedCaseInsensitiveContains(q) ||
+                ($0.serialNumber ?? "").localizedCaseInsensitiveContains(q) ||
+                ($0.modelNumber ?? "").localizedCaseInsensitiveContains(q) ||
                 $0.properties.contains {
                     $0.key.localizedCaseInsensitiveContains(q) ||
                     $0.value.localizedCaseInsensitiveContains(q)
                 }
             }
 
-            if !homeMatches && directMatchIds.isEmpty && matchingItems.isEmpty {
+            let visibleItems = home.items.filter { item in
+                if showFlaggedOnly && !item.isFlagged { return false }
+                if !hasQuery { return true }
+                if homeMatches { return true }
+                if matchingItems.contains(where: { $0.id == item.id }) { return true }
+                if let locId = item.locationId { return matchingLocationIds.contains(locId) }
+                return false
+            }
+
+            if showFlaggedOnly && visibleItems.isEmpty {
                 return nil
             }
 
             // If home name matches, show everything
-            if homeMatches {
+            if homeMatches && !showFlaggedOnly {
                 return home
             }
 
+            if !homeMatches && directMatchIds.isEmpty && visibleItems.isEmpty {
+                return nil
+            }
+
             // Collect all location IDs we need to show (matching + ancestors)
-            var allNeeded = matchingLocationIds
+            var allNeeded = showFlaggedOnly ? Set<String>() : matchingLocationIds
             // Add locations needed for matching items
-            allNeeded.formUnion(matchingItems.compactMap { $0.locationId })
+            allNeeded.formUnion(visibleItems.compactMap { $0.locationId })
             // Walk up to include ancestor locations
             var toResolve = allNeeded
             while !toResolve.isEmpty {
@@ -241,12 +259,6 @@ struct ContentView: View {
             }
 
             let filteredLocations = home.locations.filter { allNeeded.contains($0.id) }
-            // Include items that match OR are inside a matching location (including descendants)
-            let filteredItems = home.items.filter { item in
-                if matchingItems.contains(where: { $0.id == item.id }) { return true }
-                if let locId = item.locationId { return matchingLocationIds.contains(locId) }
-                return false
-            }
 
             return HomeDetail(
                 id: home.id,
@@ -255,9 +267,28 @@ struct ContentView: View {
                 role: home.role,
                 icon: home.icon,
                 locations: filteredLocations,
-                items: filteredItems
+                items: visibleItems
             )
         }
+    }
+
+    private var isFiltering: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly
+    }
+
+    private var emptyFilterTitle: String {
+        showFlaggedOnly ? "No Flagged Items" : "No Results"
+    }
+
+    private var emptyFilterDescription: String {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        if showFlaggedOnly && !query.isEmpty {
+            return "No flagged items match \"\(query)\"."
+        }
+        if showFlaggedOnly {
+            return "Flag items to keep them close at hand."
+        }
+        return "No matches for \"\(query)\"."
     }
 
     private func validCollapsibleNodes(in homes: [HomeDetail]) -> Set<CollapsibleTreeNode> {

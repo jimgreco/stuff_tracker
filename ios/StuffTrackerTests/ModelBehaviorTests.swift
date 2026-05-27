@@ -27,6 +27,7 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertNil(item.modelNumber)
         XCTAssertNil(item.warrantyExpiresDate)
         XCTAssertNil(item.estimatedValueCents)
+        XCTAssertFalse(item.isFlagged)
         XCTAssertEqual(item.sortOrder, 0)
         XCTAssertEqual(item.createdBy, "")
         XCTAssertFalse(item.needsSync)
@@ -92,6 +93,7 @@ final class ModelBehaviorTests: XCTestCase {
             modelNumber: "MOD-1",
             warrantyExpiresDate: "2027-05-24",
             estimatedValueCents: 25000,
+            isFlagged: true,
             createdBy: "owner-1",
             needsSync: false
         )
@@ -118,6 +120,7 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(activeItem.toItem().modelNumber, "MOD-1")
         XCTAssertEqual(activeItem.toItem().warrantyExpiresDate, "2027-05-24")
         XCTAssertEqual(activeItem.toItem().estimatedValueCents, 25000)
+        XCTAssertTrue(activeItem.toItem().isFlagged)
         XCTAssertEqual(detail.locations.map(\.id), ["loc-1"])
         XCTAssertEqual(detail.items.map(\.id), ["item-1"])
     }

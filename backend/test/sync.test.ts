@@ -52,6 +52,7 @@ test('item validation keeps ordered properties and document metadata', () => {
     model_number: 'MODEL-1',
     warranty_expires_date: '2027-05-24',
     estimated_value_cents: 4999,
+    is_flagged: true,
     properties: [
       { id: 'prop-1', key: 'Location', value: 'Garage' },
       { id: 'prop-2', key: 'Category', value: 'Tools' },
@@ -89,6 +90,7 @@ test('item validation keeps ordered properties and document metadata', () => {
   assert.equal(parsed.model_number, 'MODEL-1');
   assert.equal(parsed.warranty_expires_date, '2027-05-24');
   assert.equal(parsed.estimated_value_cents, 4999);
+  assert.equal(parsed.is_flagged, true);
 });
 
 test('item upload validation accepts photos and documents', () => {
@@ -153,6 +155,7 @@ test('fresh database schema allows floor locations', () => {
   assert.match(schemaSql, /serial_number TEXT/);
   assert.match(schemaSql, /warranty_expires_date DATE/);
   assert.match(schemaSql, /estimated_value_cents INTEGER/);
+  assert.match(schemaSql, /is_flagged BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS user_entitlements/);
   assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS app_store_transactions/);
   assert.match(schemaSql, /idx_user_entitlements_app_store_original_transaction/);

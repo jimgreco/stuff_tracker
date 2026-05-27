@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS items (
   model_number TEXT,
   warranty_expires_date DATE,
   estimated_value_cents INTEGER,
+  is_flagged BOOLEAN NOT NULL DEFAULT FALSE,
   created_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -87,6 +88,7 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS serial_number TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS model_number TEXT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS warranty_expires_date DATE;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS estimated_value_cents INTEGER;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tokens_revoked_before TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS auth_sessions (

@@ -120,6 +120,7 @@ struct Item: Codable, Identifiable {
     var modelNumber: String?
     var warrantyExpiresDate: String?
     var estimatedValueCents: Int?
+    var isFlagged: Bool
     var sortOrder: Int
     let createdBy: String
     var needsSync: Bool
@@ -127,7 +128,7 @@ struct Item: Codable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, homeId, locationId, name, icon, notes, quantity, properties, photoUrls
         case documents, purchaseDate, serialNumber, modelNumber, warrantyExpiresDate
-        case estimatedValueCents, sortOrder, createdBy
+        case estimatedValueCents, isFlagged, sortOrder, createdBy
     }
 
     init(id: String, homeId: String, locationId: String? = nil, name: String, icon: String? = nil,
@@ -135,7 +136,7 @@ struct Item: Codable, Identifiable {
          documents: [ItemDocument] = [],
          purchaseDate: String? = nil, serialNumber: String? = nil, modelNumber: String? = nil,
          warrantyExpiresDate: String? = nil, estimatedValueCents: Int? = nil,
-         sortOrder: Int = 0, createdBy: String = "", needsSync: Bool = false) {
+         isFlagged: Bool = false, sortOrder: Int = 0, createdBy: String = "", needsSync: Bool = false) {
         self.id = id; self.homeId = homeId; self.locationId = locationId; self.name = name
         self.icon = icon; self.notes = notes; self.quantity = quantity; self.properties = properties
         self.photoUrls = photoUrls
@@ -145,6 +146,7 @@ struct Item: Codable, Identifiable {
         self.modelNumber = modelNumber
         self.warrantyExpiresDate = warrantyExpiresDate
         self.estimatedValueCents = estimatedValueCents
+        self.isFlagged = isFlagged
         self.sortOrder = sortOrder
         self.createdBy = createdBy; self.needsSync = needsSync
     }
@@ -166,6 +168,7 @@ struct Item: Codable, Identifiable {
         modelNumber = try c.decodeIfPresent(String.self, forKey: .modelNumber)
         warrantyExpiresDate = try c.decodeIfPresent(String.self, forKey: .warrantyExpiresDate)
         estimatedValueCents = try c.decodeIfPresent(Int.self, forKey: .estimatedValueCents)
+        isFlagged = try c.decodeIfPresent(Bool.self, forKey: .isFlagged) ?? false
         sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
         createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy) ?? ""
         needsSync = false
