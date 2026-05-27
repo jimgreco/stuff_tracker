@@ -24,6 +24,7 @@ struct ContentView: View {
     @State private var newHomeName = ""
     @State private var showAccountSheet = false
     @State private var breadcrumbPath: [String] = []
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         if authStore.isRestoringSession {
@@ -50,6 +51,10 @@ struct ContentView: View {
                             description: Text(emptyFilterDescription)
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            dismissSearchInput()
+                        }
                     } else {
                         ScrollView {
                             VStack(spacing: 8) {
@@ -102,6 +107,12 @@ struct ContentView: View {
                         .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
                             updateBreadcrumbPath(from: anchors)
                         }
+                        .scrollDismissesKeyboard(.interactively)
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                dismissSearchInput()
+                            }
+                        )
                     }
                 }
             }
@@ -112,7 +123,8 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 BottomSearchControls(
                     searchText: $searchText,
-                    showFlaggedOnly: $showFlaggedOnly
+                    showFlaggedOnly: $showFlaggedOnly,
+                    isSearchFocused: $isSearchFocused
                 )
             }
             .overlay(alignment: .bottom) {
@@ -125,6 +137,7 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        dismissSearchInput()
                         showAccountSheet = true
                     } label: {
                         if let avatarUrl = authStore.currentUser?.avatarUrl,
@@ -160,6 +173,11 @@ struct ContentView: View {
                 collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
             }
         }
+    }
+
+    private func dismissSearchInput() {
+        guard isSearchFocused else { return }
+        isSearchFocused = false
     }
 
     private func updateBreadcrumbPath(from anchors: [BreadcrumbAnchor]) {
@@ -306,10 +324,10 @@ struct ContentView: View {
 private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
-    @FocusState private var isSearchFocused: Bool
+    @FocusState.Binding var isSearchFocused: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: isSearchFocused ? 0 : 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.body)
@@ -320,6 +338,9 @@ private struct BottomSearchControls: View {
                     .autocorrectionDisabled()
                     .submitLabel(.search)
                     .focused($isSearchFocused)
+                    .onSubmit {
+                        isSearchFocused = false
+                    }
 
                 if !searchText.isEmpty {
                     Button {
@@ -334,15 +355,25 @@ private struct BottomSearchControls: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 48)
-            .padding(.horizontal, 13)
+            .frame(height: isSearchFocused ? 52 : 48)
+            .padding(.horizontal, isSearchFocused ? 15 : 13)
             .bottomSearchFieldSurface(isFocused: isSearchFocused)
 
-            BottomFlagFilterButton(isOn: $showFlaggedOnly)
+            if !isSearchFocused {
+                BottomFlagFilterButton(isOn: $showFlaggedOnly)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .scale(scale: 0.78, anchor: .trailing).combined(with: .opacity)
+                        )
+                    )
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
+        .padding(.horizontal, isSearchFocused ? 10 : 14)
+        .padding(.top, isSearchFocused ? 10 : 8)
+        .padding(.bottom, isSearchFocused ? 10 : 8)
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isSearchFocused)
+        .animation(.easeInOut(duration: 0.18), value: searchText.isEmpty)
     }
 }
 
