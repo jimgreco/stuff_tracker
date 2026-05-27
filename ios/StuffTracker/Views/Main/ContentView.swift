@@ -340,6 +340,16 @@ private struct BottomSearchControls: View {
 
     var body: some View {
         HStack(spacing: isSearchFocused ? 0 : 10) {
+            if !isSearchFocused {
+                BottomFlagFilterButton(isOn: $showFlaggedOnly)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .scale(scale: 0.78, anchor: .leading).combined(with: .opacity)
+                        )
+                    )
+            }
+
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.body)
@@ -370,16 +380,6 @@ private struct BottomSearchControls: View {
             .frame(height: isSearchFocused ? 52 : 48)
             .padding(.horizontal, isSearchFocused ? 15 : 13)
             .bottomSearchFieldSurface(isFocused: isSearchFocused)
-
-            if !isSearchFocused {
-                BottomFlagFilterButton(isOn: $showFlaggedOnly)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .scale(scale: 0.78, anchor: .trailing).combined(with: .opacity)
-                        )
-                    )
-            }
         }
         .padding(.horizontal, isSearchFocused ? 10 : 14)
         .padding(.top, isSearchFocused ? 10 : 8)
