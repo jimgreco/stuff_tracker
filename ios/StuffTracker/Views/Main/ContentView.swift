@@ -224,9 +224,12 @@ struct ContentView: View {
                     .environmentObject(authStore)
                     .environmentObject(SyncManager.shared)
             }
-            .fullScreenCover(isPresented: $tutorialController.isPresented) {
-                FirstRunTutorialView(homeStore: homeStore)
-                    .environmentObject(tutorialController)
+            .overlay {
+                if tutorialController.isPresented {
+                    FirstRunTutorialOverlay(homeStore: homeStore)
+                        .environmentObject(tutorialController)
+                        .transition(.opacity)
+                }
             }
             .alert("Error", isPresented: Binding<Bool>(
                 get: { homeStore.errorMessage != nil },
@@ -745,7 +748,7 @@ private enum FirstRunTutorialStep: Int, CaseIterable {
     }
 }
 
-struct FirstRunTutorialView: View {
+struct FirstRunTutorialOverlay: View {
     @ObservedObject var homeStore: HomeStore
     @EnvironmentObject private var tutorialController: FirstRunTutorialController
     @State private var step: FirstRunTutorialStep = .welcome
@@ -806,62 +809,63 @@ struct FirstRunTutorialView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        header
-                        stepContent
-                    }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.24)
+                .ignoresSafeArea()
 
-                Divider()
+            VStack(alignment: .leading, spacing: 16) {
+                header
+
+                ScrollView {
+                    stepContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 2)
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: 360)
 
                 footer
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle("Tutorial")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Skip") {
-                        tutorialController.complete()
-                    }
-                }
-            }
-            .interactiveDismissDisabled()
-            .sheet(item: $editingItem) { item in
-                let latestItem = latestItem(withId: item.id) ?? item
-                ItemEditView(item: latestItem, homeStore: homeStore, homeId: latestItem.homeId)
-            }
+            .padding(18)
+            .frame(maxWidth: 560, alignment: .leading)
+            .tutorialCoachCardSurface()
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+        .sheet(item: $editingItem) { item in
+            let latestItem = latestItem(withId: item.id) ?? item
+            ItemEditView(item: latestItem, homeStore: homeStore, homeId: latestItem.homeId)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label("Step \(stepIndex + 1) of \(FirstRunTutorialStep.allCases.count)", systemImage: step.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button {
+                    tutorialController.complete()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Skip tutorial")
+            }
+
             ProgressView(value: Double(stepIndex + 1), total: Double(FirstRunTutorialStep.allCases.count))
                 .tint(.accentColor)
 
-            HStack(alignment: .center, spacing: 16) {
-                Image(systemName: step.systemImage)
-                    .font(.system(size: 34, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 58, height: 58)
-                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Step \(stepIndex + 1) of \(FirstRunTutorialStep.allCases.count)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-
-                    Text(step.title)
-                        .font(.title2.weight(.bold))
-                }
-            }
+            Text(step.title)
+                .font(.title3.weight(.bold))
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -870,7 +874,7 @@ struct FirstRunTutorialView: View {
         switch step {
         case .welcome:
             VStack(alignment: .leading, spacing: 14) {
-                Text("Stuff Tracker starts with a Home, then lets you organize items directly in that Home or inside optional floors, rooms, and containers.")
+                Text("Stuff Tracker is a map for the things you swear you put somewhere obvious. You can organize your stuff into a hierarchy of homes, floors, rooms, and containers.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -882,7 +886,7 @@ struct FirstRunTutorialView: View {
                 TutorialFeatureRow(
                     systemImage: "square.grid.2x2",
                     title: "Spaces",
-                    detail: "Floors and rooms are available when you want more structure."
+                    detail: "Floors, rooms, and containers are available when you want more structure."
                 )
                 TutorialFeatureRow(
                     systemImage: "tag",
@@ -893,7 +897,7 @@ struct FirstRunTutorialView: View {
 
         case .home:
             VStack(alignment: .leading, spacing: 16) {
-                Text("Create your first Home. This is the top-level place where your stuff lives.")
+                Text("Create your first Home. It will appear in the hierarchy behind this tutorial.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -912,7 +916,7 @@ struct FirstRunTutorialView: View {
 
         case .rooms:
             VStack(alignment: .leading, spacing: 14) {
-                Text("Floors and rooms are optional. You can add them later from a Home menu, and items can stay directly in the Home until you need more organization.")
+                Text("Floors, rooms, and containers are optional. You can add them later from the Home's menu, and items can stay directly in the Home until you need more organization.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -935,7 +939,7 @@ struct FirstRunTutorialView: View {
 
         case .item:
             VStack(alignment: .leading, spacing: 16) {
-                Text("Add an item to the Home. You can move it into a room or container later.")
+                Text("Add an item to the Home. The item chip will appear in the actual Home behind this card.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -961,7 +965,7 @@ struct FirstRunTutorialView: View {
 
         case .details:
             VStack(alignment: .leading, spacing: 16) {
-                Text("Open the item details to see what is editable: name, icon, quantity, notes, dates, serial and model numbers, value, location, and custom properties.")
+                Text("Open the real item details sheet to see what is editable: name, icon, quantity, notes, dates, serial and model numbers, value, location, and custom properties.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -986,7 +990,7 @@ struct FirstRunTutorialView: View {
 
         case .moving:
             VStack(alignment: .leading, spacing: 14) {
-                Text("Items, homes, rooms, and containers can be dragged and dropped to reorder or move them where they belong.")
+                Text("When this tutorial is gone, the things you see behind it can be dragged and dropped to reorder or move them where they belong.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 
@@ -1031,9 +1035,7 @@ struct FirstRunTutorialView: View {
             .buttonStyle(.borderedProminent)
             .disabled(!canUsePrimaryButton)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(.regularMaterial)
+        .padding(.top, 2)
     }
 
     private func performPrimaryAction() {
@@ -1121,6 +1123,25 @@ struct FirstRunTutorialView: View {
     }
 }
 
+private struct TutorialCoachCardSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(Color(.systemBackground).opacity(0.20), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.24), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.22), radius: 24, y: 10)
+        } else {
+            content
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(Color(.separator).opacity(0.20), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.18), radius: 22, y: 10)
+        }
+    }
+}
+
 private struct TutorialFeatureRow: View {
     let systemImage: String
     let title: String
@@ -1176,6 +1197,10 @@ private struct TutorialTextFieldSurfaceModifier: ViewModifier {
 }
 
 private extension View {
+    func tutorialCoachCardSurface() -> some View {
+        modifier(TutorialCoachCardSurfaceModifier())
+    }
+
     func tutorialTextFieldSurface() -> some View {
         modifier(TutorialTextFieldSurfaceModifier())
     }
