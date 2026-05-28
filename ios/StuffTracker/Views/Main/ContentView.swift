@@ -1158,6 +1158,8 @@ struct FirstRunTutorialOverlay: View {
         .sheet(item: $editingItem) { item in
             let latestItem = latestItem(withId: item.id) ?? item
             ItemEditView(item: latestItem, homeStore: homeStore, homeId: latestItem.homeId)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 

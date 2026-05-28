@@ -427,6 +427,8 @@ struct ItemChip: View {
         )
         .sheet(isPresented: $showEdit) {
             ItemEditView(item: item, homeStore: homeStore, homeId: homeId)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }
