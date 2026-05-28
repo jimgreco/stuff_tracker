@@ -107,6 +107,20 @@ final class HomeStore: ObservableObject {
         enqueueSyncIfNeeded()
     }
 
+    func setHomeFlagged(_ id: String, isFlagged: Bool) {
+        if let idx = homes.firstIndex(where: { $0.id == id }) {
+            homes[idx].isFlagged = isFlagged
+        }
+        if let idx = detailIndex(for: id) {
+            homeDetails[idx].isFlagged = isFlagged
+        }
+        if let localHome = local.fetchHome(id: id) {
+            localHome.isFlagged = isFlagged
+            local.updateHome(localHome)
+        }
+        enqueueSyncIfNeeded()
+    }
+
     func reorderHome(_ homeId: String, toIndex destination: Int) {
         var ordered = homeDetails.sorted { a, b in
             let aSort = local.fetchHome(id: a.id)?.sortOrder ?? 0
@@ -167,6 +181,18 @@ final class HomeStore: ObservableObject {
         }
         if let localLoc = local.fetchLocation(id: locationId) {
             localLoc.icon = customIcon
+            local.updateLocation(localLoc)
+        }
+        enqueueSyncIfNeeded()
+    }
+
+    func setLocationFlagged(homeId: String, locationId: String, isFlagged: Bool) {
+        if let hIdx = detailIndex(for: homeId),
+           let lIdx = homeDetails[hIdx].locations.firstIndex(where: { $0.id == locationId }) {
+            homeDetails[hIdx].locations[lIdx].isFlagged = isFlagged
+        }
+        if let localLoc = local.fetchLocation(id: locationId) {
+            localLoc.isFlagged = isFlagged
             local.updateLocation(localLoc)
         }
         enqueueSyncIfNeeded()
@@ -239,6 +265,7 @@ final class HomeStore: ObservableObject {
         if let localLoc = local.createLocation(homeId: toHomeId, name: loc.name, parentId: newParentId, type: loc.type.rawValue) {
             localLoc.sortOrder = index
             localLoc.icon = loc.icon
+            localLoc.isFlagged = loc.isFlagged
             local.updateLocation(localLoc)
             if let dstIdx = detailIndex(for: toHomeId) {
                 homeDetails[dstIdx].locations.append(localLoc.toLocation())
@@ -432,14 +459,30 @@ final class HomeStore: ObservableObject {
         enqueueSyncIfNeeded()
     }
 
-    func sortChildLocationsByName(homeId: String, parentId: String?) {
+    func sortChildLocationsByName(homeId: String, parentId: String?, type: Location.LocationType? = nil) {
         guard let hIdx = detailIndex(for: homeId) else { return }
 
-        let sorted = homeDetails[hIdx].locations
+        let siblings = homeDetails[hIdx].locations
             .filter { $0.parentId == parentId }
+            .sorted {
+                if $0.sortOrder == $1.sortOrder {
+                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                return $0.sortOrder < $1.sortOrder
+            }
+        let targetSiblings = siblings
+            .filter { location in type.map { location.type == $0 } ?? true }
+        let targetIds = Set(targetSiblings.map(\.id))
+        let sortedTargets = targetSiblings
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        var targetIndex = 0
+        let reordered = siblings.map { location in
+            guard targetIds.contains(location.id) else { return location }
+            defer { targetIndex += 1 }
+            return sortedTargets[targetIndex]
+        }
 
-        for (i, loc) in sorted.enumerated() {
+        for (i, loc) in reordered.enumerated() {
             if let lIdx = homeDetails[hIdx].locations.firstIndex(where: { $0.id == loc.id }) {
                 homeDetails[hIdx].locations[lIdx].sortOrder = i
             }

@@ -33,6 +33,26 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertFalse(item.needsSync)
     }
 
+    func testHomeDecodingDefaultsMissingFlag() throws {
+        let data = """
+        {
+          "id": "home-1",
+          "name": "Home",
+          "owner_id": "owner-1",
+          "role": "owner"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let home = try decoder.decode(Home.self, from: data)
+
+        XCTAssertEqual(home.id, "home-1")
+        XCTAssertEqual(home.ownerId, "owner-1")
+        XCTAssertFalse(home.isFlagged)
+    }
+
     func testHomeDetailTreeHelpersSortLocationsAndItemsBySortOrder() {
         let home = HomeDetail(
             id: "home-1",
@@ -97,6 +117,7 @@ final class ModelBehaviorTests: XCTestCase {
             ownerId: "owner-1",
             role: "admin",
             icon: "house",
+            isFlagged: true,
             needsSync: false
         )
         let activeLocation = LocalLocation(
@@ -104,6 +125,7 @@ final class ModelBehaviorTests: XCTestCase {
             homeId: "home-1",
             name: "Top Floor",
             type: "floor",
+            isFlagged: true,
             needsSync: false
         )
         let deletedLocation = LocalLocation(
@@ -145,7 +167,10 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(apiHome.id, "home-1")
         XCTAssertEqual(apiHome.ownerId, "owner-1")
         XCTAssertEqual(apiHome.role, "admin")
+        XCTAssertTrue(apiHome.isFlagged)
+        XCTAssertTrue(detail.isFlagged)
         XCTAssertEqual(activeLocation.toLocation().type, .floor)
+        XCTAssertTrue(activeLocation.toLocation().isFlagged)
         XCTAssertEqual(activeItem.toItem().quantity, 2)
         XCTAssertEqual(activeItem.toItem().serialNumber, "SN-1")
         XCTAssertEqual(activeItem.toItem().modelNumber, "MOD-1")

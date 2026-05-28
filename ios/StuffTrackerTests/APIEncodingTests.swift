@@ -30,6 +30,20 @@ final class APIEncodingTests: XCTestCase {
         )
     }
 
+    func testUpdateHomeBodyEncodesFlag() throws {
+        let body = APIClient.UpdateHomeBody(
+            name: "145 Lex",
+            icon: "house.fill",
+            isFlagged: true
+        )
+
+        let json = try encodedJSON(body)
+
+        XCTAssertEqual(json["name"] as? String, "145 Lex")
+        XCTAssertEqual(json["icon"] as? String, "house.fill")
+        XCTAssertEqual(json["is_flagged"] as? Bool, true)
+    }
+
     func testItemBodyEncodesNilLocationAsExplicitNull() throws {
         let body = APIClient.ItemBody(
             name: "Couch 5",
@@ -71,7 +85,8 @@ final class APIEncodingTests: XCTestCase {
             name: "Top Floor",
             parentId: nil,
             sortOrder: 0,
-            icon: nil
+            icon: nil,
+            isFlagged: true
         )
 
         let json = try encodedJSON(body)
@@ -82,6 +97,7 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertEqual(json["sort_order"] as? Int, 0)
         XCTAssertTrue(json.keys.contains("icon"))
         XCTAssertTrue(json["icon"] is NSNull)
+        XCTAssertEqual(json["is_flagged"] as? Bool, true)
     }
 
     func testCreateLocationBodyEncodesTopLevelParentAsExplicitNull() throws {
@@ -90,7 +106,8 @@ final class APIEncodingTests: XCTestCase {
             parentId: nil,
             type: "floor",
             sortOrder: 0,
-            icon: nil
+            icon: nil,
+            isFlagged: true
         )
 
         let json = try encodedJSON(body)
@@ -100,6 +117,7 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertTrue(json["parent_id"] is NSNull)
         XCTAssertTrue(json.keys.contains("icon"))
         XCTAssertTrue(json["icon"] is NSNull)
+        XCTAssertEqual(json["is_flagged"] as? Bool, true)
     }
 
     func testGoogleSignInBodyKeepsBackendCamelCaseTokenKey() throws {

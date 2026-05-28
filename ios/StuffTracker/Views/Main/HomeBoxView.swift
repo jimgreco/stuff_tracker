@@ -239,6 +239,7 @@ private struct RenameableHeader: View {
     let name: String
     let icon: String
     let font: Font
+    var isFlagged: Bool = false
     @Binding var isRenaming: Bool
     @Binding var renameName: String
     let onCommit: (String) -> Void
@@ -246,6 +247,11 @@ private struct RenameableHeader: View {
     var body: some View {
         if isRenaming {
             HStack(spacing: 6) {
+                if isFlagged {
+                    Image(systemName: "flag.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Flagged")
+                }
                 Image(systemName: icon)
                 TextField("Name", text: $renameName, onCommit: {
                     let trimmed = renameName.trimmingCharacters(in: .whitespaces)
@@ -263,7 +269,14 @@ private struct RenameableHeader: View {
                 }
             }
         } else {
-            Label(name, systemImage: icon)
+            HStack(spacing: 5) {
+                if isFlagged {
+                    Image(systemName: "flag.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Flagged")
+                }
+                Label(name, systemImage: icon)
+            }
                 .font(font)
         }
     }
@@ -347,6 +360,7 @@ struct HomeBoxView: View {
                     name: home.name,
                     icon: currentIcon,
                     font: .title3.bold(),
+                    isFlagged: home.isFlagged,
                     isRenaming: $isRenaming,
                     renameName: $renameName
                 ) { newName in
@@ -368,6 +382,9 @@ struct HomeBoxView: View {
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: {
                             Label("Change Icon", systemImage: "star.square")
                         }
+                        Button { homeStore.setHomeFlagged(home.id, isFlagged: !home.isFlagged) } label: {
+                            Label(home.isFlagged ? "Remove Flag" : "Flag", systemImage: home.isFlagged ? "flag.fill" : "flag")
+                        }
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
@@ -382,6 +399,16 @@ struct HomeBoxView: View {
                             isAddingRoom = true
                         } label: {
                             Label("Add Room", systemImage: "plus")
+                        }
+                        Divider()
+                        Button { homeStore.sortItemsByName(homeId: home.id, locationId: nil) } label: {
+                            Label("Sort items by name", systemImage: "textformat.abc")
+                        }
+                        Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: nil, type: .floor) } label: {
+                            Label("Sort floors by name", systemImage: "arrow.up.arrow.down")
+                        }
+                        Button { homeStore.sortChildLocationsByName(homeId: home.id, parentId: nil, type: .room) } label: {
+                            Label("Sort rooms by name", systemImage: "arrow.up.arrow.down")
                         }
                         Divider()
                         Button(role: .destructive) {
@@ -578,6 +605,7 @@ struct FloorBoxView: View {
 
                 RenameableHeader(
                     name: floor.name, icon: currentIcon, font: .headline,
+                    isFlagged: floor.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
                     Task { await homeStore.renameLocation(homeId: home.id, locationId: floor.id, name: newName) }
@@ -594,6 +622,9 @@ struct FloorBoxView: View {
                     Menu {
                         Button { renameName = floor.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
+                        Button { homeStore.setLocationFlagged(homeId: home.id, locationId: floor.id, isFlagged: !floor.isFlagged) } label: {
+                            Label(floor.isFlagged ? "Remove Flag" : "Flag", systemImage: floor.isFlagged ? "flag.fill" : "flag")
+                        }
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
@@ -777,6 +808,7 @@ struct RoomBoxView: View {
 
                 RenameableHeader(
                     name: room.name, icon: currentIcon, font: .headline,
+                    isFlagged: room.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
                     Task { await homeStore.renameLocation(homeId: home.id, locationId: room.id, name: newName) }
@@ -793,6 +825,9 @@ struct RoomBoxView: View {
                     Menu {
                         Button { renameName = room.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
+                        Button { homeStore.setLocationFlagged(homeId: home.id, locationId: room.id, isFlagged: !room.isFlagged) } label: {
+                            Label(room.isFlagged ? "Remove Flag" : "Flag", systemImage: room.isFlagged ? "flag.fill" : "flag")
+                        }
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
@@ -964,6 +999,7 @@ struct ContainerBoxView: View {
 
                 RenameableHeader(
                     name: container.name, icon: currentIcon, font: .subheadline.bold(),
+                    isFlagged: container.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
                     Task { await homeStore.renameLocation(homeId: home.id, locationId: container.id, name: newName) }
@@ -980,6 +1016,9 @@ struct ContainerBoxView: View {
                     Menu {
                         Button { renameName = container.name; isRenaming = true } label: { Label("Rename", systemImage: "pencil") }
                         Button { selectedIcon = currentIcon; showIconPicker = true } label: { Label("Change Icon", systemImage: "star.square") }
+                        Button { homeStore.setLocationFlagged(homeId: home.id, locationId: container.id, isFlagged: !container.isFlagged) } label: {
+                            Label(container.isFlagged ? "Remove Flag" : "Flag", systemImage: container.isFlagged ? "flag.fill" : "flag")
+                        }
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)

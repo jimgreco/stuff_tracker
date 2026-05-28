@@ -56,6 +56,30 @@ struct Home: Codable, Identifiable {
     let ownerId: String
     var role: String // "owner" | "admin" | "editor" | "viewer"
     var icon: String?
+    var isFlagged: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, ownerId, role, icon, isFlagged
+    }
+
+    init(id: String, name: String, ownerId: String, role: String, icon: String? = nil, isFlagged: Bool = false) {
+        self.id = id
+        self.name = name
+        self.ownerId = ownerId
+        self.role = role
+        self.icon = icon
+        self.isFlagged = isFlagged
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        ownerId = try c.decode(String.self, forKey: .ownerId)
+        role = try c.decode(String.self, forKey: .role)
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+        isFlagged = try c.decodeIfPresent(Bool.self, forKey: .isFlagged) ?? false
+    }
 }
 
 // MARK: - Location (room or container)
@@ -68,11 +92,39 @@ struct Location: Codable, Identifiable, Hashable {
     var type: LocationType
     var sortOrder: Int
     var icon: String?
+    var isFlagged: Bool
 
     enum LocationType: String, Codable {
         case floor
         case room
         case container
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, homeId, parentId, name, type, sortOrder, icon, isFlagged
+    }
+
+    init(id: String, homeId: String, parentId: String? = nil, name: String, type: LocationType, sortOrder: Int, icon: String? = nil, isFlagged: Bool = false) {
+        self.id = id
+        self.homeId = homeId
+        self.parentId = parentId
+        self.name = name
+        self.type = type
+        self.sortOrder = sortOrder
+        self.icon = icon
+        self.isFlagged = isFlagged
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        homeId = try c.decode(String.self, forKey: .homeId)
+        parentId = try c.decodeIfPresent(String.self, forKey: .parentId)
+        name = try c.decode(String.self, forKey: .name)
+        type = try c.decode(LocationType.self, forKey: .type)
+        sortOrder = try c.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+        isFlagged = try c.decodeIfPresent(Bool.self, forKey: .isFlagged) ?? false
     }
 }
 
@@ -183,8 +235,36 @@ struct HomeDetail: Codable {
     let ownerId: String
     let role: String
     var icon: String?
+    var isFlagged: Bool
     var locations: [Location]
     var items: [Item]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, ownerId, role, icon, isFlagged, locations, items
+    }
+
+    init(id: String, name: String, ownerId: String, role: String, icon: String? = nil, isFlagged: Bool = false, locations: [Location], items: [Item]) {
+        self.id = id
+        self.name = name
+        self.ownerId = ownerId
+        self.role = role
+        self.icon = icon
+        self.isFlagged = isFlagged
+        self.locations = locations
+        self.items = items
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        ownerId = try c.decode(String.self, forKey: .ownerId)
+        role = try c.decode(String.self, forKey: .role)
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
+        isFlagged = try c.decodeIfPresent(Bool.self, forKey: .isFlagged) ?? false
+        locations = try c.decodeIfPresent([Location].self, forKey: .locations) ?? []
+        items = try c.decodeIfPresent([Item].self, forKey: .items) ?? []
+    }
 }
 
 // MARK: - Member

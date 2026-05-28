@@ -417,6 +417,7 @@ final class LocalDataManager {
                     ownerId: home.ownerId,
                     role: home.role,
                     icon: home.icon,
+                    isFlagged: home.isFlagged,
                     needsSync: false
                 )
                 modelContext?.insert(localHome)
@@ -438,6 +439,7 @@ final class LocalDataManager {
             home.ownerId = homeDetail.ownerId
             home.role = homeDetail.role
             home.icon = homeDetail.icon
+            home.isFlagged = homeDetail.isFlagged
             home.needsSync = false
             result.applied += 1
         } else {
@@ -471,6 +473,7 @@ final class LocalDataManager {
                     type: location.type.rawValue,
                     sortOrder: location.sortOrder,
                     icon: location.icon,
+                    isFlagged: location.isFlagged,
                     needsSync: false
                 )
                 modelContext?.insert(localLocation)

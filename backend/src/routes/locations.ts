@@ -14,7 +14,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  const { name, parent_id, type, sort_order, icon } = LocationSchema.parse(req.body);
+  const { name, parent_id, type, sort_order, icon, is_flagged } = LocationSchema.parse(req.body);
   if (type === 'container') {
     const quota = await canCreateContainer(homeId);
     if (quota) { sendQuota(res, quota); return; }
@@ -32,10 +32,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, home_id, parent_id, name, type, sort_order, icon`,
-    [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null]
+    `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon, is_flagged)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, home_id, parent_id, name, type, sort_order, icon, is_flagged`,
+    [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null, is_flagged ?? false]
   );
   res.status(201).json(rows[0]);
 });
@@ -71,6 +71,7 @@ router.patch('/:locationId', async (req: AuthRequest, res: Response) => {
   if (updates.parent_id !== undefined) { fields.push(`parent_id = $${i++}`); values.push(updates.parent_id); }
   if (updates.sort_order !== undefined) { fields.push(`sort_order = $${i++}`); values.push(updates.sort_order); }
   if (updates.icon !== undefined) { fields.push(`icon = $${i++}`); values.push(updates.icon); }
+  if (updates.is_flagged !== undefined) { fields.push(`is_flagged = $${i++}`); values.push(updates.is_flagged); }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
 
   fields.push(`updated_at = NOW()`);

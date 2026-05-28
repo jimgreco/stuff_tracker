@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   HomeNameSchema,
+  HomeSchema,
   InviteSchema,
   AppStoreTransactionSyncSchema,
   ManualEntitlementGrantSchema,
@@ -15,6 +16,14 @@ test('home name schema enforces non-empty names up to 100 chars', () => {
   assert.equal(HomeNameSchema.parse({ name: '33 Stratton Sq' }).name, '33 Stratton Sq');
   assert.throws(() => HomeNameSchema.parse({ name: '' }));
   assert.throws(() => HomeNameSchema.parse({ name: 'x'.repeat(101) }));
+});
+
+test('home schema accepts icons and flags', () => {
+  assert.deepEqual(
+    HomeSchema.parse({ name: '145 Lex', icon: 'house.fill', is_flagged: false }),
+    { name: '145 Lex', icon: 'house.fill', is_flagged: false }
+  );
+  assert.throws(() => HomeSchema.parse({ name: '145 Lex', icon: '' }));
 });
 
 test('app store transaction sync schema accepts snake and camel case payloads', () => {

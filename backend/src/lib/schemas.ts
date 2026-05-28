@@ -11,6 +11,7 @@ export const LocationSchema = z.object({
   type: LocationTypeSchema,
   sort_order: z.number().int().optional(),
   icon: IconSchema,
+  is_flagged: z.boolean().optional(),
 });
 
 export const ItemDocumentSchema = z.object({
@@ -69,6 +70,7 @@ export const HomeNameSchema = z.object({
 export const HomeSchema = z.object({
   name: z.string().min(1).max(100),
   icon: IconSchema,
+  is_flagged: z.boolean().optional(),
 });
 
 export const MemberRoleSchema = z.enum(['admin', 'editor', 'viewer']);

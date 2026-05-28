@@ -388,8 +388,8 @@ final class APIClient {
         try await request("GET", path: "/homes")
     }
 
-    func createHome(name: String, icon: String? = nil) async throws -> Home {
-        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon))
+    func createHome(name: String, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Home {
+        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged))
     }
 
     func getHome(_ id: String) async throws -> HomeDetail {
@@ -399,20 +399,28 @@ final class APIClient {
     struct UpdateHomeBody: Encodable {
         let name: String
         let icon: String?
+        let isFlagged: Bool?
+
+        init(name: String, icon: String?, isFlagged: Bool? = nil) {
+            self.name = name
+            self.icon = icon
+            self.isFlagged = isFlagged
+        }
 
         enum CodingKeys: String, CodingKey {
-            case name, icon
+            case name, icon, isFlagged
         }
 
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(name, forKey: .name)
             try container.encode(icon, forKey: .icon)
+            try container.encodeIfPresent(isFlagged, forKey: .isFlagged)
         }
     }
 
-    func updateHome(_ id: String, name: String, icon: String? = nil) async throws -> Home {
-        try await request("PATCH", path: "/homes/\(id)", body: UpdateHomeBody(name: name, icon: icon))
+    func updateHome(_ id: String, name: String, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Home {
+        try await request("PATCH", path: "/homes/\(id)", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged))
     }
 
     func deleteHome(_ id: String) async throws {
@@ -446,9 +454,19 @@ final class APIClient {
         let type: String
         let sortOrder: Int?
         let icon: String?
+        let isFlagged: Bool?
+
+        init(name: String, parentId: String?, type: String, sortOrder: Int?, icon: String?, isFlagged: Bool? = nil) {
+            self.name = name
+            self.parentId = parentId
+            self.type = type
+            self.sortOrder = sortOrder
+            self.icon = icon
+            self.isFlagged = isFlagged
+        }
 
         enum CodingKeys: String, CodingKey {
-            case name, parentId, type, sortOrder, icon
+            case name, parentId, type, sortOrder, icon, isFlagged
         }
 
         func encode(to encoder: Encoder) throws {
@@ -458,12 +476,13 @@ final class APIClient {
             try container.encode(type, forKey: .type)
             try container.encodeIfPresent(sortOrder, forKey: .sortOrder)
             try container.encode(icon, forKey: .icon)
+            try container.encodeIfPresent(isFlagged, forKey: .isFlagged)
         }
     }
 
-    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil) async throws -> Location {
+    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Location {
         try await request("POST", path: "/homes/\(homeId)/locations",
-                          body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon))
+                          body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged))
     }
 
     struct UpdateLocationBody: Encodable {
@@ -471,9 +490,18 @@ final class APIClient {
         let parentId: String?
         let sortOrder: Int?
         let icon: String?
+        let isFlagged: Bool?
+
+        init(name: String?, parentId: String?, sortOrder: Int?, icon: String?, isFlagged: Bool? = nil) {
+            self.name = name
+            self.parentId = parentId
+            self.sortOrder = sortOrder
+            self.icon = icon
+            self.isFlagged = isFlagged
+        }
 
         enum CodingKeys: String, CodingKey {
-            case name, parentId, sortOrder, icon
+            case name, parentId, sortOrder, icon, isFlagged
         }
 
         func encode(to encoder: Encoder) throws {
@@ -482,12 +510,13 @@ final class APIClient {
             try container.encode(parentId, forKey: .parentId)
             try container.encodeIfPresent(sortOrder, forKey: .sortOrder)
             try container.encode(icon, forKey: .icon)
+            try container.encodeIfPresent(isFlagged, forKey: .isFlagged)
         }
     }
 
-    func updateLocation(homeId: String, locationId: String, name: String? = nil, parentId: String? = nil, sortOrder: Int? = nil, icon: String? = nil) async throws -> Location {
+    func updateLocation(homeId: String, locationId: String, name: String? = nil, parentId: String? = nil, sortOrder: Int? = nil, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Location {
         return try await request("PATCH", path: "/homes/\(homeId)/locations/\(locationId)",
-                                 body: UpdateLocationBody(name: name, parentId: parentId, sortOrder: sortOrder, icon: icon))
+                                 body: UpdateLocationBody(name: name, parentId: parentId, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged))
     }
 
     func deleteLocation(homeId: String, locationId: String) async throws {

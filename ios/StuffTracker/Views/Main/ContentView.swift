@@ -225,6 +225,27 @@ struct ContentView: View {
             let q = query.lowercased()
             let hasQuery = !q.isEmpty
             let homeMatches = hasQuery && home.name.localizedCaseInsensitiveContains(q)
+            let homeIsFlagged = showFlaggedOnly && home.isFlagged
+
+            if homeIsFlagged && (!hasQuery || homeMatches) {
+                return home
+            }
+
+            func expandedLocationIds(from rootIds: Set<String>) -> Set<String> {
+                var expandedIds = rootIds
+                var toExpand = rootIds
+                while !toExpand.isEmpty {
+                    let children = Set(
+                        home.locations
+                            .filter { loc in loc.parentId.map { toExpand.contains($0) } ?? false }
+                            .map { $0.id }
+                    )
+                    let newChildren = children.subtracting(expandedIds)
+                    expandedIds.formUnion(newChildren)
+                    toExpand = newChildren
+                }
+                return expandedIds
+            }
 
             // Find locations whose name matches
             let directMatchIds = Set(
@@ -234,18 +255,19 @@ struct ContentView: View {
             )
 
             // Expand to include all descendants of matching locations
-            var matchingLocationIds = directMatchIds
-            var toExpand = directMatchIds
-            while !toExpand.isEmpty {
-                let children = Set(
-                    home.locations
-                        .filter { loc in loc.parentId.map { toExpand.contains($0) } ?? false }
-                        .map { $0.id }
-                )
-                let newChildren = children.subtracting(matchingLocationIds)
-                matchingLocationIds.formUnion(newChildren)
-                toExpand = newChildren
-            }
+            let matchingLocationIds = expandedLocationIds(from: directMatchIds)
+
+            let flaggedRootLocationIds = Set(
+                home.locations
+                    .filter { location in
+                        guard showFlaggedOnly && location.isFlagged else { return false }
+                        if !hasQuery || homeMatches { return true }
+                        return location.name.localizedCaseInsensitiveContains(q) ||
+                        matchingLocationIds.contains(location.id)
+                    }
+                    .map(\.id)
+            )
+            let flaggedLocationIds = expandedLocationIds(from: flaggedRootLocationIds)
 
             // Find items that match by name/notes/properties
             let matchingItems = home.items.filter {
@@ -261,15 +283,18 @@ struct ContentView: View {
             }
 
             let visibleItems = home.items.filter { item in
-                if showFlaggedOnly && !item.isFlagged { return false }
+                let isInsideFlaggedHome = homeIsFlagged
+                let isInsideFlaggedLocation = item.locationId.map { flaggedLocationIds.contains($0) } ?? false
+                if showFlaggedOnly && !item.isFlagged && !isInsideFlaggedLocation && !isInsideFlaggedHome { return false }
                 if !hasQuery { return true }
+                if isInsideFlaggedLocation { return true }
                 if homeMatches { return true }
                 if matchingItems.contains(where: { $0.id == item.id }) { return true }
                 if let locId = item.locationId { return matchingLocationIds.contains(locId) }
                 return false
             }
 
-            if showFlaggedOnly && visibleItems.isEmpty {
+            if showFlaggedOnly && visibleItems.isEmpty && flaggedLocationIds.isEmpty && !(homeIsFlagged && !directMatchIds.isEmpty) {
                 return nil
             }
 
@@ -278,12 +303,13 @@ struct ContentView: View {
                 return home
             }
 
-            if !homeMatches && directMatchIds.isEmpty && visibleItems.isEmpty {
+            if !homeMatches && directMatchIds.isEmpty && visibleItems.isEmpty && flaggedLocationIds.isEmpty {
                 return nil
             }
 
             // Collect all location IDs we need to show (matching + ancestors)
-            var allNeeded = showFlaggedOnly ? Set<String>() : matchingLocationIds
+            var allNeeded = (showFlaggedOnly && !homeIsFlagged) ? Set<String>() : matchingLocationIds
+            allNeeded.formUnion(flaggedLocationIds)
             // Add locations needed for matching items
             allNeeded.formUnion(visibleItems.compactMap { $0.locationId })
             // Walk up to include ancestor locations
@@ -305,6 +331,7 @@ struct ContentView: View {
                 ownerId: home.ownerId,
                 role: home.role,
                 icon: home.icon,
+                isFlagged: home.isFlagged,
                 locations: filteredLocations,
                 items: visibleItems
             )
@@ -316,16 +343,16 @@ struct ContentView: View {
     }
 
     private var emptyFilterTitle: String {
-        showFlaggedOnly ? "No Flagged Items" : "No Results"
+        showFlaggedOnly ? "No Flags" : "No Results"
     }
 
     private var emptyFilterDescription: String {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         if showFlaggedOnly && !query.isEmpty {
-            return "No flagged items match \"\(query)\"."
+            return "No flagged homes, containers, or items match \"\(query)\"."
         }
         if showFlaggedOnly {
-            return "Flag items to keep them close at hand."
+            return "Flag homes, containers, or items to keep them close at hand."
         }
         return "No matches for \"\(query)\"."
     }

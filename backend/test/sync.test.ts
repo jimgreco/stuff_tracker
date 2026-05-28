@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LOCATION_TYPES, locationTypeConstraintSql } from '../src/db/locationTypeConstraint';
-import { ItemSchema, ItemUploadSchema, LocationSchema } from '../src/lib/schemas';
+import { HomeSchema, ItemSchema, ItemUploadSchema, LocationSchema } from '../src/lib/schemas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,10 +17,24 @@ test('location sync validation accepts floor locations', () => {
     type: 'floor',
     sort_order: 0,
     icon: 'building.2',
+    is_flagged: true,
   });
 
   assert.equal(parsed.type, 'floor');
   assert.equal(parsed.icon, 'building.2');
+  assert.equal(parsed.is_flagged, true);
+});
+
+test('home sync validation accepts flags', () => {
+  const parsed = HomeSchema.parse({
+    name: '145 Lex',
+    icon: 'house.fill',
+    is_flagged: true,
+  });
+
+  assert.equal(parsed.name, '145 Lex');
+  assert.equal(parsed.icon, 'house.fill');
+  assert.equal(parsed.is_flagged, true);
 });
 
 test('location sync validation rejects unknown location types', () => {
@@ -150,7 +164,9 @@ test('fresh database schema allows floor locations', () => {
   assert.match(schemaSql, /tokens_revoked_before TIMESTAMPTZ/);
   assert.match(schemaSql, /type IN \('floor', 'room', 'container'\)/);
   assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS icon TEXT/);
+  assert.match(schemaSql, /ALTER TABLE homes ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS icon TEXT/);
+  assert.match(schemaSql, /ALTER TABLE locations ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(schemaSql, /ALTER TABLE items ADD COLUMN IF NOT EXISTS icon TEXT/);
   assert.match(schemaSql, /serial_number TEXT/);
   assert.match(schemaSql, /warranty_expires_date DATE/);

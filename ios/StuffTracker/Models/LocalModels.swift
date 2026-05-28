@@ -10,6 +10,7 @@ final class LocalHome {
     var ownerId: String?
     var role: String
     var icon: String?
+    var isFlagged: Bool = false
     var sortOrder: Int = 0
     var needsSync: Bool
     var isDeleted: Bool
@@ -27,6 +28,7 @@ final class LocalHome {
          ownerId: String? = nil,
          role: String = "owner",
          icon: String? = nil,
+         isFlagged: Bool = false,
          sortOrder: Int = 0,
          needsSync: Bool = true,
          isDeleted: Bool = false) {
@@ -35,6 +37,7 @@ final class LocalHome {
         self.ownerId = ownerId
         self.role = role
         self.icon = icon
+        self.isFlagged = isFlagged
         self.sortOrder = sortOrder
         self.needsSync = needsSync
         self.isDeleted = isDeleted
@@ -46,7 +49,7 @@ final class LocalHome {
 
     // Convert to API model
     func toHome() -> Home {
-        Home(id: id, name: name, ownerId: ownerId ?? "", role: role, icon: icon)
+        Home(id: id, name: name, ownerId: ownerId ?? "", role: role, icon: icon, isFlagged: isFlagged)
     }
 
     // Convert to HomeDetail
@@ -57,6 +60,7 @@ final class LocalHome {
             ownerId: ownerId ?? "",
             role: role,
             icon: icon,
+            isFlagged: isFlagged,
             locations: locations.filter { !$0.isDeleted }.map { $0.toLocation() },
             items: items.filter { !$0.isDeleted }.map { $0.toItem() }
         )
@@ -68,6 +72,7 @@ final class LocalHome {
         self.ownerId = home.ownerId
         self.role = home.role
         self.icon = home.icon
+        self.isFlagged = home.isFlagged
         self.needsSync = false
         self.updatedAt = Date()
     }
@@ -82,6 +87,7 @@ final class LocalLocation {
     var type: String // "floor", "room" or "container"
     var sortOrder: Int
     var icon: String?
+    var isFlagged: Bool = false
     var needsSync: Bool
     var isDeleted: Bool
     var createdAt: Date
@@ -96,6 +102,7 @@ final class LocalLocation {
          type: String,
          sortOrder: Int = 0,
          icon: String? = nil,
+         isFlagged: Bool = false,
          needsSync: Bool = true,
          isDeleted: Bool = false) {
         self.id = id
@@ -105,6 +112,7 @@ final class LocalLocation {
         self.type = type
         self.sortOrder = sortOrder
         self.icon = icon
+        self.isFlagged = isFlagged
         self.needsSync = needsSync
         self.isDeleted = isDeleted
         self.createdAt = Date()
@@ -119,7 +127,8 @@ final class LocalLocation {
             name: name,
             type: Location.LocationType(rawValue: type) ?? .room,
             sortOrder: sortOrder,
-            icon: icon
+            icon: icon,
+            isFlagged: isFlagged
         )
     }
 
@@ -129,6 +138,7 @@ final class LocalLocation {
         self.type = location.type.rawValue
         self.sortOrder = location.sortOrder
         self.icon = location.icon
+        self.isFlagged = location.isFlagged
         self.needsSync = false
         self.updatedAt = Date()
     }
