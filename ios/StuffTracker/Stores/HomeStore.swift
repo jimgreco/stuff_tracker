@@ -417,6 +417,25 @@ final class HomeStore: ObservableObject {
         enqueueSyncIfNeeded()
     }
 
+    func setItemsFlagged(homeId: String, itemIds: [String], isFlagged: Bool) {
+        guard let hIdx = detailIndex(for: homeId) else { return }
+
+        var seen = Set<String>()
+        let uniqueIds = itemIds.filter { seen.insert($0).inserted }
+        guard !uniqueIds.isEmpty else { return }
+
+        for itemId in uniqueIds {
+            if let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == itemId }) {
+                homeDetails[hIdx].items[iIdx].isFlagged = isFlagged
+            }
+            if let localItem = local.fetchItem(id: itemId) {
+                localItem.isFlagged = isFlagged
+                local.updateItem(localItem)
+            }
+        }
+        enqueueSyncIfNeeded()
+    }
+
     func reorderItem(homeId: String, itemId: String, toIndex destination: Int) {
         guard let hIdx = detailIndex(for: homeId),
               let item = homeDetails[hIdx].items.first(where: { $0.id == itemId }) else { return }

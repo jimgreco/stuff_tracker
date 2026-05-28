@@ -65,6 +65,8 @@ struct ContentView: View {
     @State private var isAddingHome = false
     @State private var newHomeName = ""
     @State private var showAccountSheet = false
+    @State private var showBulkMoveSheet = false
+    @State private var showBulkDeleteConfirm = false
     @State private var breadcrumbPath: [String] = []
     @FocusState private var isSearchFocused: Bool
 
@@ -161,11 +163,22 @@ struct ContentView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                BottomSearchControls(
-                    searchText: $searchText,
-                    showFlaggedOnly: $showFlaggedOnly,
-                    isSearchFocused: $isSearchFocused
-                )
+                if itemSelection.isSelecting {
+                    SelectionActionBar(
+                        selectedCount: itemSelection.selectedCount,
+                        canMove: selectedHomeForActions != nil,
+                        isUnflagAction: shouldUnflagSelection,
+                        onMove: { showBulkMoveSheet = true },
+                        onFlag: { setSelectedItemsFlagged() },
+                        onDelete: { requestDeleteSelectedItems() }
+                    )
+                } else {
+                    BottomSearchControls(
+                        searchText: $searchText,
+                        showFlaggedOnly: $showFlaggedOnly,
+                        isSearchFocused: $isSearchFocused
+                    )
+                }
             }
             .overlay(alignment: .bottom) {
                 DragTrashZone(homeStore: homeStore)
@@ -224,6 +237,13 @@ struct ContentView: View {
                     .environmentObject(authStore)
                     .environmentObject(SyncManager.shared)
             }
+            .sheet(isPresented: $showBulkMoveSheet) {
+                if let home = selectedHomeForActions {
+                    BulkItemMoveSheet(home: home, selectedCount: itemSelection.selectedCount) { locationId in
+                        moveSelectedItems(to: locationId)
+                    }
+                }
+            }
             .overlay {
                 if tutorialController.isPresented {
                     FirstRunTutorialOverlay(homeStore: homeStore)
@@ -238,6 +258,14 @@ struct ContentView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(homeStore.errorMessage ?? "")
+            }
+            .alert("Delete \(itemSelection.selectedCount) items?", isPresented: $showBulkDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    deleteSelectedItems()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will move the selected items to the trash.")
             }
             .task {
                 await homeStore.loadHomes()
@@ -254,6 +282,62 @@ struct ContentView: View {
     private func dismissSearchInput() {
         guard isSearchFocused else { return }
         isSearchFocused = false
+    }
+
+    private var selectedHomeForActions: HomeDetail? {
+        guard let homeId = itemSelection.selectedHomeId else { return nil }
+        return homeStore.homeDetails.first { $0.id == homeId }
+    }
+
+    private var selectedItemsForActions: [Item] {
+        guard let home = selectedHomeForActions else { return [] }
+        let selectedIds = Set(itemSelection.selectedItemIds)
+        return home.items.filter { selectedIds.contains($0.id) }
+    }
+
+    private var shouldUnflagSelection: Bool {
+        let selectedItems = selectedItemsForActions
+        return !selectedItems.isEmpty && selectedItems.allSatisfy(\.isFlagged)
+    }
+
+    private func moveSelectedItems(to locationId: String?) {
+        guard let homeId = itemSelection.selectedHomeId,
+              itemSelection.selectedCount > 0 else { return }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            homeStore.moveItems(homeId: homeId, itemIds: itemSelection.selectedItemIds, toLocation: locationId)
+            itemSelection.clearSelection()
+        }
+    }
+
+    private func setSelectedItemsFlagged() {
+        guard let homeId = itemSelection.selectedHomeId,
+              itemSelection.selectedCount > 0 else { return }
+
+        let shouldFlag = !shouldUnflagSelection
+        withAnimation(.easeInOut(duration: 0.18)) {
+            homeStore.setItemsFlagged(homeId: homeId, itemIds: itemSelection.selectedItemIds, isFlagged: shouldFlag)
+            itemSelection.clearSelection()
+        }
+    }
+
+    private func requestDeleteSelectedItems() {
+        guard itemSelection.selectedCount > 0 else { return }
+        if itemSelection.selectedCount > 1 {
+            showBulkDeleteConfirm = true
+        } else {
+            deleteSelectedItems()
+        }
+    }
+
+    private func deleteSelectedItems() {
+        guard let homeId = itemSelection.selectedHomeId,
+              itemSelection.selectedCount > 0 else { return }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            homeStore.deleteItems(homeId: homeId, itemIds: itemSelection.selectedItemIds)
+            itemSelection.clearSelection()
+        }
     }
 
     private func updateBreadcrumbPath(from anchors: [BreadcrumbAnchor]) {
@@ -435,6 +519,237 @@ private struct SearchDismissTapShield: View {
     }
 }
 
+private struct SelectionActionBar: View {
+    let selectedCount: Int
+    let canMove: Bool
+    let isUnflagAction: Bool
+    let onMove: () -> Void
+    let onFlag: () -> Void
+    let onDelete: () -> Void
+
+    private var hasSelection: Bool {
+        selectedCount > 0
+    }
+
+    private var selectionText: String {
+        selectedCount == 1 ? "1 selected" : "\(selectedCount) selected"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(selectionText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(hasSelection ? .primary : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(minWidth: 68, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            SelectionActionButton(
+                title: "Move",
+                systemImage: "folder",
+                tint: .blue,
+                isEnabled: hasSelection && canMove,
+                action: onMove
+            )
+
+            SelectionActionButton(
+                title: isUnflagAction ? "Unflag" : "Flag",
+                systemImage: isUnflagAction ? "flag.slash" : "flag.fill",
+                tint: .orange,
+                isEnabled: hasSelection,
+                action: onFlag
+            )
+
+            SelectionActionButton(
+                title: "Delete",
+                systemImage: "trash",
+                tint: .red,
+                isEnabled: hasSelection,
+                action: onDelete
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .selectionActionBarSurface()
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .animation(.easeInOut(duration: 0.18), value: selectedCount)
+    }
+}
+
+private struct SelectionActionButton: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: systemImage)
+                    .font(.callout.weight(.semibold))
+                    .frame(height: 18)
+
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .frame(width: 52, height: 48)
+            .selectionActionButtonSurface(tint: tint, isEnabled: isEnabled)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct SelectionActionBarSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(Color(.systemBackground).opacity(0.18), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.18), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.12), radius: 16, y: 6)
+        } else {
+            content
+                .background(.thinMaterial, in: shape)
+                .overlay(shape.stroke(Color(.separator).opacity(0.18), lineWidth: 0.75))
+                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+        }
+    }
+}
+
+private struct SelectionActionButtonSurfaceModifier: ViewModifier {
+    let tint: Color
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .foregroundStyle(isEnabled ? tint : Color.secondary)
+                .background(isEnabled ? tint.opacity(0.10) : Color(.systemBackground).opacity(0.10), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(isEnabled ? tint.opacity(0.22) : Color.white.opacity(0.10), lineWidth: 0.75))
+                .opacity(isEnabled ? 1 : 0.48)
+        } else {
+            content
+                .foregroundStyle(isEnabled ? tint : Color.secondary)
+                .background(isEnabled ? tint.opacity(0.12) : Color(.secondarySystemGroupedBackground), in: shape)
+                .overlay(shape.stroke(isEnabled ? tint.opacity(0.28) : Color(.separator).opacity(0.14), lineWidth: 0.75))
+                .opacity(isEnabled ? 1 : 0.48)
+        }
+    }
+}
+
+private struct BulkItemMoveSheet: View {
+    let home: HomeDetail
+    let selectedCount: Int
+    let onMove: (String?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var path: [String] = []
+
+    private var title: String {
+        selectedCount == 1 ? "Move Item" : "Move Items"
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            BulkItemMoveLevel(home: home, parentId: nil, onMove: onMove, dismissSheet: { dismiss() })
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        DismissButton()
+                    }
+                }
+                .navigationDestination(for: String.self) { locId in
+                    let loc = home.locations.first(where: { $0.id == locId })
+                    BulkItemMoveLevel(home: home, parentId: locId, onMove: onMove, dismissSheet: { dismiss() })
+                        .navigationTitle(loc?.name ?? "")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+        }
+    }
+}
+
+private struct BulkItemMoveLevel: View {
+    let home: HomeDetail
+    let parentId: String?
+    let onMove: (String?) -> Void
+    let dismissSheet: () -> Void
+
+    private var children: [Location] {
+        home.locations
+            .filter { $0.parentId == parentId }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    move(to: parentId)
+                } label: {
+                    HStack {
+                        Label(parentId == nil ? "Move to \(home.name)" : "Move here", systemImage: parentId == nil ? (home.icon ?? "house.fill") : "checkmark.circle")
+                        Spacer()
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
+
+            if !children.isEmpty {
+                Section {
+                    ForEach(children) { loc in
+                        let hasChildren = home.locations.contains { $0.parentId == loc.id }
+                        if hasChildren {
+                            NavigationLink(value: loc.id) {
+                                Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
+                            }
+                        } else {
+                            Button {
+                                move(to: loc.id)
+                            } label: {
+                                HStack {
+                                    Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
+                                    Spacer()
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func move(to locationId: String?) {
+        onMove(locationId)
+        dismissSheet()
+    }
+}
+
+private struct DismissButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button("Cancel") {
+            dismiss()
+        }
+    }
+}
+
 private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
@@ -561,6 +876,14 @@ private struct BottomFlagFilterSurfaceModifier: ViewModifier {
 }
 
 private extension View {
+    func selectionActionBarSurface() -> some View {
+        modifier(SelectionActionBarSurfaceModifier())
+    }
+
+    func selectionActionButtonSurface(tint: Color, isEnabled: Bool) -> some View {
+        modifier(SelectionActionButtonSurfaceModifier(tint: tint, isEnabled: isEnabled))
+    }
+
     func bottomSearchFieldSurface(isFocused: Bool) -> some View {
         modifier(BottomSearchFieldSurfaceModifier(isFocused: isFocused))
     }
@@ -1002,7 +1325,7 @@ struct FirstRunTutorialOverlay: View {
                 TutorialFeatureRow(
                     systemImage: "checkmark.circle",
                     title: "Move several",
-                    detail: "Use Select, choose multiple items, then drag the group together."
+                    detail: "Use Select, choose multiple items, then move, flag, or delete them from the bottom controls."
                 )
                 TutorialFeatureRow(
                     systemImage: "trash",
