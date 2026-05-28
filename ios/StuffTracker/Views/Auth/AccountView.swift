@@ -5,6 +5,7 @@ import StoreKit
 
 struct AccountView: View {
     @ObservedObject var homeStore: HomeStore
+    var onReplayTutorial: () -> Void = {}
     @EnvironmentObject var authStore: AuthStore
     @EnvironmentObject var syncManager: SyncManager
     @EnvironmentObject var subscriptionStore: SubscriptionStore
@@ -37,6 +38,7 @@ struct AccountView: View {
                     unauthenticatedSection
                 }
 
+                tutorialSection
                 appBuildSection
             }
             .navigationTitle("Account")
@@ -82,6 +84,16 @@ struct AccountView: View {
                 .textSelection(.enabled)
         }
         .listRowBackground(Color.clear)
+    }
+
+    private var tutorialSection: some View {
+        Section("Tutorial") {
+            Button {
+                onReplayTutorial()
+            } label: {
+                Label("Reset Tutorial", systemImage: "arrow.counterclockwise.circle")
+            }
+        }
     }
 
     // MARK: - Authenticated

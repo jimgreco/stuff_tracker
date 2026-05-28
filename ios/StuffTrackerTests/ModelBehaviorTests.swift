@@ -255,4 +255,66 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertTrue(store.isCollapsed(.location("container-1")))
         XCTAssertEqual(defaults.stringArray(forKey: key), ["location:container-1"])
     }
+
+    @MainActor
+    func testFirstRunTutorialControllerPresentsForEmptyFirstRunAndPersistsCompletion() {
+        let suiteName = "FirstRunTutorialControllerTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let controller = FirstRunTutorialController(defaults: defaults)
+
+        XCTAssertFalse(controller.hasCompleted)
+        controller.presentAfterInitialLoad(hasExistingHomes: false)
+        XCTAssertTrue(controller.isPresented)
+
+        controller.complete()
+        XCTAssertTrue(controller.hasCompleted)
+        XCTAssertFalse(controller.isPresented)
+        XCTAssertTrue(defaults.bool(forKey: FirstRunTutorialController.completedDefaultsKey))
+
+        let reloaded = FirstRunTutorialController(defaults: defaults)
+        XCTAssertTrue(reloaded.hasCompleted)
+    }
+
+    @MainActor
+    func testFirstRunTutorialControllerDoesNotAutoPresentForExistingHomes() {
+        let suiteName = "FirstRunTutorialControllerTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let controller = FirstRunTutorialController(defaults: defaults)
+        controller.presentAfterInitialLoad(hasExistingHomes: true)
+
+        XCTAssertTrue(controller.hasCompleted)
+        XCTAssertFalse(controller.isPresented)
+        XCTAssertTrue(defaults.bool(forKey: FirstRunTutorialController.completedDefaultsKey))
+    }
+
+    @MainActor
+    func testFirstRunTutorialControllerResetAndReplayClearsCompletion() {
+        let suiteName = "FirstRunTutorialControllerTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(true, forKey: FirstRunTutorialController.completedDefaultsKey)
+
+        let controller = FirstRunTutorialController(defaults: defaults)
+        controller.resetAndReplay()
+
+        XCTAssertFalse(controller.hasCompleted)
+        XCTAssertTrue(controller.isPresented)
+        XCTAssertFalse(defaults.bool(forKey: FirstRunTutorialController.completedDefaultsKey))
+    }
 }

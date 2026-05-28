@@ -7,6 +7,7 @@ struct StuffTrackerApp: App {
     @StateObject private var authStore = AuthStore()
     @StateObject private var syncManager = SyncManager.shared
     @StateObject private var subscriptionStore = SubscriptionStore.shared
+    @StateObject private var tutorialController = FirstRunTutorialController()
 
     init() {
         // Configure Google Sign-In with client ID from Info.plist
@@ -25,6 +26,7 @@ struct StuffTrackerApp: App {
                 .environmentObject(authStore)
                 .environmentObject(syncManager)
                 .environmentObject(subscriptionStore)
+                .environmentObject(tutorialController)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

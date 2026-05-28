@@ -14,8 +14,49 @@ struct BreadcrumbPreferenceKey: PreferenceKey {
     }
 }
 
+@MainActor
+final class FirstRunTutorialController: ObservableObject {
+    static let completedDefaultsKey = "has_completed_first_run_tutorial_v1"
+
+    @Published private(set) var hasCompleted: Bool
+    @Published var isPresented = false
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.hasCompleted = defaults.bool(forKey: Self.completedDefaultsKey)
+    }
+
+    func presentAfterInitialLoad(hasExistingHomes: Bool) {
+        guard !hasCompleted else { return }
+
+        if hasExistingHomes {
+            complete()
+        } else {
+            isPresented = true
+        }
+    }
+
+    func resetAndReplay() {
+        setCompleted(false)
+        isPresented = true
+    }
+
+    func complete() {
+        setCompleted(true)
+        isPresented = false
+    }
+
+    private func setCompleted(_ completed: Bool) {
+        hasCompleted = completed
+        defaults.set(completed, forKey: Self.completedDefaultsKey)
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
+    @EnvironmentObject private var tutorialController: FirstRunTutorialController
     @StateObject private var homeStore = HomeStore()
     @StateObject private var collapseStore = HierarchyCollapseStore()
     @StateObject private var itemSelection = ItemSelectionController()
@@ -174,9 +215,18 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: $showAccountSheet) {
-                AccountView(homeStore: homeStore)
+                AccountView(homeStore: homeStore) {
+                    showAccountSheet = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        tutorialController.resetAndReplay()
+                    }
+                }
                     .environmentObject(authStore)
                     .environmentObject(SyncManager.shared)
+            }
+            .fullScreenCover(isPresented: $tutorialController.isPresented) {
+                FirstRunTutorialView(homeStore: homeStore)
+                    .environmentObject(tutorialController)
             }
             .alert("Error", isPresented: Binding<Bool>(
                 get: { homeStore.errorMessage != nil },
@@ -186,7 +236,10 @@ struct ContentView: View {
             } message: {
                 Text(homeStore.errorMessage ?? "")
             }
-            .task { await homeStore.loadHomes() }
+            .task {
+                await homeStore.loadHomes()
+                tutorialController.presentAfterInitialLoad(hasExistingHomes: !homeStore.homeDetails.isEmpty)
+            }
             .onReceive(homeStore.$homeDetails) { homes in
                 collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
                 itemSelection.prune(validItemIds: Set(homes.flatMap(\.items).map(\.id)))
@@ -656,6 +709,475 @@ struct EmptyHomePrompt: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - First run tutorial
+
+private enum FirstRunTutorialStep: Int, CaseIterable {
+    case welcome
+    case home
+    case rooms
+    case item
+    case details
+    case moving
+
+    var title: String {
+        switch self {
+        case .welcome: return "Welcome"
+        case .home: return "Create a Home"
+        case .rooms: return "Floors and Rooms"
+        case .item: return "Add an Item"
+        case .details: return "Open Details"
+        case .moving: return "Move Things"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .welcome: return "shippingbox.fill"
+        case .home: return "house.fill"
+        case .rooms: return "door.left.hand.open"
+        case .item: return "tag.fill"
+        case .details: return "slider.horizontal.3"
+        case .moving: return "hand.draw.fill"
+        }
+    }
+}
+
+struct FirstRunTutorialView: View {
+    @ObservedObject var homeStore: HomeStore
+    @EnvironmentObject private var tutorialController: FirstRunTutorialController
+    @State private var step: FirstRunTutorialStep = .welcome
+    @State private var homeName = "Home"
+    @State private var itemName = "Keys"
+    @State private var selectedHomeId: String?
+    @State private var selectedItemId: String?
+    @State private var didOpenItemDetails = false
+    @State private var editingItem: Item?
+
+    private var stepIndex: Int {
+        FirstRunTutorialStep.allCases.firstIndex(of: step) ?? 0
+    }
+
+    private var selectedHome: HomeDetail? {
+        if let selectedHomeId,
+           let home = homeStore.homeDetails.first(where: { $0.id == selectedHomeId }) {
+            return home
+        }
+        return homeStore.homeDetails.first
+    }
+
+    private var selectedItem: Item? {
+        guard let home = selectedHome else { return nil }
+        if let selectedItemId,
+           let item = home.items.first(where: { $0.id == selectedItemId }) {
+            return item
+        }
+        return home.items.first
+    }
+
+    private var primaryButtonTitle: String {
+        switch step {
+        case .welcome, .rooms:
+            return "Next"
+        case .home:
+            return selectedHome == nil ? "Create Home" : "Next"
+        case .item:
+            return selectedItem == nil ? "Create Item" : "Next"
+        case .details:
+            return didOpenItemDetails ? "Next" : "Open Details"
+        case .moving:
+            return "Finish"
+        }
+    }
+
+    private var canUsePrimaryButton: Bool {
+        switch step {
+        case .home:
+            return selectedHome != nil || !homeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .item:
+            return selectedItem != nil || !itemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .details:
+            return selectedItem != nil
+        default:
+            return true
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        header
+                        stepContent
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Divider()
+
+                footer
+            }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle("Tutorial")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Skip") {
+                        tutorialController.complete()
+                    }
+                }
+            }
+            .interactiveDismissDisabled()
+            .sheet(item: $editingItem) { item in
+                let latestItem = latestItem(withId: item.id) ?? item
+                ItemEditView(item: latestItem, homeStore: homeStore, homeId: latestItem.homeId)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ProgressView(value: Double(stepIndex + 1), total: Double(FirstRunTutorialStep.allCases.count))
+                .tint(.accentColor)
+
+            HStack(alignment: .center, spacing: 16) {
+                Image(systemName: step.systemImage)
+                    .font(.system(size: 34, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 58, height: 58)
+                    .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Step \(stepIndex + 1) of \(FirstRunTutorialStep.allCases.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+
+                    Text(step.title)
+                        .font(.title2.weight(.bold))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stepContent: some View {
+        switch step {
+        case .welcome:
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Stuff Tracker starts with a Home, then lets you organize items directly in that Home or inside optional floors, rooms, and containers.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TutorialFeatureRow(
+                    systemImage: "house",
+                    title: "Homes",
+                    detail: "Create one for each place you want to track."
+                )
+                TutorialFeatureRow(
+                    systemImage: "square.grid.2x2",
+                    title: "Spaces",
+                    detail: "Floors and rooms are available when you want more structure."
+                )
+                TutorialFeatureRow(
+                    systemImage: "tag",
+                    title: "Items",
+                    detail: "Add the things you want to find, document, or keep organized."
+                )
+            }
+
+        case .home:
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Create your first Home. This is the top-level place where your stuff lives.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TextField("Home name", text: $homeName)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .tutorialTextFieldSurface()
+
+                if let selectedHome {
+                    TutorialSelectedRow(
+                        systemImage: "checkmark.circle.fill",
+                        text: "Using \(selectedHome.name)"
+                    )
+                }
+            }
+
+        case .rooms:
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Floors and rooms are optional. You can add them later from a Home menu, and items can stay directly in the Home until you need more organization.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TutorialFeatureRow(
+                    systemImage: "building.2",
+                    title: "Floors",
+                    detail: "Useful for larger homes, offices, storage units, or multi-level spaces."
+                )
+                TutorialFeatureRow(
+                    systemImage: "door.left.hand.closed",
+                    title: "Rooms",
+                    detail: "Use rooms to group items by where you would naturally look for them."
+                )
+                TutorialFeatureRow(
+                    systemImage: "shippingbox",
+                    title: "Containers",
+                    detail: "Rooms can hold containers, and containers can hold more containers."
+                )
+            }
+
+        case .item:
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Add an item to the Home. You can move it into a room or container later.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                if let selectedHome {
+                    TutorialSelectedRow(
+                        systemImage: "house.fill",
+                        text: selectedHome.name
+                    )
+                }
+
+                TextField("Item name", text: $itemName)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .tutorialTextFieldSurface()
+
+                if let selectedItem {
+                    TutorialSelectedRow(
+                        systemImage: "checkmark.circle.fill",
+                        text: "Created \(selectedItem.name)"
+                    )
+                }
+            }
+
+        case .details:
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Open the item details to see what is editable: name, icon, quantity, notes, dates, serial and model numbers, value, location, and custom properties.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TutorialFeatureRow(
+                    systemImage: "photo.on.rectangle",
+                    title: "Photos",
+                    detail: "Add photos from your library or camera."
+                )
+                TutorialFeatureRow(
+                    systemImage: "doc.badge.plus",
+                    title: "Documents",
+                    detail: "Attach manuals, receipts, warranties, or other files."
+                )
+
+                if didOpenItemDetails {
+                    TutorialSelectedRow(
+                        systemImage: "checkmark.circle.fill",
+                        text: "Details opened"
+                    )
+                }
+            }
+
+        case .moving:
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Items, homes, rooms, and containers can be dragged and dropped to reorder or move them where they belong.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+
+                TutorialFeatureRow(
+                    systemImage: "hand.draw",
+                    title: "Drag items",
+                    detail: "Long-press an item chip, then drag it into a Home, room, or container."
+                )
+                TutorialFeatureRow(
+                    systemImage: "checkmark.circle",
+                    title: "Move several",
+                    detail: "Use Select, choose multiple items, then drag the group together."
+                )
+                TutorialFeatureRow(
+                    systemImage: "trash",
+                    title: "Drop to delete",
+                    detail: "Drag to the bottom trash target when you want to delete something."
+                )
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            if stepIndex > 0 {
+                Button {
+                    moveBack()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Spacer()
+
+            Button {
+                performPrimaryAction()
+            } label: {
+                Label(primaryButtonTitle, systemImage: step == .moving ? "checkmark" : "chevron.right")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!canUsePrimaryButton)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.regularMaterial)
+    }
+
+    private func performPrimaryAction() {
+        switch step {
+        case .welcome, .rooms:
+            moveForward()
+        case .home:
+            if selectedHome == nil {
+                createTutorialHome()
+            }
+            if selectedHome != nil {
+                moveForward()
+            }
+        case .item:
+            if selectedItem == nil {
+                createTutorialItem()
+            }
+            if selectedItem != nil {
+                moveForward()
+            }
+        case .details:
+            if didOpenItemDetails {
+                moveForward()
+            } else {
+                openSelectedItemDetails()
+            }
+        case .moving:
+            tutorialController.complete()
+        }
+    }
+
+    private func moveForward() {
+        let allSteps = FirstRunTutorialStep.allCases
+        let nextIndex = min(stepIndex + 1, allSteps.count - 1)
+        withAnimation(.easeInOut(duration: 0.18)) {
+            step = allSteps[nextIndex]
+        }
+    }
+
+    private func moveBack() {
+        let allSteps = FirstRunTutorialStep.allCases
+        let previousIndex = max(stepIndex - 1, 0)
+        withAnimation(.easeInOut(duration: 0.18)) {
+            step = allSteps[previousIndex]
+        }
+    }
+
+    private func createTutorialHome() {
+        let trimmedName = homeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        let existingIds = Set(homeStore.homeDetails.map(\.id))
+        homeStore.createHome(name: trimmedName)
+        selectedHomeId = homeStore.homeDetails.first { !existingIds.contains($0.id) }?.id
+            ?? homeStore.homeDetails.first?.id
+    }
+
+    private func createTutorialItem() {
+        guard let home = selectedHome else { return }
+        let trimmedName = itemName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        let existingIds = Set(home.items.map(\.id))
+        homeStore.createItem(homeId: home.id, name: trimmedName, locationId: nil)
+        selectedItemId = homeStore.homeDetails
+            .first(where: { $0.id == home.id })?
+            .items
+            .first { !existingIds.contains($0.id) }?
+            .id
+    }
+
+    private func openSelectedItemDetails() {
+        guard let item = selectedItem else { return }
+        didOpenItemDetails = true
+        editingItem = item
+    }
+
+    private func latestItem(withId itemId: String) -> Item? {
+        for home in homeStore.homeDetails {
+            if let item = home.items.first(where: { $0.id == itemId }) {
+                return item
+            }
+        }
+        return nil
+    }
+}
+
+private struct TutorialFeatureRow: View {
+    let systemImage: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.headline)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 28, height: 28)
+                .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct TutorialSelectedRow: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.green)
+            .lineLimit(2)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct TutorialTextFieldSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color(.separator).opacity(0.26), lineWidth: 0.75)
+            }
+    }
+}
+
+private extension View {
+    func tutorialTextFieldSurface() -> some View {
+        modifier(TutorialTextFieldSurfaceModifier())
     }
 }
 
