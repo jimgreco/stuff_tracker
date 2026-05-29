@@ -115,8 +115,7 @@ capabilities = request(
   "/bundleIds/#{bundle_id}/bundleIdCapabilities",
   token,
   query: {
-    "fields[bundleIdCapabilities]" => "capabilityType",
-    "limit" => "200"
+    "fields[bundleIdCapabilities]" => "capabilityType"
   }
 ).fetch("data")
 
