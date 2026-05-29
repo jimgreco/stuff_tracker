@@ -53,6 +53,10 @@ export function createApp() {
     }
   });
 
+  app.get(['/apple-app-site-association', '/.well-known/apple-app-site-association'], (_req, res) => {
+    res.type('application/json').send(appleAppSiteAssociation());
+  });
+
   app.use('/auth', authRateLimit, authRouter);
   app.use('/account', accountRouter);
   app.use('/admin', adminRouter);
@@ -93,7 +97,32 @@ function configureStaticWeb(app: ReturnType<typeof express>): void {
 
   app.use(express.static(webRoot, { index: false }));
   app.use('/web', express.static(webRoot, { index: false }));
+  app.get(['/items/:homeId/:itemId', '/web/items/:homeId/:itemId'], sendIndex);
   app.get(['/', '/web', '/web/'], sendIndex);
+}
+
+function appleAppSiteAssociation() {
+  return {
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: `${associatedDomainsTeamId()}.${associatedDomainsBundleId()}`,
+          paths: ['/items/*'],
+        },
+      ],
+    },
+  };
+}
+
+function associatedDomainsTeamId(): string {
+  return process.env.APPLE_TEAM_ID?.trim() || 'V6JPQCD336';
+}
+
+function associatedDomainsBundleId(): string {
+  return process.env.APP_STORE_BUNDLE_ID?.trim()
+    || process.env.APPLE_BUNDLE_ID?.trim()
+    || 'com.jimgreco.stufftracker';
 }
 
 function staticWebRoot(): string | undefined {

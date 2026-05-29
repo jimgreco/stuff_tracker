@@ -12,6 +12,7 @@
 
   const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
   const STORED_TOKEN = localStorage.getItem(STORAGE.token) || "";
+  const INITIAL_ITEM_LINK = parseItemDeepLink(window.location);
   const app = document.getElementById("app");
 
   const state = {
@@ -20,6 +21,7 @@
     user: STORED_TOKEN ? readJson(STORAGE.user, null) : null,
     accountPlan: null,
     homes: STORED_TOKEN ? readJson(STORAGE.homes, []) : [],
+    homesLoaded: false,
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
     flaggedOnly: false,
@@ -32,6 +34,10 @@
     authConfigLoaded: false,
     googleClientId: "",
     appleClientId: "",
+    appStoreUrl: "",
+    pendingItemLink: INITIAL_ITEM_LINK,
+    deepLinkHandled: false,
+    highlightedItemId: "",
   };
 
   if (!STORED_TOKEN) {
@@ -136,6 +142,29 @@
     return "http://localhost:3002";
   }
 
+  function parseItemDeepLink(location) {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const offset = parts[0] === "web" ? 1 : 0;
+    if (parts[offset] !== "items" || parts.length !== offset + 3) return null;
+
+    const homeId = decodePathPart(parts[offset + 1]);
+    const itemId = decodePathPart(parts[offset + 2]);
+    if (!homeId || !itemId) return null;
+
+    return {
+      homeId,
+      itemId,
+    };
+  }
+
+  function decodePathPart(value) {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return "";
+    }
+  }
+
   function writeJson(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
   }
@@ -161,6 +190,7 @@
 
   function clearCachedData() {
     state.homes = [];
+    state.homesLoaded = false;
     state.accountPlan = null;
     state.collapsed = new Set();
     localStorage.removeItem(STORAGE.homes);
@@ -301,6 +331,9 @@
 
   function renderApp() {
     if (!state.token) {
+      if (state.pendingItemLink) {
+        return renderSharedItemFallback();
+      }
       return renderSignedOutApp();
     }
 
@@ -346,12 +379,43 @@
     `;
   }
 
+  function renderSharedItemFallback() {
+    return `
+      <div class="marketing-page shared-link-page">
+        <header class="marketing-nav">
+          <a class="marketing-brand" href="/" aria-label="Stuff Tracker home">
+            <img src="/assets/app-icon.png" width="34" height="34" alt="">
+            <span>Stuff Tracker</span>
+          </a>
+          <button type="button" class="marketing-sign-in" data-action="open-account">Sign in</button>
+        </header>
+        <main class="shared-link-main">
+          <section class="shared-link-panel">
+            <img class="shared-link-icon" src="/assets/app-icon.png" width="76" height="76" alt="">
+            <p class="marketing-kicker">Shared item</p>
+            <h1>Open this item in Stuff Tracker</h1>
+            <p class="shared-link-copy">Sign in with an account that can access this home, or install the iOS app and open the shared HTTPS link again.</p>
+            <div class="shared-link-actions">
+              ${state.appStoreUrl ? `<a class="marketing-secondary" href="${escapeAttr(state.appStoreUrl)}" target="_blank" rel="noreferrer">Get iOS App</a>` : ""}
+              <button type="button" class="marketing-primary button-reset" data-action="open-account">Sign in on Web</button>
+            </div>
+            <div class="shared-link-auth">
+              ${state.authConfigLoaded ? renderAuthControls() : `<div class="auth-unavailable">Loading sign-in providers...</div>`}
+            </div>
+          </section>
+        </main>
+        ${renderSheet()}
+        ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
+      </div>
+    `;
+  }
+
   function renderSignedOutApp() {
     return `
       <div class="marketing-page">
         <header class="marketing-nav">
           <a class="marketing-brand" href="#top" aria-label="Stuff Tracker home">
-            <img src="./assets/app-icon.png" width="34" height="34" alt="">
+            <img src="/assets/app-icon.png" width="34" height="34" alt="">
             <span>Stuff Tracker</span>
           </a>
           <nav class="marketing-links" aria-label="Landing page">
@@ -476,7 +540,7 @@
     return `
       <section class="empty-state auth-required">
         <div class="empty-panel">
-          <img src="./assets/app-icon.png" alt="">
+          <img src="/assets/app-icon.png" alt="">
           <h2>Sign in to use Stuff Tracker on the web</h2>
           <p>Create or connect an account to sync your homes, rooms, and items.</p>
           <div class="auth-actions">
@@ -551,7 +615,7 @@
     return `
       <div class="empty-state">
         <div class="empty-panel">
-          <img src="./assets/app-icon.png" alt="">
+          <img src="/assets/app-icon.png" alt="">
           <h2>Welcome to Stuff Tracker</h2>
           <p>Track your stuff across homes, rooms, containers, and loose items.</p>
           <button type="button" class="primary-button" data-action="start-add" data-add-kind="home">
@@ -670,8 +734,9 @@
   }
 
   function renderItemChip(home, item) {
+    const highlighted = state.highlightedItemId === item.id;
     return `
-      <button type="button" class="item-chip" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+      <button type="button" class="item-chip ${highlighted ? "is-deep-linked" : ""}" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
         ${svgIcon(item.icon || "circle.fill")}
         <span class="item-name">${escapeHtml(item.name)}</span>
         ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
@@ -1214,6 +1279,13 @@
     return findHome(homeId)?.items.find((item) => item.id === itemId);
   }
 
+  function findItemContext(homeId, itemId) {
+    const home = findHome(homeId);
+    if (!home) return null;
+    const item = home.items.find((candidate) => candidate.id === itemId);
+    return item ? { home, item } : null;
+  }
+
   function cloneItem(item) {
     return JSON.parse(JSON.stringify(item));
   }
@@ -1268,9 +1340,11 @@
       const config = await apiRequest("GET", "/auth/config");
       state.googleClientId = config.googleClientId ?? config.google_client_id ?? "";
       state.appleClientId = config.appleClientId ?? config.apple_client_id ?? "";
+      state.appStoreUrl = config.iosAppStoreUrl ?? config.ios_app_store_url ?? "";
     } catch {
       state.googleClientId = "";
       state.appleClientId = "";
+      state.appStoreUrl = "";
     }
     state.authConfigLoaded = true;
     render();
@@ -1353,6 +1427,7 @@
     state.accountPlan = plan;
     const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
     state.homes = details.map(normalizeHomeDetail);
+    state.homesLoaded = true;
     persistData();
   }
 
@@ -1448,6 +1523,7 @@
     } finally {
       state.isLoading = false;
       render();
+      openPendingItemLink();
     }
   }
 
@@ -1612,6 +1688,61 @@
     const sorted = childLocations(target.home, parentId).sort((a, b) => a.name.localeCompare(b.name));
     await Promise.all(sorted.map((location, index) => apiRequest("PATCH", `/homes/${target.home.id}/locations/${location.id}`, { sort_order: index })));
     await loadServerHomes();
+  }
+
+  function openPendingItemLink() {
+    const link = state.pendingItemLink;
+    if (!link || state.deepLinkHandled || !state.token || !state.homesLoaded) return;
+
+    const context = findItemContext(link.homeId, link.itemId);
+    state.deepLinkHandled = true;
+
+    if (!context) {
+      showToast("Could not open that item. Sign in with an account that can access it.");
+      return;
+    }
+
+    prepareHierarchyForItem(context.home, context.item);
+    state.highlightedItemId = context.item.id;
+    state.sheet = null;
+    render();
+
+    requestAnimationFrame(() => {
+      const chip = itemChipElement(context.home.id, context.item.id);
+      chip?.scrollIntoView({ block: "center", behavior: "smooth" });
+
+      window.setTimeout(() => {
+        const latestItem = findItem(context.home.id, context.item.id) || context.item;
+        state.highlightedItemId = "";
+        state.sheet = {
+          type: "itemEditor",
+          homeId: context.home.id,
+          itemId: context.item.id,
+          draft: cloneItem(latestItem),
+        };
+        render();
+      }, 420);
+    });
+  }
+
+  function prepareHierarchyForItem(home, item) {
+    state.search = "";
+    state.flaggedOnly = false;
+    state.adding = null;
+    state.collapsed.delete(nodeKey("home", home.id));
+
+    let locationId = item.locationId;
+    while (locationId) {
+      state.collapsed.delete(nodeKey("location", locationId));
+      const location = home.locations.find((candidate) => candidate.id === locationId);
+      locationId = location?.parentId || null;
+    }
+    persistCollapsed();
+  }
+
+  function itemChipElement(homeId, itemId) {
+    return Array.from(document.querySelectorAll(".item-chip[data-item-id]"))
+      .find((element) => element.dataset.homeId === homeId && element.dataset.itemId === itemId);
   }
 
   function updateBreadcrumb() {
@@ -1909,6 +2040,10 @@
   window.addEventListener("load", () => requestAnimationFrame(renderProviderSignInButtons));
 
   render();
+
+  if (state.pendingItemLink && !state.token && !state.authConfigLoaded) {
+    void loadAuthConfig();
+  }
 
   if (state.token) {
     void runMutation(loadServerHomes);

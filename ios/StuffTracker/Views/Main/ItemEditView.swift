@@ -301,6 +301,9 @@ struct ItemEditView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    shareMenu
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
@@ -332,6 +335,75 @@ struct ItemEditView: View {
                 Text(attachmentError ?? "")
             }
         }
+    }
+
+    private var shareMenu: some View {
+        Menu {
+            if let deepLink = deepLinkForSharing {
+                ShareLink(item: deepLink.url) {
+                    Label("Share Item Link", systemImage: "link")
+                }
+
+                Divider()
+            }
+
+            ShareLink(item: shareText(.location)) {
+                Label("Share Location", systemImage: "mappin.and.ellipse")
+            }
+
+            ShareLink(item: shareText(.details)) {
+                Label("Share Details", systemImage: "doc.text")
+            }
+
+            ShareLink(item: shareText(.locationAndDetails)) {
+                Label("Share Location and Details", systemImage: "square.and.arrow.up")
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .disabled(normalizedText(name) == nil)
+        .accessibilityLabel("Share item")
+    }
+
+    private func shareText(_ scope: ItemShareScope) -> String {
+        ItemShareFormatter.text(for: itemForSharing, home: home, scope: scope)
+    }
+
+    private var deepLinkForSharing: ItemDeepLink? {
+        let item = itemForSharing
+        guard !item.homeId.isEmpty, !item.id.isEmpty else { return nil }
+        return ItemDeepLink(homeId: item.homeId, itemId: item.id)
+    }
+
+    private var itemForSharing: Item {
+        let estimatedCents: Int?
+        if let value = Double(estimatedValue.trimmingCharacters(in: .whitespacesAndNewlines)), value >= 0 {
+            estimatedCents = Int((value * 100).rounded())
+        } else {
+            estimatedCents = item.estimatedValueCents
+        }
+
+        return Item(
+            id: item.id,
+            homeId: item.homeId,
+            locationId: selectedLocationId,
+            name: normalizedText(name) ?? item.name,
+            icon: normalizedText(selectedIcon),
+            notes: normalizedText(notes),
+            quantity: quantity,
+            properties: normalizedProperties,
+            photoUrls: photoAttachments.compactMap(\.remoteURL),
+            documents: documentAttachments.compactMap(\.document),
+            purchaseDate: ItemDateCodec.string(from: purchaseDate),
+            serialNumber: normalizedText(serialNumber),
+            modelNumber: normalizedText(modelNumber),
+            warrantyExpiresDate: ItemDateCodec.string(from: warrantyExpiresDate),
+            estimatedValueCents: estimatedCents,
+            isFlagged: isFlagged,
+            sortOrder: item.sortOrder,
+            createdBy: item.createdBy,
+            needsSync: item.needsSync
+        )
     }
 
     @ViewBuilder
@@ -1201,6 +1273,97 @@ private struct OptionalDatePickerRow: View {
             }
             .buttonStyle(.borderless)
         }
+    }
+}
+
+enum ItemShareScope {
+    case location
+    case details
+    case locationAndDetails
+}
+
+enum ItemShareFormatter {
+    static func text(for item: Item, home: HomeDetail?, scope: ItemShareScope) -> String {
+        var lines = [item.name]
+
+        if scope.includesLocation {
+            lines.append("Location: \(locationText(for: item, home: home))")
+        }
+
+        if scope.includesDetails {
+            lines.append("Quantity: \(item.quantity)")
+            append("Notes", item.notes, to: &lines)
+            append("Serial Number", item.serialNumber, to: &lines)
+            append("Model Number", item.modelNumber, to: &lines)
+            append("Purchase Date", item.purchaseDate, to: &lines)
+            append("Warranty Expires", item.warrantyExpiresDate, to: &lines)
+
+            if let estimatedValue = formattedEstimatedValue(item.estimatedValueCents) {
+                lines.append("Estimated Value: \(estimatedValue)")
+            }
+
+            for property in item.properties {
+                let key = property.key.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty else { continue }
+
+                let value = property.value.trimmingCharacters(in: .whitespacesAndNewlines)
+                lines.append(value.isEmpty ? key : "\(key): \(value)")
+            }
+
+            if !item.documents.isEmpty {
+                let documentNames = item.documents
+                    .map(\.name)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+
+                if documentNames.isEmpty {
+                    lines.append(item.documents.count == 1 ? "Documents: 1 file" : "Documents: \(item.documents.count) files")
+                } else {
+                    lines.append("Documents: \(documentNames.joined(separator: ", "))")
+                }
+            }
+
+            if !item.photoUrls.isEmpty {
+                lines.append(item.photoUrls.count == 1 ? "Photos: 1 photo" : "Photos: \(item.photoUrls.count) photos")
+            }
+        }
+
+        if let link = appLink(for: item) {
+            lines.append("Open in Stuff Tracker: \(link)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private static func append(_ label: String, _ value: String?, to lines: inout [String]) {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return }
+        lines.append("\(label): \(value)")
+    }
+
+    private static func locationText(for item: Item, home: HomeDetail?) -> String {
+        guard let home else { return "None" }
+        let selectedLabel = LocationTreePresentation.selectedLabel(home: home, selectedId: item.locationId)
+        return selectedLabel == home.name ? home.name : "\(home.name) › \(selectedLabel)"
+    }
+
+    private static func formattedEstimatedValue(_ cents: Int?) -> String? {
+        guard let cents else { return nil }
+        return String(format: "$%.2f", Double(cents) / 100)
+    }
+
+    private static func appLink(for item: Item) -> String? {
+        guard !item.homeId.isEmpty, !item.id.isEmpty else { return nil }
+        return ItemDeepLink(homeId: item.homeId, itemId: item.id).url.absoluteString
+    }
+}
+
+private extension ItemShareScope {
+    var includesLocation: Bool {
+        self == .location || self == .locationAndDetails
+    }
+
+    var includesDetails: Bool {
+        self == .details || self == .locationAndDetails
     }
 }
 

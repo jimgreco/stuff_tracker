@@ -37,6 +37,14 @@ function webAppleClientId(): string | undefined {
   return process.env.APPLE_WEB_CLIENT_ID?.trim();
 }
 
+function iosAppStoreUrl(): string | null {
+  const configured = process.env.IOS_APP_STORE_URL?.trim() || process.env.APP_STORE_URL?.trim();
+  if (configured) return configured;
+
+  const appAppleId = process.env.APP_STORE_APP_APPLE_ID?.trim();
+  return appAppleId ? `https://apps.apple.com/app/id${appAppleId}` : null;
+}
+
 async function issueAuthResponse(req: Request, user: { id: string; email: string }) {
   const session = await createAuthSession(user.id, req);
   return {
@@ -84,6 +92,7 @@ router.get('/config', (_req: Request, res: Response) => {
   res.json({
     google_client_id: webGoogleClientId() ?? null,
     apple_client_id: webAppleClientId() ?? null,
+    ios_app_store_url: iosAppStoreUrl(),
   });
 });
 

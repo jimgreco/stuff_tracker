@@ -408,6 +408,7 @@ struct ItemChip: View {
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
+        .id(ItemDeepLink.itemAnchorID(item.id))
         .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline, isSelected: isSelected)
         .contentShape(Rectangle())
         .onTapGesture {

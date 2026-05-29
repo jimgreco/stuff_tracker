@@ -56,6 +56,7 @@ final class FirstRunTutorialController: ObservableObject {
 
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
+    @EnvironmentObject private var deepLinkStore: DeepLinkStore
     @EnvironmentObject private var tutorialController: FirstRunTutorialController
     @StateObject private var homeStore = HomeStore()
     @StateObject private var collapseStore = HierarchyCollapseStore()
@@ -67,6 +68,8 @@ struct ContentView: View {
     @State private var showAccountSheet = false
     @State private var showBulkMoveSheet = false
     @State private var showBulkDeleteConfirm = false
+    @State private var deepLinkedItem: Item?
+    @State private var deepLinkScrollTargetID: String?
     @State private var breadcrumbPath: [String] = []
     @FocusState private var isSearchFocused: Bool
 
@@ -96,58 +99,63 @@ struct ContentView: View {
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        ScrollView {
-                            VStack(spacing: 8) {
-                                if !isFiltering {
-                                    HomeDropZone(insertionIndex: 0, homeStore: homeStore)
-                                }
-                                ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
-                                    HomeBoxView(
-                                        home: home,
-                                        homeStore: homeStore,
-                                        collapseStore: collapseStore,
-                                        isSearchActive: isFiltering
-                                    )
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(spacing: 8) {
                                     if !isFiltering {
-                                        HomeDropZone(insertionIndex: index + 1, homeStore: homeStore)
+                                        HomeDropZone(insertionIndex: 0, homeStore: homeStore)
                                     }
-                                }
-
-                                if !isFiltering {
-                                    if isAddingHome {
-                                        InlineAddField(placeholder: "Home name", text: $newHomeName) {
-                                            let name = newHomeName
-                                            newHomeName = ""
-                                            isAddingHome = false
-                                            Task { await homeStore.createHome(name: name) }
-                                        } onCancel: {
-                                            newHomeName = ""
-                                            isAddingHome = false
+                                    ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
+                                        HomeBoxView(
+                                            home: home,
+                                            homeStore: homeStore,
+                                            collapseStore: collapseStore,
+                                            isSearchActive: isFiltering
+                                        )
+                                        if !isFiltering {
+                                            HomeDropZone(insertionIndex: index + 1, homeStore: homeStore)
                                         }
                                     }
 
-                                    HStack {
-                                        Button {
-                                            isAddingHome = true
-                                        } label: {
-                                            Label("Add home", systemImage: "plus")
-                                                .font(.callout)
-                                                .foregroundStyle(.secondary)
+                                    if !isFiltering {
+                                        if isAddingHome {
+                                            InlineAddField(placeholder: "Home name", text: $newHomeName) {
+                                                let name = newHomeName
+                                                newHomeName = ""
+                                                isAddingHome = false
+                                                Task { await homeStore.createHome(name: name) }
+                                            } onCancel: {
+                                                newHomeName = ""
+                                                isAddingHome = false
+                                            }
                                         }
-                                        Spacer()
-                                    }
-                                    .padding(.bottom, 8)
 
-                                    TrashBinView(homeStore: homeStore)
+                                        HStack {
+                                            Button {
+                                                isAddingHome = true
+                                            } label: {
+                                                Label("Add home", systemImage: "plus")
+                                                    .font(.callout)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                        }
+                                        .padding(.bottom, 8)
+
+                                        TrashBinView(homeStore: homeStore)
+                                    }
                                 }
+                                .padding()
                             }
-                            .padding()
+                            .coordinateSpace(name: "scroll")
+                            .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
+                                updateBreadcrumbPath(from: anchors)
+                            }
+                            .scrollDismissesKeyboard(.interactively)
+                            .task(id: deepLinkScrollTargetID) {
+                                scrollToDeepLinkedItem(deepLinkScrollTargetID, proxy: proxy)
+                            }
                         }
-                        .coordinateSpace(name: "scroll")
-                        .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
-                            updateBreadcrumbPath(from: anchors)
-                        }
-                        .scrollDismissesKeyboard(.interactively)
                     }
                 }
             }
@@ -244,6 +252,12 @@ struct ContentView: View {
                     }
                 }
             }
+            .sheet(item: $deepLinkedItem) { item in
+                let latestItem = itemForDeepLink(homeId: item.homeId, itemId: item.id) ?? item
+                ItemEditView(item: latestItem, homeStore: homeStore, homeId: latestItem.homeId)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
             .overlay {
                 if tutorialController.isPresented {
                     FirstRunTutorialOverlay(homeStore: homeStore)
@@ -269,11 +283,16 @@ struct ContentView: View {
             }
             .task {
                 await homeStore.loadHomes()
+                openPendingDeepLinkIfPossible(reportMissing: true)
                 tutorialController.presentAfterInitialLoad(hasExistingHomes: !homeStore.homeDetails.isEmpty)
+            }
+            .onReceive(deepLinkStore.$pendingItemLink) { _ in
+                openPendingDeepLinkIfPossible()
             }
             .onReceive(homeStore.$homeDetails) { homes in
                 collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
                 itemSelection.prune(validItemIds: Set(homes.flatMap(\.items).map(\.id)))
+                openPendingDeepLinkIfPossible()
             }
         }
         .environmentObject(itemSelection)
@@ -293,6 +312,66 @@ struct ContentView: View {
         guard let home = selectedHomeForActions else { return [] }
         let selectedIds = Set(itemSelection.selectedItemIds)
         return home.items.filter { selectedIds.contains($0.id) }
+    }
+
+    private func openPendingDeepLinkIfPossible(reportMissing: Bool = false) {
+        guard let link = deepLinkStore.pendingItemLink else { return }
+
+        guard let context = deepLinkContext(homeId: link.homeId, itemId: link.itemId) else {
+            if reportMissing && !homeStore.isLoading {
+                homeStore.errorMessage = "Could not open that item. Make sure you are signed in to an account that can access it."
+                deepLinkStore.clear(link)
+            }
+            return
+        }
+
+        prepareHierarchyForDeepLink(to: context.item, in: context.home)
+        deepLinkScrollTargetID = ItemDeepLink.itemAnchorID(context.item.id)
+        deepLinkStore.clear(link)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            deepLinkedItem = itemForDeepLink(homeId: context.item.homeId, itemId: context.item.id) ?? context.item
+        }
+    }
+
+    private func itemForDeepLink(homeId: String, itemId: String) -> Item? {
+        deepLinkContext(homeId: homeId, itemId: itemId)?.item
+    }
+
+    private func deepLinkContext(homeId: String, itemId: String) -> (home: HomeDetail, item: Item)? {
+        guard let home = homeStore.homeDetails.first(where: { $0.id == homeId }),
+              let item = home.items.first(where: { $0.id == itemId }) else {
+            return nil
+        }
+        return (home, item)
+    }
+
+    private func prepareHierarchyForDeepLink(to item: Item, in home: HomeDetail) {
+        searchText = ""
+        showFlaggedOnly = false
+        isSearchFocused = false
+        itemSelection.clearSelection()
+        isAddingHome = false
+
+        collapseStore.setCollapsed(false, for: .home(home.id))
+
+        var currentLocationId = item.locationId
+        while let locationId = currentLocationId,
+              let location = home.locations.first(where: { $0.id == locationId }) {
+            collapseStore.setCollapsed(false, for: .location(locationId))
+            currentLocationId = location.parentId
+        }
+    }
+
+    private func scrollToDeepLinkedItem(_ targetID: String?, proxy: ScrollViewProxy) {
+        guard let targetID else { return }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.26)) {
+                proxy.scrollTo(targetID, anchor: .center)
+            }
+            deepLinkScrollTargetID = nil
+        }
     }
 
     private var shouldUnflagSelection: Bool {

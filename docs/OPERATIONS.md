@@ -90,6 +90,8 @@ Production and sandbox App Store signed payload verification requires Apple root
 
 In the production `../deploy` Compose stack, these are supplied to the Stuff container from `~/deploy/.env` as `STUFF_APP_STORE_APP_APPLE_ID` and `STUFF_ADMIN_API_TOKEN`. The product IDs and bundle ID have safe defaults in `docker-compose.yml`, and Apple root certificates are mounted from `~/deploy/apple-pki`.
 
+Universal item links use `https://stuff-tracker.jim-greco.com/items/:homeId/:itemId`. The backend serves the Apple app-site-association payload at `/.well-known/apple-app-site-association`. App Store/TestFlight signing must use a provisioning profile whose App ID has the Associated Domains capability enabled for `applinks:stuff-tracker.jim-greco.com`.
+
 The iOS app sends verified StoreKit transactions to `POST /account/app-store/transactions`, using the authenticated user ID as the StoreKit app account token. On renewals, refunds, and revocations, App Store Server Notifications update the same entitlement row by original transaction ID.
 
 Web does not sell subscriptions. To enable an account from web or support without App Store purchase, set `ADMIN_API_TOKEN` and call:
