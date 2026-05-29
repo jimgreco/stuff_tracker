@@ -165,15 +165,19 @@ if certificate_ids.empty?
     "/certificates",
     token,
     query: {
-      "filter[certificateType]" => "IOS_DISTRIBUTION",
       "fields[certificates]" => "certificateType,displayName,expirationDate,serialNumber,activated",
       "limit" => "200"
     }
   ).fetch("data")
 
+  distribution_types = %w[IOS_DISTRIBUTION DISTRIBUTION]
   certificate_ids = certificates
+                    .select { |certificate| distribution_types.include?(certificate.dig("attributes", "certificateType")) }
                     .select { |certificate| certificate.dig("attributes", "activated") != false }
-                    .select { |certificate| Time.parse(certificate.dig("attributes", "expirationDate")) > Time.now }
+                    .select do |certificate|
+                      expiration = certificate.dig("attributes", "expirationDate")
+                      expiration.nil? || Time.parse(expiration) > Time.now
+                    end
                     .map { |certificate| certificate.fetch("id") }
 end
 
