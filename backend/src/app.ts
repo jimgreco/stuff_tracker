@@ -152,8 +152,8 @@ async function sharedItemMetadata(homeId: string, itemId: string): Promise<Share
     const locationText = [item.home_name, ...locationNames].join(' / ');
 
     return {
-      title: `${item.item_name} - ${locationText} | Stuff Tracker`,
-      description: `${item.item_name} is in ${locationText}. Open it in Stuff Tracker.`,
+      title: `${item.item_name} - ${locationText} | CubbyLog`,
+      description: `${item.item_name} is in ${locationText}. Open it in CubbyLog.`,
     };
   } catch {
     return undefined;
@@ -196,7 +196,7 @@ function sharedItemDocument(indexHtml: string, metadata: SharedItemMetadata, bas
   const imageUrl = escapeHtml(`${baseUrl}/assets/app-icon.png`);
   const socialMetadata = [
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="Stuff Tracker">`,
+    `<meta property="og:site_name" content="CubbyLog">`,
     `<meta property="og:title" content="${title}">`,
     `<meta property="og:description" content="${description}">`,
     `<meta property="og:url" content="${url}">`,
@@ -336,8 +336,10 @@ function corsOptions(): CorsOptions {
     ? []
     : [
         'http://localhost:3000',
+        'http://localhost:4173',
         'http://localhost:5173',
         'http://127.0.0.1:3000',
+        'http://127.0.0.1:4173',
         'http://127.0.0.1:5173',
       ];
   const allowedOrigins = new Set([...configuredOrigins, ...developmentOrigins]);

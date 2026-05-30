@@ -136,7 +136,7 @@
     if ((protocol === "http:" || protocol === "https:") && !isLocalHost) {
       return origin;
     }
-    if (isLocalHost && port && port !== "5173") {
+    if (isLocalHost && port === "3002") {
       return origin;
     }
     return "http://localhost:3002";
@@ -344,7 +344,7 @@
         <header class="top-bar">
           <div class="nav-row">
             <div class="nav-spacer" aria-hidden="true"></div>
-            <div class="nav-title">Stuff Tracker</div>
+            <div class="nav-title">CubbyLog</div>
             <button type="button" class="icon-button avatar-button" data-action="open-account" aria-label="Account">
               ${renderAvatar()}
             </button>
@@ -383,9 +383,9 @@
     return `
       <div class="marketing-page shared-link-page">
         <header class="marketing-nav">
-          <a class="marketing-brand" href="/" aria-label="Stuff Tracker home">
+          <a class="marketing-brand" href="/" aria-label="CubbyLog home">
             <img src="/assets/app-icon.png" width="34" height="34" alt="">
-            <span>Stuff Tracker</span>
+            <span>CubbyLog</span>
           </a>
           <button type="button" class="marketing-sign-in" data-action="open-account">Sign in</button>
         </header>
@@ -393,8 +393,8 @@
           <section class="shared-link-panel">
             <img class="shared-link-icon" src="/assets/app-icon.png" width="76" height="76" alt="">
             <p class="marketing-kicker">Shared item</p>
-            <h1>Open this item in Stuff Tracker</h1>
-            <p class="shared-link-copy">Sign in with an account that can access this home, or install the iOS app and open the shared HTTPS link again.</p>
+            <h1>Open this shared item in CubbyLog</h1>
+            <p class="shared-link-copy">Sign in with an account that can access this home, or open the link again from the iOS app.</p>
             <div class="shared-link-actions">
               ${state.appStoreUrl ? `<a class="marketing-secondary" href="${escapeAttr(state.appStoreUrl)}" target="_blank" rel="noreferrer">Get iOS App</a>` : ""}
               <button type="button" class="marketing-primary button-reset" data-action="open-account">Sign in on Web</button>
@@ -414,9 +414,9 @@
     return `
       <div class="marketing-page">
         <header class="marketing-nav">
-          <a class="marketing-brand" href="#top" aria-label="Stuff Tracker home">
+          <a class="marketing-brand" href="#top" aria-label="CubbyLog home">
             <img src="/assets/app-icon.png" width="34" height="34" alt="">
-            <span>Stuff Tracker</span>
+            <span>CubbyLog</span>
           </a>
           <nav class="marketing-links" aria-label="Landing page">
             <a href="#features">Features</a>
@@ -428,25 +428,25 @@
         <main id="top" class="marketing-main">
           <section class="marketing-hero">
             <div class="marketing-hero-copy">
-              <p class="marketing-kicker">Home inventory that follows the way you actually store things</p>
-              <h1>Stuff Tracker</h1>
-              <p class="marketing-lede">Map homes, rooms, containers, and loose items. Keep photos, documents, serial numbers, warranties, and values close to the things they belong to.</p>
+              <p class="marketing-kicker">A gentle home for the things you keep</p>
+              <h1>CubbyLog</h1>
+              <p class="marketing-lede">Remember where the spare keys, school forms, warranties, and borrowed chargers live. CubbyLog turns your home into a friendly map, one shelf and cubby at a time.</p>
               <div class="marketing-actions">
-                <button type="button" class="marketing-primary" data-action="open-account">Start tracking</button>
-                <a class="marketing-secondary" href="#features">See features</a>
+                <button type="button" class="marketing-primary" data-action="open-account">Start your CubbyLog</button>
+                <a class="marketing-secondary" href="#features">See how it works</a>
               </div>
               <dl class="marketing-proof">
                 <div>
-                  <dt>Homes</dt>
-                  <dd>Shared spaces</dd>
+                  <dt>Places</dt>
+                  <dd>Rooms, shelves, bins</dd>
                 </div>
                 <div>
-                  <dt>Items</dt>
-                  <dd>Photos and docs</dd>
+                  <dt>Details</dt>
+                  <dd>Photos and notes</dd>
                 </div>
                 <div>
-                  <dt>Search</dt>
-                  <dd>Room to serial</dd>
+                  <dt>Confidence</dt>
+                  <dd>Warranties and serials</dd>
                 </div>
               </dl>
             </div>
@@ -463,16 +463,16 @@
 
   function renderMarketingFeatures() {
     const features = [
-      ["house.fill", "Mirror your real storage", "Build a tree of homes, floors, rooms, bins, shelves, drawers, and loose items without flattening everything into one list."],
-      ["search", "Find by any clue", "Search item names, notes, rooms, serial numbers, model numbers, and custom properties when you only remember part of the answer."],
-      ["photo.fill", "Attach the evidence", "Keep photos, documents, warranty dates, purchase dates, values, and notes with the item they describe."],
-      ["share", "Use it with your household", "Share a home so the people who live with the stuff can keep the inventory current together."],
+      ["cabinet.fill", "Name the places you actually use", "Kitchen drawer, blue bin, guest closet, garage shelf: your inventory can use the words you would actually say."],
+      ["search", "Find it by the clue you remember", "Search notes, rooms, labels, serial numbers, model numbers, and odd details when you only have part of the answer."],
+      ["heart.fill", "Keep the little context", "Photos, receipts, manuals, warranty dates, values, and notes stay tucked beside the item they describe."],
+      ["share", "Give the household the same map", "Share a home so family or housemates can find things and keep the map current together."],
     ];
     return `
       <section id="features" class="marketing-section">
         <div class="marketing-section-heading">
-          <p>Built around where things live</p>
-          <h2>Inventory that keeps the room, container, and item together.</h2>
+          <p>Made for real-life storage</p>
+          <h2>Your home is not a spreadsheet. CubbyLog keeps the room, shelf, bin, and item together.</h2>
         </div>
         <div class="marketing-feature-grid">
           ${features.map(([icon, title, copy]) => `
@@ -491,29 +491,29 @@
     return `
       <section id="details" class="marketing-section marketing-detail-band">
         <div class="marketing-section-heading">
-          <p>Less guessing when it matters</p>
-          <h2>Useful details stay attached to the thing, not buried in a folder.</h2>
+          <p>Small details, kept kindly</p>
+          <h2>The things you save should be as easy to find as the things themselves.</h2>
         </div>
         <div class="marketing-detail-list">
           <div class="marketing-detail-row">
             ${svgIcon("tag")}
             <div>
-              <h3>Custom fields for the odd details</h3>
-              <p>Add the property you need, from filter size to paint color to access code.</p>
+              <h3>Custom notes for the odd little details</h3>
+              <p>Add whatever future you will be grateful for, from filter size to paint color to access code.</p>
             </div>
           </div>
           <div class="marketing-detail-row">
             ${svgIcon("doc")}
             <div>
-              <h3>Documents beside the item</h3>
-              <p>Store receipts, manuals, warranty paperwork, and reference files where future you will look first.</p>
+              <h3>Receipts and manuals where they belong</h3>
+              <p>Keep paperwork with the item it belongs to, right where everyone will look first.</p>
             </div>
           </div>
           <div class="marketing-detail-row">
             ${svgIcon("cloud")}
             <div>
-              <h3>Synced from the start</h3>
-              <p>Sign in once and keep the same inventory available from the web and the app.</p>
+              <h3>Your map follows you</h3>
+              <p>Sign in once and keep the same cozy map available from the web and the app.</p>
             </div>
           </div>
         </div>
@@ -525,12 +525,11 @@
     return `
       <section id="access" class="marketing-section marketing-access">
         <div class="marketing-section-heading">
-          <p>Ready when you are</p>
-          <h2>Start with the spaces you already know, then fill in the details over time.</h2>
+          <p>Start small</p>
+          <h2>Add one closet today, then let the rest of the house catch up over time.</h2>
         </div>
         <div class="marketing-access-actions">
           <button type="button" class="marketing-primary" data-action="open-account">Sign in or create account</button>
-          <button type="button" class="marketing-secondary button-reset" data-action="open-account">${svgIcon("cloud")} API settings</button>
         </div>
       </section>
     `;
@@ -541,20 +540,21 @@
       <section class="empty-state auth-required">
         <div class="empty-panel">
           <img src="/assets/app-icon.png" alt="">
-          <h2>Sign in to use Stuff Tracker on the web</h2>
-          <p>Create or connect an account to sync your homes, rooms, and items.</p>
+          <h2>Bring your CubbyLog to the web</h2>
+          <p>Sign in to see the same homes, rooms, and cubbies you keep on your phone.</p>
           <div class="auth-actions">
             ${renderAuthControls()}
           </div>
-          <button type="button" class="secondary-button" data-action="open-account">
-            ${svgIcon("cloud")} API settings
-          </button>
         </div>
       </section>
     `;
   }
 
   function renderAuthControls() {
+    if (!state.authConfigLoaded) {
+      return `<div class="auth-unavailable">Loading sign-in options...</div>`;
+    }
+
     const controls = [];
     if (state.googleClientId) {
       controls.push(`<div class="provider-button-host" data-google-sign-in-host></div>`);
@@ -562,11 +562,11 @@
     if (state.appleClientId) {
       controls.push(`<button type="button" class="row-button provider-apple" data-action="apple-sign-in">Sign in with Apple</button>`);
     }
-    if (isLocalHost()) {
+    if (isLocalHost() && !state.googleClientId && !state.appleClientId) {
       controls.push(`<button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>`);
     }
     if (!controls.length) {
-      controls.push(`<div class="auth-unavailable">Sign-in providers are not configured for this API URL.</div>`);
+      controls.push(`<div class="auth-unavailable">Sign-in providers are not configured for this CubbyLog environment.</div>`);
     }
     return controls.join("");
   }
@@ -616,8 +616,8 @@
       <div class="empty-state">
         <div class="empty-panel">
           <img src="/assets/app-icon.png" alt="">
-          <h2>Welcome to Stuff Tracker</h2>
-          <p>Track your stuff across homes, rooms, containers, and loose items.</p>
+          <h2>Welcome to CubbyLog</h2>
+          <p>Add one home to start building your friendly map of rooms, shelves, bins, and the things tucked inside.</p>
           <button type="button" class="primary-button" data-action="start-add" data-add-kind="home">
             ${svgIcon("plus")} Create Your First Home
           </button>
@@ -794,6 +794,20 @@
 
   function renderAccountSheet() {
     const connected = Boolean(state.token);
+    if (!connected) {
+      const body = `
+        <section class="sign-in-panel">
+          <img src="/assets/app-icon.png" width="76" height="76" alt="">
+          <h2>Welcome to CubbyLog</h2>
+          <p>Sign in with Google or Apple to create your account and keep your home map in sync.</p>
+          <div class="auth-actions">
+            ${renderAuthControls()}
+          </div>
+        </section>
+      `;
+      return sheetChrome("Sign in", body, { closeLabel: "Close" });
+    }
+
     const userName = state.user ? state.user.name : "Not signed in";
     const userEmail = state.user ? state.user.email : "Not signed in";
     const body = `
@@ -817,7 +831,6 @@
             <input name="apiBaseUrl" value="${escapeAttr(state.apiBaseUrl)}" inputmode="url" autocomplete="url">
           </label>
           <button type="submit" class="row-button">${svgIcon("check")} Save API URL</button>
-          ${!connected ? renderAuthControls() : ""}
           ${connected ? `<button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>` : ""}
         </div>
       </form>
@@ -826,7 +839,6 @@
         <div class="form-list">
           ${connected ? `<button type="button" class="row-button danger" data-action="logout-all">${svgIcon("x")} Sign Out Everywhere</button>` : ""}
           ${connected ? `<button type="button" class="row-button danger" data-action="sign-out">${svgIcon("x")} Sign Out</button>` : ""}
-          ${!connected ? `<div class="auth-unavailable">Sign in to create and sync inventory data on the web.</div>` : ""}
         </div>
       </section>
       <p class="footnote">Version web.</p>

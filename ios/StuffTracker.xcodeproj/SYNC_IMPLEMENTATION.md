@@ -1,7 +1,7 @@
 # SwiftData Local Persistence & Sync Implementation
 
 ## Overview
-Your Stuff Tracker app now has full offline support with automatic cloud sync when authenticated. Users can start using the app immediately without signing in, and all their data is saved locally. When they sign in, everything syncs seamlessly.
+Your CubbyLog app now has full offline support with automatic cloud sync when authenticated. Users can start using the app immediately without signing in, and all their data is saved locally. When they sign in, everything syncs seamlessly.
 
 ## What Was Added
 

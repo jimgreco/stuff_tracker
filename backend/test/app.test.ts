@@ -44,7 +44,7 @@ test('app serves the mobile web shell at root, /web, and item links', async (t) 
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
-    assert.match(body, /<title>Stuff Tracker \| Home Inventory App<\/title>/);
+    assert.match(body, /<title>CubbyLog \| Friendly Home Inventory<\/title>/);
   }
 });
 
@@ -84,8 +84,8 @@ test('app renders shared item page metadata with item name and location', async 
 
   const response = await fetch(`${serverBaseUrl(server)}/items/${homeId}/${itemId}`);
   const body = await response.text();
-  const expectedTitle = 'Espresso &lt;Machine&gt; - Home &quot;Main&quot; / Kitchen / Counter &amp; Bar | Stuff Tracker';
-  const expectedDescription = 'Espresso &lt;Machine&gt; is in Home &quot;Main&quot; / Kitchen / Counter &amp; Bar. Open it in Stuff Tracker.';
+  const expectedTitle = 'Espresso &lt;Machine&gt; - Home &quot;Main&quot; / Kitchen / Counter &amp; Bar | CubbyLog';
+  const expectedDescription = 'Espresso &lt;Machine&gt; is in Home &quot;Main&quot; / Kitchen / Counter &amp; Bar. Open it in CubbyLog.';
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type') ?? '', /text\/html/);

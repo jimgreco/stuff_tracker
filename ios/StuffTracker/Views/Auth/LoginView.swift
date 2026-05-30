@@ -15,7 +15,7 @@ enum LoginViewMode {
 
     var title: String {
         switch self {
-        case .initial: return "Stuff Tracker"
+        case .initial: return "CubbyLog"
         case .reconnect: return "Sign In Required"
         }
     }

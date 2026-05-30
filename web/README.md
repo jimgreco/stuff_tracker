@@ -1,4 +1,4 @@
-# Stuff Tracker Mobile Web
+# CubbyLog Mobile Web
 
 This is a static mobile-first web shell modeled after the iOS app. The web surface requires an account before inventory data is shown or edited.
 

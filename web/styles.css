@@ -94,8 +94,9 @@ button:disabled {
 
 .marketing-page {
   min-height: 100vh;
-  background: #f6f7f9;
-  color: #18191d;
+  background:
+    linear-gradient(180deg, #fbf6ef 0%, #f4faf7 42%, #fffaf2 100%);
+  color: #27231f;
 }
 
 .marketing-page a {
@@ -113,8 +114,8 @@ button:disabled {
   justify-content: space-between;
   gap: 18px;
   padding: calc(var(--safe-top) + 10px) max(20px, calc((100vw - 1160px) / 2 + 24px)) 10px;
-  border-bottom: 1px solid rgba(24, 25, 29, 0.08);
-  background: rgba(246, 247, 249, 0.82);
+  border-bottom: 1px solid rgba(90, 67, 48, 0.1);
+  background: rgba(251, 246, 239, 0.86);
   backdrop-filter: blur(18px);
 }
 
@@ -124,7 +125,7 @@ button:disabled {
   align-items: center;
   gap: 10px;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 850;
 }
 
 .marketing-brand img {
@@ -136,22 +137,23 @@ button:disabled {
 .marketing-links {
   display: flex;
   gap: 22px;
-  color: rgba(24, 25, 29, 0.66);
+  color: rgba(39, 35, 31, 0.68);
   font-size: 14px;
   font-weight: 650;
 }
 
 .marketing-links a:hover {
-  color: #18191d;
+  color: #27231f;
 }
 
 .marketing-sign-in {
   min-height: 38px;
   padding: 8px 14px;
   border-radius: 999px;
-  background: #18191d;
+  background: #2f554a;
   color: #ffffff;
   font-weight: 750;
+  box-shadow: 0 8px 18px rgba(47, 85, 74, 0.18);
 }
 
 .marketing-main {
@@ -175,10 +177,10 @@ button:disabled {
   gap: 16px;
   justify-items: center;
   padding: 28px;
-  border: 1px solid rgba(24, 25, 29, 0.08);
+  border: 1px solid rgba(90, 67, 48, 0.1);
   border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 18px 48px rgba(18, 24, 32, 0.1);
+  background: #fffaf2;
+  box-shadow: 0 18px 48px rgba(74, 55, 38, 0.12);
   text-align: center;
 }
 
@@ -189,7 +191,7 @@ button:disabled {
 
 .shared-link-panel .marketing-kicker {
   margin: 0;
-  color: rgba(24, 25, 29, 0.58);
+  color: rgba(39, 35, 31, 0.58);
 }
 
 .shared-link-panel h1 {
@@ -202,7 +204,7 @@ button:disabled {
 .shared-link-copy {
   max-width: 410px;
   margin: 0;
-  color: rgba(24, 25, 29, 0.66);
+  color: rgba(39, 35, 31, 0.66);
   line-height: 1.45;
 }
 
@@ -227,9 +229,10 @@ button:disabled {
   min-height: 76svh;
   align-items: center;
   padding: 74px max(24px, calc((100vw - 1160px) / 2 + 24px)) 58px;
-  background-color: #1f2731;
+  background-color: #31423b;
   background-image:
-    linear-gradient(90deg, rgba(10, 13, 18, 0.9) 0%, rgba(10, 13, 18, 0.78) 36%, rgba(10, 13, 18, 0.28) 68%, rgba(10, 13, 18, 0.08) 100%),
+    linear-gradient(90deg, rgba(37, 43, 36, 0.9) 0%, rgba(48, 63, 52, 0.78) 38%, rgba(48, 63, 52, 0.28) 70%, rgba(48, 63, 52, 0.08) 100%),
+    linear-gradient(180deg, rgba(206, 121, 82, 0.12), rgba(41, 126, 112, 0.08)),
     url("./assets/landing-hero.jpg");
   background-position: center;
   background-size: cover;
@@ -243,7 +246,7 @@ button:disabled {
 .marketing-kicker {
   max-width: 520px;
   margin: 0 0 16px;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 242, 222, 0.82);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.45;
@@ -254,12 +257,13 @@ button:disabled {
   font-size: 72px;
   line-height: 0.96;
   letter-spacing: 0;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }
 
 .marketing-lede {
   max-width: 570px;
   margin: 22px 0 0;
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(255, 250, 241, 0.88);
   font-size: 21px;
   line-height: 1.42;
 }
@@ -287,14 +291,14 @@ button:disabled {
 }
 
 .marketing-primary {
-  background: #ffffff;
-  color: #18191d;
+  background: #fff3df;
+  color: #28332f;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .marketing-secondary {
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 243, 224, 0.48);
+  background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   backdrop-filter: blur(12px);
 }
@@ -325,7 +329,7 @@ button:disabled {
 
 .marketing-proof dd {
   margin: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 242, 222, 0.74);
   font-size: 13px;
 }
 
@@ -341,14 +345,14 @@ button:disabled {
 
 .marketing-section-heading p {
   margin: 0 0 10px;
-  color: #346d55;
+  color: #2f7d6f;
   font-size: 14px;
   font-weight: 850;
 }
 
 .marketing-section-heading h2 {
   margin: 0;
-  color: #18191d;
+  color: #27231f;
   font-size: 38px;
   line-height: 1.08;
   letter-spacing: 0;
@@ -365,10 +369,10 @@ button:disabled {
   min-width: 0;
   min-height: 250px;
   padding: 22px;
-  border: 1px solid rgba(24, 25, 29, 0.1);
+  border: 1px solid rgba(90, 67, 48, 0.12);
   border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 10px 28px rgba(31, 39, 49, 0.06);
+  background: #fffaf2;
+  box-shadow: 0 10px 28px rgba(74, 55, 38, 0.07);
 }
 
 .marketing-feature-icon {
@@ -379,6 +383,21 @@ button:disabled {
   border-radius: 8px;
   background: #e9f3ee;
   color: #28724f;
+}
+
+.marketing-feature-card:nth-child(2) .marketing-feature-icon {
+  background: #f9ead8;
+  color: #ad633a;
+}
+
+.marketing-feature-card:nth-child(3) .marketing-feature-icon {
+  background: #f7e2e5;
+  color: #b44d58;
+}
+
+.marketing-feature-card:nth-child(4) .marketing-feature-icon {
+  background: #e8e8f8;
+  color: #5352a3;
 }
 
 .marketing-feature-icon .svg-icon {
@@ -397,14 +416,14 @@ button:disabled {
 .marketing-feature-card p,
 .marketing-detail-row p {
   margin: 0;
-  color: rgba(24, 25, 29, 0.68);
+  color: rgba(39, 35, 31, 0.68);
   font-size: 15px;
   line-height: 1.48;
 }
 
 .marketing-detail-band {
-  border-top: 1px solid rgba(24, 25, 29, 0.1);
-  border-bottom: 1px solid rgba(24, 25, 29, 0.1);
+  border-top: 1px solid rgba(111, 81, 56, 0.14);
+  border-bottom: 1px solid rgba(111, 81, 56, 0.14);
 }
 
 .marketing-detail-list {
@@ -420,13 +439,13 @@ button:disabled {
   gap: 14px;
   min-width: 0;
   padding-top: 22px;
-  border-top: 2px solid #d7a141;
+  border-top: 2px solid #d98c62;
 }
 
 .marketing-detail-row > .svg-icon {
   width: 26px;
   height: 26px;
-  color: #b17218;
+  color: #a65735;
 }
 
 .marketing-detail-row h3 {
@@ -442,9 +461,9 @@ button:disabled {
 }
 
 .marketing-access .marketing-secondary {
-  border-color: rgba(24, 25, 29, 0.16);
-  background: #ffffff;
-  color: #18191d;
+  border-color: rgba(39, 35, 31, 0.14);
+  background: #fffaf2;
+  color: #27231f;
   box-shadow: none;
 }
 
@@ -454,9 +473,9 @@ button:disabled {
 }
 
 .marketing-access .marketing-primary {
-  background: #18191d;
+  background: #2f554a;
   color: #ffffff;
-  box-shadow: 0 12px 28px rgba(24, 25, 29, 0.18);
+  box-shadow: 0 12px 28px rgba(47, 85, 74, 0.2);
 }
 
 .marketing-sign-in:active,
@@ -1139,6 +1158,32 @@ button:disabled {
   font-size: 13px;
   line-height: 1.4;
   text-align: center;
+}
+
+.sign-in-panel {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  padding: 16px 6px 8px;
+  text-align: center;
+}
+
+.sign-in-panel img {
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.sign-in-panel h2 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.sign-in-panel p {
+  max-width: 350px;
+  margin: 0 0 4px;
+  color: var(--secondary);
+  line-height: 1.4;
 }
 
 .primary-button,

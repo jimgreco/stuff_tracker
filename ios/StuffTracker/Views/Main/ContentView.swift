@@ -193,7 +193,7 @@ struct ContentView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 76)
             }
-            .navigationTitle("Stuff Tracker")
+            .navigationTitle("CubbyLog")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -994,7 +994,7 @@ private struct StartupPhotoLoadingView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 14) {
-                Text("Stuff Tracker")
+                Text("CubbyLog")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
 
@@ -1086,7 +1086,7 @@ struct EmptyHomePrompt: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.blue)
             
-            Text("Welcome to Stuff Tracker")
+            Text("Welcome to CubbyLog")
                 .font(.title.bold())
             
             Text("Track your stuff across rooms and containers")
@@ -1278,7 +1278,7 @@ struct FirstRunTutorialOverlay: View {
         switch step {
         case .welcome:
             VStack(alignment: .leading, spacing: 14) {
-                Text("Stuff Tracker is a map for the things you swear you put somewhere obvious. You can organize your stuff into a hierarchy of homes, floors, rooms, and containers.")
+                Text("CubbyLog is a map for the things you swear you put somewhere obvious. You can organize your stuff into a hierarchy of homes, floors, rooms, and containers.")
                     .font(.body)
                     .foregroundStyle(.secondary)
 

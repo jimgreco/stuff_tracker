@@ -90,7 +90,33 @@ Production and sandbox App Store signed payload verification requires Apple root
 
 In the production `../deploy` Compose stack, these are supplied to the Stuff container from `~/deploy/.env` as `STUFF_APP_STORE_APP_APPLE_ID` and `STUFF_ADMIN_API_TOKEN`. The product IDs and bundle ID have safe defaults in `docker-compose.yml`, and Apple root certificates are mounted from `~/deploy/apple-pki`.
 
-Universal item links use `https://stuff-tracker.jim-greco.com/items/:homeId/:itemId`. The backend serves the Apple app-site-association payload at `/.well-known/apple-app-site-association`. App Store/TestFlight signing must use a provisioning profile whose App ID has the Associated Domains capability enabled for `applinks:stuff-tracker.jim-greco.com`.
+Universal item links use `https://cubbylog.com/items/:homeId/:itemId`. The iOS app also accepts `https://www.cubbylog.com/items/:homeId/:itemId`. The backend serves the Apple app-site-association payload at `/.well-known/apple-app-site-association`. App Store/TestFlight signing must use a provisioning profile whose App ID has the Associated Domains capability enabled for `applinks:cubbylog.com` and `applinks:www.cubbylog.com`.
+
+## Production Domain
+
+Primary public origin: `https://cubbylog.com`.
+
+In production, set:
+
+```sh
+STUFF_APP_BASE_URL=https://cubbylog.com
+PRODUCTION_BASE_URL=https://cubbylog.com
+```
+
+Cloudflare DNS for `cubbylog.com`:
+
+- `@`: point to the existing production origin and proxy it through Cloudflare. Use the EC2 origin IP from `EC2_HOST`, or a Cloudflare-supported flattened CNAME if the origin target is unproxied.
+- `www`: `CNAME` to `cubbylog.com`, proxied.
+
+Nginx Proxy Manager needs proxy hosts for `cubbylog.com` and `www.cubbylog.com` pointing at the existing `stuff` service on port `3002`, with TLS certificates covering both names. Both hosts should serve `/.well-known/apple-app-site-association` directly so universal links can validate.
+
+OAuth and Apple settings that must include the new origin:
+
+- Google web OAuth Authorized JavaScript origins: `https://cubbylog.com` and `https://www.cubbylog.com`.
+- Apple Sign in with Apple Services ID web domains and return URLs: `cubbylog.com`, `www.cubbylog.com`, `https://cubbylog.com`, and `https://www.cubbylog.com`, following Apple's field requirements.
+- App Store Server Notifications V2 URL: `https://cubbylog.com/app-store/notifications`.
+
+Use `support@cubbylog.com` as the public support address. If Cloudflare Email Routing is used, add a route from `support@cubbylog.com` to the owner's mailbox and let Cloudflare create the required MX and SPF TXT records. If support replies will be sent from `@cubbylog.com`, configure the sending provider's SPF, DKIM, and DMARC records before using it for outbound mail.
 
 The iOS app sends verified StoreKit transactions to `POST /account/app-store/transactions`, using the authenticated user ID as the StoreKit app account token. On renewals, refunds, and revocations, App Store Server Notifications update the same entitlement row by original transaction ID.
 
@@ -173,7 +199,7 @@ High-value credentials:
 The production web shell gets its public provider IDs from `GET /auth/config`. If the signed-out web page says sign-in providers are not configured, check that the running Stuff container has at least one web provider ID:
 
 ```sh
-curl https://stuff-tracker.jim-greco.com/auth/config
+curl https://cubbylog.com/auth/config
 ```
 
 For the `../deploy` Compose stack, set the prefixed host environment variables in `~/deploy/.env`:
@@ -183,7 +209,7 @@ STUFF_GOOGLE_WEB_CLIENT_ID=...
 STUFF_APPLE_WEB_CLIENT_ID=...
 ```
 
-`STUFF_GOOGLE_WEB_CLIENT_ID` must be a Google OAuth Web application client with `https://stuff-tracker.jim-greco.com` in Authorized JavaScript origins. `STUFF_APPLE_WEB_CLIENT_ID` must be an Apple Services ID configured for Sign in with Apple JS and the same site origin.
+`STUFF_GOOGLE_WEB_CLIENT_ID` must be a Google OAuth Web application client with `https://cubbylog.com` and `https://www.cubbylog.com` in Authorized JavaScript origins. `STUFF_APPLE_WEB_CLIENT_ID` must be an Apple Services ID configured for Sign in with Apple JS and the same site origins.
 
 ## Session Tokens
 

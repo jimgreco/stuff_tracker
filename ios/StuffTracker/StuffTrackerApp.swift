@@ -5,7 +5,11 @@ import GoogleSignIn
 
 struct ItemDeepLink: Identifiable, Equatable {
     static let universalScheme = "https"
-    static let universalHost = "stuff-tracker.jim-greco.com"
+    static let universalHost = "cubbylog.com"
+    static let supportedUniversalHosts = [
+        "cubbylog.com",
+        "www.cubbylog.com",
+    ]
     static let universalPathPrefix = "items"
 
     let homeId: String
@@ -47,7 +51,8 @@ struct ItemDeepLink: Identifiable, Equatable {
 
     private static func parseUniversalLink(_ url: URL) -> ItemDeepLink? {
         guard url.scheme?.lowercased() == Self.universalScheme,
-              url.host?.lowercased() == Self.universalHost else {
+              let host = url.host?.lowercased(),
+              Self.supportedUniversalHosts.contains(host) else {
             return nil
         }
 

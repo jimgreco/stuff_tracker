@@ -1329,7 +1329,7 @@ enum ItemShareFormatter {
         }
 
         if let link = appLink(for: item) {
-            lines.append("Open in Stuff Tracker: \(link)")
+            lines.append("Open in CubbyLog: \(link)")
         }
 
         return lines.joined(separator: "\n")

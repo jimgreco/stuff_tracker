@@ -26,7 +26,7 @@ final class APIClient {
     #if DEBUG
     private let baseURL = APIClient.debugBaseURL()
     #else
-    private let baseURL = "https://stuff-tracker.jim-greco.com"
+    private let baseURL = "https://cubbylog.com"
     #endif
 
     private var token: String? {
@@ -56,7 +56,9 @@ final class APIClient {
 
     #if DEBUG
     private static func debugBaseURL() -> String {
-        if let rawOverride = ProcessInfo.processInfo.environment["STUFF_TRACKER_API_BASE_URL"] {
+        let rawOverride = ProcessInfo.processInfo.environment["CUBBYLOG_API_BASE_URL"]
+            ?? ProcessInfo.processInfo.environment["STUFF_TRACKER_API_BASE_URL"]
+        if let rawOverride {
             let override = rawOverride.trimmingCharacters(in: .whitespacesAndNewlines)
             if !override.isEmpty {
                 return override
@@ -66,7 +68,7 @@ final class APIClient {
         #if targetEnvironment(simulator)
         return "http://localhost:3002"
         #else
-        return "https://stuff-tracker.jim-greco.com"
+        return "https://cubbylog.com"
         #endif
     }
     #endif

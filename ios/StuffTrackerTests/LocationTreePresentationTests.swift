@@ -59,7 +59,7 @@ final class LocationTreePresentationTests: XCTestCase {
             """
             HDMI Cable
             Location: Home › Top Floor › Living Room › Media Bin
-            Open in Stuff Tracker: https://stuff-tracker.jim-greco.com/items/home-1/item-1
+            Open in CubbyLog: https://cubbylog.com/items/home-1/item-1
             """
         )
     }
@@ -104,7 +104,7 @@ final class LocationTreePresentationTests: XCTestCase {
             Empty Value
             Documents: Manual.pdf
             Photos: 1 photo
-            Open in Stuff Tracker: https://stuff-tracker.jim-greco.com/items/home-1/item-1
+            Open in CubbyLog: https://cubbylog.com/items/home-1/item-1
             """
         )
         XCTAssertFalse(text.contains("https://example.com"))
@@ -123,7 +123,7 @@ final class LocationTreePresentationTests: XCTestCase {
             Loose Keys
             Location: Home
             Quantity: 1
-            Open in Stuff Tracker: https://stuff-tracker.jim-greco.com/items/home-1/item-1
+            Open in CubbyLog: https://cubbylog.com/items/home-1/item-1
             """
         )
     }
@@ -131,10 +131,11 @@ final class LocationTreePresentationTests: XCTestCase {
     func testItemDeepLinkParsesUniversalItemURLs() {
         let link = ItemDeepLink(homeId: "home-1", itemId: "item-1")
 
-        XCTAssertEqual(link.url.absoluteString, "https://stuff-tracker.jim-greco.com/items/home-1/item-1")
+        XCTAssertEqual(link.url.absoluteString, "https://cubbylog.com/items/home-1/item-1")
         XCTAssertEqual(ItemDeepLink.itemAnchorID("item-1"), "item:item-1")
         XCTAssertEqual(ItemDeepLink(url: link.url), link)
-        XCTAssertNil(ItemDeepLink(url: URL(string: "https://stuff-tracker.jim-greco.com")!))
+        XCTAssertEqual(ItemDeepLink(url: URL(string: "https://www.cubbylog.com/items/home-1/item-1")!), link)
+        XCTAssertNil(ItemDeepLink(url: URL(string: "https://cubbylog.com")!))
         XCTAssertNil(ItemDeepLink(url: URL(string: "https://example.com/items/home-1/item-1")!))
         XCTAssertNil(ItemDeepLink(url: URL(string: "stuff://item?homeId=home-1&itemId=item-1")!))
     }
