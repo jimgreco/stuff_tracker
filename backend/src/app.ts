@@ -94,11 +94,144 @@ function configureStaticWeb(app: ReturnType<typeof express>): void {
   const sendIndex = (_req: Request, res: Response) => {
     res.sendFile(indexPath);
   };
+  const sendSharedItemIndex = async (req: Request, res: Response) => {
+    const metadata = await sharedItemMetadata(req.params.homeId, req.params.itemId);
+    if (!metadata) {
+      res.sendFile(indexPath);
+      return;
+    }
+
+    res.type('html').send(sharedItemDocument(
+      fs.readFileSync(indexPath, 'utf8'),
+      metadata,
+      publicBaseUrl(req),
+      req.originalUrl
+    ));
+  };
 
   app.use(express.static(webRoot, { index: false }));
   app.use('/web', express.static(webRoot, { index: false }));
-  app.get(['/items/:homeId/:itemId', '/web/items/:homeId/:itemId'], sendIndex);
+  app.get(['/items/:homeId/:itemId', '/web/items/:homeId/:itemId'], sendSharedItemIndex);
   app.get(['/', '/web', '/web/'], sendIndex);
+}
+
+type SharedItemMetadata = {
+  title: string;
+  description: string;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function sharedItemMetadata(homeId: string, itemId: string): Promise<SharedItemMetadata | undefined> {
+  if (!UUID_PATTERN.test(homeId) || !UUID_PATTERN.test(itemId)) {
+    return undefined;
+  }
+
+  try {
+    const { rows } = await pool.query<{
+      item_name: string;
+      home_name: string;
+      location_id: string | null;
+    }>(
+      `SELECT i.name AS item_name, i.location_id, h.name AS home_name
+       FROM items i
+       JOIN homes h ON h.id = i.home_id
+       WHERE i.home_id = $1 AND i.id = $2
+       LIMIT 1`,
+      [homeId, itemId]
+    );
+
+    const item = rows[0];
+    if (!item) {
+      return undefined;
+    }
+
+    const locationNames = item.location_id
+      ? await locationPath(homeId, item.location_id)
+      : [];
+    const locationText = [item.home_name, ...locationNames].join(' / ');
+
+    return {
+      title: `${item.item_name} - ${locationText} | Stuff Tracker`,
+      description: `${item.item_name} is in ${locationText}. Open it in Stuff Tracker.`,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function locationPath(homeId: string, locationId: string): Promise<string[]> {
+  const { rows } = await pool.query<{
+    id: string;
+    parent_id: string | null;
+    name: string;
+  }>(
+    'SELECT id, parent_id, name FROM locations WHERE home_id = $1',
+    [homeId]
+  );
+
+  const locationsById = new Map(rows.map((row) => [row.id, row]));
+  const names: string[] = [];
+  const visited = new Set<string>();
+  let currentId: string | null = locationId;
+
+  while (currentId && !visited.has(currentId)) {
+    const location = locationsById.get(currentId);
+    if (!location) {
+      break;
+    }
+
+    names.unshift(location.name);
+    visited.add(currentId);
+    currentId = location.parent_id;
+  }
+
+  return names;
+}
+
+function sharedItemDocument(indexHtml: string, metadata: SharedItemMetadata, baseUrl: string, path: string): string {
+  const title = escapeHtml(metadata.title);
+  const description = escapeHtml(metadata.description);
+  const url = escapeHtml(`${baseUrl}${path}`);
+  const imageUrl = escapeHtml(`${baseUrl}/assets/app-icon.png`);
+  const socialMetadata = [
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="Stuff Tracker">`,
+    `<meta property="og:title" content="${title}">`,
+    `<meta property="og:description" content="${description}">`,
+    `<meta property="og:url" content="${url}">`,
+    `<meta property="og:image" content="${imageUrl}">`,
+    `<meta name="twitter:card" content="summary">`,
+    `<meta name="twitter:title" content="${title}">`,
+    `<meta name="twitter:description" content="${description}">`,
+  ].map((tag) => `    ${tag}`).join('\n');
+
+  return indexHtml
+    .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${description}">`)
+    .replace('</head>', `${socialMetadata}\n  </head>`);
+}
+
+function publicBaseUrl(req: Request): string {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  return `${req.protocol}://${req.get('host') ?? 'localhost'}`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return char;
+    }
+  });
 }
 
 function appleAppSiteAssociation() {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { createApp } from '../src/app';
+import { pool } from '../src/db/pool';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'unit-test-secret-that-is-long-enough';
@@ -45,6 +46,52 @@ test('app serves the mobile web shell at root, /web, and item links', async (t) 
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
     assert.match(body, /<title>Stuff Tracker \| Home Inventory App<\/title>/);
   }
+});
+
+test('app renders shared item page metadata with item name and location', async (t) => {
+  const homeId = '11111111-1111-4111-8111-111111111111';
+  const itemId = '22222222-2222-4222-8222-222222222222';
+  const roomId = '33333333-3333-4333-8333-333333333333';
+  const shelfId = '44444444-4444-4444-8444-444444444444';
+  const originalQuery = pool.query.bind(pool);
+  pool.query = (async (query: unknown) => {
+    const sql = String(query);
+    if (sql.includes('FROM items i')) {
+      return {
+        rows: [{
+          item_name: 'Espresso <Machine>',
+          home_name: 'Home "Main"',
+          location_id: shelfId,
+        }],
+      };
+    }
+    if (sql.includes('FROM locations')) {
+      return {
+        rows: [
+          { id: roomId, parent_id: null, name: 'Kitchen' },
+          { id: shelfId, parent_id: roomId, name: 'Counter & Bar' },
+        ],
+      };
+    }
+    return originalQuery(query as never);
+  }) as typeof pool.query;
+
+  const server = await listen();
+  t.after(() => {
+    pool.query = originalQuery;
+    return close(server);
+  });
+
+  const response = await fetch(`${serverBaseUrl(server)}/items/${homeId}/${itemId}`);
+  const body = await response.text();
+  const expectedTitle = 'Espresso &lt;Machine&gt; - Home &quot;Main&quot; / Kitchen / Counter &amp; Bar | Stuff Tracker';
+  const expectedDescription = 'Espresso &lt;Machine&gt; is in Home &quot;Main&quot; / Kitchen / Counter &amp; Bar. Open it in Stuff Tracker.';
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+  assert.match(body, new RegExp(`<title>${escapeRegExp(expectedTitle)}</title>`));
+  assert.match(body, new RegExp(`<meta name="description" content="${escapeRegExp(expectedDescription)}">`));
+  assert.match(body, new RegExp(`<meta property="og:title" content="${escapeRegExp(expectedTitle)}">`));
 });
 
 test('app serves Apple app site association for item universal links', async (t) => {
@@ -125,4 +172,8 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 
   process.env[key] = value;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
