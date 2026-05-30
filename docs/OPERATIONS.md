@@ -65,7 +65,7 @@ If GitHub Actions is unavailable and production is down, manually deploy a clean
 
 ## Post-Deploy Smoke Tests
 
-The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production container after each backend deploy. The smoke test checks `/health/live`, `/health`, authenticated `/homes`, home creation/deletion, item creation/deletion, and attachment upload signing.
+The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production container after each backend deploy. The smoke test checks `/health/live`, `/health`, `/auth/config` shape, authenticated `/homes`, home creation/deletion, item creation/deletion, and attachment upload signing.
 
 The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
 

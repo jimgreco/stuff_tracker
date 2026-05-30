@@ -15,11 +15,7 @@ async function main() {
   try {
     await expectJson('/health/live', 200, (body) => body.ok === true);
     await expectJson('/health', 200, (body) => body.ok === true && body.db === true);
-    await expectJson('/auth/config', 200, (body) => {
-      return typeof body === 'object'
-        && body !== null
-        && (Boolean(body.google_client_id) || Boolean(body.apple_client_id));
-    });
+    validateAuthConfig(await requestJson('/auth/config'));
 
     const user = await createSmokeUser(pool, email);
     userId = user.id;
@@ -151,6 +147,22 @@ async function request(path, options = {}) {
 function assertString(value, label) {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`missing ${label}`);
+  }
+}
+
+function validateAuthConfig(body) {
+  if (!body || typeof body !== 'object') {
+    throw new Error(`/auth/config returned an unexpected payload: ${JSON.stringify(body)}`);
+  }
+
+  for (const key of ['google_client_id', 'apple_client_id', 'ios_app_store_url']) {
+    if (body[key] !== null && typeof body[key] !== 'string') {
+      throw new Error(`/auth/config returned an invalid ${key}: ${JSON.stringify(body[key])}`);
+    }
+  }
+
+  if (!body.google_client_id && !body.apple_client_id) {
+    console.warn('No web sign-in providers are configured; set STUFF_GOOGLE_WEB_CLIENT_ID or STUFF_APPLE_WEB_CLIENT_ID to enable production web login.');
   }
 }
 
