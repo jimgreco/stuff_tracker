@@ -566,7 +566,12 @@
       controls.push(`<button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>`);
     }
     if (!controls.length) {
-      controls.push(`<div class="auth-unavailable">Sign-in providers are not configured for this CubbyLog environment.</div>`);
+      controls.push(`
+        <div class="auth-unavailable">
+          Google and Apple sign-in are not connected on the web yet.
+          ${state.appStoreUrl ? `<a class="auth-fallback-link" href="${escapeAttr(state.appStoreUrl)}" target="_blank" rel="noreferrer">Get the iOS app</a>` : ""}
+        </div>
+      `);
     }
     return controls.join("");
   }

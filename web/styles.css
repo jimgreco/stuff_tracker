@@ -1153,11 +1153,19 @@ button:disabled {
 }
 
 .auth-unavailable {
+  display: grid;
+  gap: 10px;
   padding: 14px 16px;
   color: var(--secondary);
   font-size: 13px;
   line-height: 1.4;
   text-align: center;
+}
+
+.auth-fallback-link {
+  justify-self: center;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .sign-in-panel {
