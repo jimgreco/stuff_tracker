@@ -15,6 +15,11 @@ async function main() {
   try {
     await expectJson('/health/live', 200, (body) => body.ok === true);
     await expectJson('/health', 200, (body) => body.ok === true && body.db === true);
+    await expectJson('/auth/config', 200, (body) => {
+      return typeof body === 'object'
+        && body !== null
+        && (Boolean(body.google_client_id) || Boolean(body.apple_client_id));
+    });
 
     const user = await createSmokeUser(pool, email);
     userId = user.id;

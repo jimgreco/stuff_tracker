@@ -162,9 +162,28 @@ High-value credentials:
 - `STUFF_MIGRATION_DATABASE_URL`
 - `JWT_SECRET`
 - `GOOGLE_CLIENT_ID`
+- `GOOGLE_WEB_CLIENT_ID`
 - Apple Sign In configuration for `APPLE_BUNDLE_ID`
+- Apple web Sign In Service ID for `APPLE_WEB_CLIENT_ID`
 - S3 bucket credentials and bucket policy
 - iOS signing certificate, provisioning profile, and App Store Connect API key
+
+## Web Sign-In
+
+The production web shell gets its public provider IDs from `GET /auth/config`. If the signed-out web page says sign-in providers are not configured, check that the running Stuff container has at least one web provider ID:
+
+```sh
+curl https://stuff-tracker.jim-greco.com/auth/config
+```
+
+For the `../deploy` Compose stack, set the prefixed host environment variables in `~/deploy/.env`:
+
+```sh
+STUFF_GOOGLE_WEB_CLIENT_ID=...
+STUFF_APPLE_WEB_CLIENT_ID=...
+```
+
+`STUFF_GOOGLE_WEB_CLIENT_ID` must be a Google OAuth Web application client with `https://stuff-tracker.jim-greco.com` in Authorized JavaScript origins. `STUFF_APPLE_WEB_CLIENT_ID` must be an Apple Services ID configured for Sign in with Apple JS and the same site origin.
 
 ## Session Tokens
 
