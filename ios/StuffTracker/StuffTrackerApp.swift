@@ -110,6 +110,7 @@ struct StuffTrackerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .tint(CubbyTheme.green)
                 .environmentObject(authStore)
                 .environmentObject(syncManager)
                 .environmentObject(subscriptionStore)

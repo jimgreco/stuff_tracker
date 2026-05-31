@@ -193,7 +193,7 @@ private struct AddItemChip: View {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.accentColor.opacity(0.72))
+                    .foregroundStyle(CubbyTheme.green.opacity(0.78))
 
                 Text("Add item")
                     .font(.subheadline.weight(.medium))
@@ -217,12 +217,12 @@ private struct AddItemChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(Color.accentColor.opacity(0.045), in: shape)
-                .overlay(shape.stroke(Color.accentColor.opacity(0.14), lineWidth: 0.5))
+                .background(CubbyTheme.green.opacity(0.075), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.18), lineWidth: 0.5))
         } else {
             content
-                .background(Color.accentColor.opacity(0.06), in: shape)
-                .overlay(shape.stroke(Color.accentColor.opacity(0.16), lineWidth: 0.5))
+                .background(CubbyTheme.green.opacity(0.08), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.20), lineWidth: 0.5))
         }
     }
 }
@@ -268,11 +268,11 @@ private struct ItemInsertionDropZone: View {
 
             ZStack {
                 Capsule()
-                    .fill(Color.accentColor.opacity(isTargeted ? 0.16 : 0))
+                    .fill(CubbyTheme.green.opacity(isTargeted ? 0.16 : 0))
                     .frame(width: 12, height: 32)
 
                 Capsule()
-                    .fill(Color.accentColor.opacity(isTargeted ? 1 : 0))
+                    .fill(CubbyTheme.green.opacity(isTargeted ? 1 : 0))
                     .frame(width: 3, height: 28)
             }
             .padding(paddingEdge, insideOverlap + lineOutset)
@@ -387,7 +387,7 @@ struct ItemChip: View {
 
             Image(systemName: item.icon ?? "circle.fill")
                 .font(.caption2)
-                .foregroundStyle(item.icon != nil ? .primary : Color.accentColor.opacity(0.28))
+                .foregroundStyle(item.icon != nil ? .primary : CubbyTheme.green.opacity(0.36))
 
             Text(item.name)
                 .font(.subheadline)
@@ -402,7 +402,7 @@ struct ItemChip: View {
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(CubbyTheme.green)
                     .accessibilityLabel("Selected")
             }
         }
@@ -444,16 +444,16 @@ private struct ItemChipSurfaceModifier: ViewModifier {
 
     private var strokeColor: Color {
         if isSelected {
-            return Color.accentColor
+            return CubbyTheme.green
         }
-        return showUnsyncedOutline ? .orange : Color(.separator).opacity(0.18)
+        return showUnsyncedOutline ? .orange : CubbyTheme.containerBorder
     }
 
     private var backgroundColor: Color {
         if isSelected {
-            return Color.accentColor.opacity(0.16)
+            return CubbyTheme.green.opacity(0.16)
         }
-        return Color(.systemBackground).opacity(0.72)
+        return CubbyTheme.paper.opacity(0.84)
     }
 
     func body(content: Content) -> some View {
@@ -461,7 +461,7 @@ private struct ItemChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(isSelected ? Color.accentColor.opacity(0.14) : Color(.systemBackground).opacity(0.52), in: shape)
+                .background(isSelected ? CubbyTheme.green.opacity(0.14) : CubbyTheme.paper.opacity(0.62), in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         } else {
             content

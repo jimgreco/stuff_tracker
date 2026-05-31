@@ -14,12 +14,16 @@ struct InlineAddField: View {
                 .submitLabel(.done)
                 .onSubmit { if !text.isEmpty { onCommit() } }
                 .padding(8)
-                .background(Color(.secondarySystemBackground))
+                .background(CubbyTheme.paper.opacity(0.92))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(CubbyTheme.floorBorder.opacity(0.75), lineWidth: 0.75)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             Button(action: onCommit) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(CubbyTheme.green)
                     .font(.title3)
             }
             .disabled(text.isEmpty)
@@ -41,7 +45,7 @@ struct AddButton: View {
         Button(action: action) {
             Image(systemName: "plus")
                 .font(.body.bold())
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(CubbyTheme.green)
         }
     }
 }

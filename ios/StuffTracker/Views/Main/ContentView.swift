@@ -159,7 +159,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .background(CubbyWallBackground())
             .overlay(alignment: .top) {
                 BreadcrumbBar(path: breadcrumbPath)
             }
@@ -195,6 +195,9 @@ struct ContentView: View {
             }
             .navigationTitle("CubbyLog")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(CubbyTheme.green)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if itemSelection.isSelecting {
@@ -296,6 +299,7 @@ struct ContentView: View {
             }
         }
         .environmentObject(itemSelection)
+        .preferredColorScheme(.light)
     }
 
     private func dismissSearchInput() {
@@ -694,15 +698,15 @@ private struct SelectionActionBarSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(Color(.systemBackground).opacity(0.18), in: shape)
+                .background(CubbyTheme.paper.opacity(0.22), in: shape)
                 .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.stroke(Color.white.opacity(0.18), lineWidth: 0.75))
-                .shadow(color: Color.black.opacity(0.12), radius: 16, y: 6)
+                .overlay(shape.stroke(Color.white.opacity(0.24), lineWidth: 0.75))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.16), radius: 16, y: 6)
         } else {
             content
                 .background(.thinMaterial, in: shape)
-                .overlay(shape.stroke(Color(.separator).opacity(0.18), lineWidth: 0.75))
-                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+                .overlay(shape.stroke(CubbyTheme.floorBorder, lineWidth: 0.75))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 5)
         }
     }
 }
@@ -717,14 +721,14 @@ private struct SelectionActionButtonSurfaceModifier: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .foregroundStyle(isEnabled ? tint : Color.secondary)
-                .background(isEnabled ? tint.opacity(0.10) : Color(.systemBackground).opacity(0.10), in: shape)
+                .background(isEnabled ? tint.opacity(0.12) : CubbyTheme.paper.opacity(0.18), in: shape)
                 .glassEffect(.regular.interactive(), in: shape)
                 .overlay(shape.stroke(isEnabled ? tint.opacity(0.22) : Color.white.opacity(0.10), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         } else {
             content
                 .foregroundStyle(isEnabled ? tint : Color.secondary)
-                .background(isEnabled ? tint.opacity(0.12) : Color(.secondarySystemGroupedBackground), in: shape)
+                .background(isEnabled ? tint.opacity(0.12) : CubbyTheme.paper, in: shape)
                 .overlay(shape.stroke(isEnabled ? tint.opacity(0.28) : Color(.separator).opacity(0.14), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         }
@@ -912,15 +916,15 @@ private struct BottomSearchFieldSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(Color(.systemBackground).opacity(isFocused ? 0.22 : 0.16), in: shape)
+                .background(CubbyTheme.paper.opacity(isFocused ? 0.30 : 0.22), in: shape)
                 .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.stroke(Color.white.opacity(isFocused ? 0.28 : 0.16), lineWidth: 0.75))
-                .shadow(color: Color.black.opacity(isFocused ? 0.16 : 0.10), radius: isFocused ? 18 : 12, y: 6)
+                .overlay(shape.stroke(Color.white.opacity(isFocused ? 0.36 : 0.22), lineWidth: 0.75))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(isFocused ? 0.18 : 0.12), radius: isFocused ? 18 : 12, y: 6)
         } else {
             content
-                .background(.thinMaterial, in: shape)
-                .overlay(shape.stroke(Color(.separator).opacity(isFocused ? 0.24 : 0.16), lineWidth: 0.75))
-                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+                .background(CubbyTheme.paper.opacity(0.96), in: shape)
+                .overlay(shape.stroke(CubbyTheme.floorBorder.opacity(isFocused ? 1 : 0.72), lineWidth: 0.75))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 5)
         }
     }
 }
@@ -940,16 +944,16 @@ private struct BottomFlagFilterSurfaceModifier: ViewModifier {
                     .shadow(color: Color.orange.opacity(0.18), radius: 12, y: 5)
             } else {
                 content
-                    .background(Color(.systemBackground).opacity(0.16), in: shape)
+                    .background(CubbyTheme.paper.opacity(0.22), in: shape)
                     .glassEffect(.regular.interactive(), in: shape)
-                    .overlay(shape.stroke(Color.white.opacity(0.16), lineWidth: 0.75))
-                    .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+                    .overlay(shape.stroke(Color.white.opacity(0.20), lineWidth: 0.75))
+                    .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 5)
             }
         } else {
             content
-                .background(isOn ? Color.orange.opacity(0.14) : Color(.secondarySystemGroupedBackground), in: shape)
-                .overlay(shape.stroke(isOn ? Color.orange.opacity(0.32) : Color(.separator).opacity(0.16), lineWidth: 0.75))
-                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+                .background(isOn ? Color.orange.opacity(0.14) : CubbyTheme.paper, in: shape)
+                .overlay(shape.stroke(isOn ? Color.orange.opacity(0.32) : CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 10, y: 4)
         }
     }
 }
@@ -1054,16 +1058,16 @@ private struct FloatingBreadcrumbSurfaceModifier: ViewModifier {
             content
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Color(.systemBackground).opacity(0.16), in: shape)
+                .background(CubbyTheme.paper.opacity(0.24), in: shape)
                 .glassEffect(.regular.interactive(), in: shape)
-                .shadow(color: Color.black.opacity(0.10), radius: 12, y: 5)
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 5)
         } else {
             content
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(.thinMaterial, in: shape)
-                .overlay(shape.stroke(Color(.separator).opacity(0.18), lineWidth: 0.5))
-                .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+                .background(CubbyTheme.paper.opacity(0.96), in: shape)
+                .overlay(shape.stroke(CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.5))
+                .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 10, y: 4)
         }
     }
 }
@@ -1082,9 +1086,9 @@ struct EmptyHomePrompt: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "archivebox.fill")
+            Image(systemName: "cabinet.fill")
                 .font(.system(size: 64))
-                .foregroundStyle(.blue)
+                .foregroundStyle(CubbyTheme.green)
             
             Text("Welcome to CubbyLog")
                 .font(.title.bold())
@@ -1097,6 +1101,7 @@ struct EmptyHomePrompt: View {
             Button("Create Your First Home", action: onCreate)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .tint(CubbyTheme.green)
             
             if !authStore.isAuthenticated {
                 VStack(spacing: 8) {

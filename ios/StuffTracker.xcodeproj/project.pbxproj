@@ -32,6 +32,7 @@
 			A024 /* SecureTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A124 /* SecureTokenStore.swift */; };
 			A025 /* SubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A125 /* SubscriptionStore.swift */; };
 			A026 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A126 /* LaunchScreen.storyboard */; };
+			A027 /* CubbyTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A127 /* CubbyTheme.swift */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
@@ -77,6 +78,7 @@
 			A124 /* SecureTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureTokenStore.swift; sourceTree = "<group>"; };
 			A125 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
 			A126 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+			A127 /* CubbyTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubbyTheme.swift; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B37719F62FAD719C004BBAEC /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -143,6 +145,7 @@
 				A110 /* ItemEditView.swift */,
 				A120 /* TrashBinView.swift */,
 				A121 /* PendingChangesView.swift */,
+				A127 /* CubbyTheme.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -390,6 +393,7 @@
 				A019 /* AccountView.swift in Sources */,
 				A020 /* TrashBinView.swift in Sources */,
 					A021 /* PendingChangesView.swift in Sources */,
+					A027 /* CubbyTheme.swift in Sources */,
 					A022 /* SyncUploadPlanner.swift in Sources */,
 					A024 /* SecureTokenStore.swift in Sources */,
 					A025 /* SubscriptionStore.swift in Sources */,

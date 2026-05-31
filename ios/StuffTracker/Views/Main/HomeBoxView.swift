@@ -3,15 +3,10 @@ import SwiftUI
 // MARK: - Design tokens
 
 private extension Color {
-    static let homeBox      = Color(.secondarySystemGroupedBackground)
-    static let floorBox     = Color(.tertiarySystemGroupedBackground)
-    static let roomBox      = Color(.tertiarySystemGroupedBackground)
-    static let containerBox = Color(.systemBackground).opacity(0.72)
-
-    static let homeBorder      = Color(.separator).opacity(0.28)
-    static let floorBorder     = Color(.separator).opacity(0.24)
-    static let roomBorder      = Color(.separator).opacity(0.22)
-    static let containerBorder = Color(.separator).opacity(0.18)
+    static let homeBorder = CubbyTheme.homeBorder
+    static let floorBorder = CubbyTheme.floorBorder
+    static let roomBorder = CubbyTheme.roomBorder
+    static let containerBorder = CubbyTheme.containerBorder
 }
 
 // MARK: - Default icons
@@ -189,7 +184,7 @@ struct HomeDropZone: View {
 
     var body: some View {
         Rectangle()
-            .fill(isTargeted ? Color.accentColor : Color.clear)
+            .fill(isTargeted ? CubbyTheme.green : Color.clear)
             .frame(maxWidth: .infinity)
             .frame(height: isTargeted ? 4 : 2)
             .padding(.horizontal, 8)
@@ -213,7 +208,7 @@ private struct LocationDropZone: View {
 
     var body: some View {
         Rectangle()
-            .fill(isTargeted ? Color.accentColor : Color.clear)
+            .fill(isTargeted ? CubbyTheme.green : Color.clear)
             .frame(maxWidth: .infinity)
             .frame(height: isTargeted ? 4 : 1)
             .padding(.horizontal, 8)
@@ -504,7 +499,10 @@ struct HomeBoxView: View {
         .padding(.bottom, 10)
         .background(
             GeometryReader { geo in
-                Color.homeBox
+                ZStack(alignment: .top) {
+                    CubbySurfaceBackground(kind: .home)
+                    CubbyShelfLip(kind: .home, height: 12)
+                }
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(path: [home.name], minY: geo.frame(in: .named("scroll")).minY)
                     ])
@@ -513,9 +511,9 @@ struct HomeBoxView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(isDropTargeted ? Color.accentColor : Color.homeBorder, lineWidth: isDropTargeted ? 2 : 0.75)
+                .stroke(isDropTargeted ? CubbyTheme.green : Color.homeBorder, lineWidth: isDropTargeted ? 2 : 0.75)
         )
-        .shadow(color: Color.black.opacity(0.045), radius: 14, y: 4)
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 16, y: 6)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
@@ -708,7 +706,10 @@ struct FloorBoxView: View {
         .padding(.bottom, 8)
         .background(
             GeometryReader { geo in
-                Color.floorBox
+                ZStack(alignment: .top) {
+                    CubbySurfaceBackground(kind: .floor)
+                    CubbyShelfLip(kind: .floor)
+                }
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: floor.id, homeName: home.name, locations: home.locations),
@@ -718,7 +719,8 @@ struct FloorBoxView: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? CubbyTheme.green : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.08), radius: 10, y: 3)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
@@ -900,7 +902,10 @@ struct RoomBoxView: View {
         .padding(.bottom, 8)
         .background(
             GeometryReader { geo in
-                Color.roomBox
+                ZStack(alignment: .top) {
+                    CubbySurfaceBackground(kind: .room)
+                    CubbyShelfLip(kind: .room)
+                }
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: room.id, homeName: home.name, locations: home.locations),
@@ -910,7 +915,8 @@ struct RoomBoxView: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? Color.accentColor : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? CubbyTheme.green : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.06), radius: 8, y: 2)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
@@ -1080,7 +1086,10 @@ struct ContainerBoxView: View {
         .padding(.bottom, 6)
         .background(
             GeometryReader { geo in
-                Color.containerBox
+                ZStack(alignment: .top) {
+                    CubbySurfaceBackground(kind: .container)
+                    CubbyShelfLip(kind: .container, height: 6)
+                }
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: container.id, homeName: home.name, locations: home.locations),
@@ -1090,7 +1099,7 @@ struct ContainerBoxView: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isDropTargeted ? Color.accentColor : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isDropTargeted ? CubbyTheme.green : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             guard dragged.homeId == nil || dragged.homeId == home.id else { return false }

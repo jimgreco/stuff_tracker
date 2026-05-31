@@ -260,6 +260,9 @@ struct ItemEditView: View {
     @State private var showDocumentImporter = false
     @State private var attachmentError: String?
 
+    private let editorListInsets = EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20)
+    private let editorActionInsets = EdgeInsets(top: 7, leading: 20, bottom: 7, trailing: 20)
+
     init(item: Item, homeStore: HomeStore, homeId: String = "") {
         self.item = item
         self.homeStore = homeStore
@@ -479,7 +482,7 @@ struct ItemEditView: View {
             } label: {
                 Label("Add Property", systemImage: "plus.circle.fill")
             }
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowInsets(editorActionInsets)
         }
     }
 
@@ -502,7 +505,7 @@ struct ItemEditView: View {
                         .font(.body)
                         .lineLimit(1...3)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, 6)
                 .opacity(draggedPropertyID == propertyID ? 0.5 : 1)
             }
             .contentShape(Rectangle())
@@ -515,7 +518,7 @@ struct ItemEditView: View {
             .modifier(ReorderRowFrameReporter(id: propertyID, frames: $propertyFrames))
             .simultaneousGesture(propertyReorderGesture(for: propertyID))
         }
-        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
+        .listRowInsets(editorListInsets)
     }
 
     @ViewBuilder
@@ -530,7 +533,7 @@ struct ItemEditView: View {
             PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
                 Label("Choose Photos", systemImage: "photo.on.rectangle")
             }
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowInsets(editorActionInsets)
 
             Button {
                 if CameraCaptureView.isAvailable {
@@ -542,7 +545,7 @@ struct ItemEditView: View {
                 Label("Take Photo", systemImage: "camera.fill")
             }
             .disabled(!CameraCaptureView.isAvailable)
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowInsets(editorActionInsets)
         }
     }
 
@@ -566,9 +569,8 @@ struct ItemEditView: View {
 
                     Spacer()
                 }
-                .padding(.leading, 24)
-                .padding(.vertical, 3)
-                .frame(minHeight: 98)
+                .padding(.vertical, 6)
+                .frame(minHeight: 104)
                 .opacity(draggedPhotoAttachmentID == attachmentID ? 0.5 : 1)
             }
             .contentShape(Rectangle())
@@ -581,7 +583,7 @@ struct ItemEditView: View {
             .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $photoFrames))
             .simultaneousGesture(photoReorderGesture(for: attachmentID))
         }
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+        .listRowInsets(editorListInsets)
     }
 
     @ViewBuilder
@@ -596,7 +598,7 @@ struct ItemEditView: View {
             } label: {
                 Label("Add Documents", systemImage: "doc.badge.plus")
             }
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowInsets(editorActionInsets)
         }
     }
 
@@ -637,7 +639,7 @@ struct ItemEditView: View {
                         }
                     }
                 }
-                .padding(.vertical, 1)
+                .padding(.vertical, 6)
                 .buttonStyle(.borderless)
                 .opacity(draggedDocumentAttachmentID == attachmentID ? 0.5 : 1)
             }
@@ -651,7 +653,7 @@ struct ItemEditView: View {
             .modifier(ReorderRowFrameReporter(id: attachmentID, frames: $documentFrames))
             .simultaneousGesture(documentReorderGesture(for: attachmentID))
         }
-        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowInsets(editorListInsets)
     }
 
     @ViewBuilder
