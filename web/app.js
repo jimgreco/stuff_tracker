@@ -285,6 +285,17 @@
     return `<svg class="svg-icon${klass}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
   }
 
+  function googleMark() {
+    return `
+      <svg class="google-mark" viewBox="0 0 18 18" aria-hidden="true">
+        <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.08-1.79 2.72v2.26h2.9c1.7-1.57 2.69-3.87 2.69-6.62z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.83.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/>
+        <path fill="#FBBC05" d="M3.95 10.7A5.41 5.41 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.03l2.99-2.33z"/>
+        <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"/>
+      </svg>
+    `;
+  }
+
   function defaultLocationIcon(location) {
     if (location.type === "floor") return "building.2";
     if (location.type === "room") return "door.left.hand.closed";
@@ -559,7 +570,15 @@
 
     const controls = [];
     if (state.googleClientId) {
-      controls.push(`<div class="provider-button-host" data-google-sign-in-host></div>`);
+      controls.push(`
+        <div class="provider-button-host provider-google-host" data-google-sign-in-host>
+          <div class="provider-google-facade" aria-hidden="true">
+            ${googleMark()}
+            <span>Sign in with Google</span>
+          </div>
+          <div class="provider-google-click-target" data-google-click-target></div>
+        </div>
+      `);
     }
     if (state.appleClientId) {
       controls.push(`<button type="button" class="row-button provider-apple" data-action="apple-sign-in">${svgIcon("apple", "provider-icon")}<span>Sign in with Apple</span></button>`);
@@ -1380,15 +1399,16 @@
 
     containers.forEach((container) => {
       if (container.dataset.clientId === state.googleClientId) return;
-      container.innerHTML = "";
+      const target = container.querySelector("[data-google-click-target]") || container;
+      target.innerHTML = "";
       const width = Math.round(container.getBoundingClientRect().width || container.clientWidth || 320);
-      window.google.accounts.id.renderButton(container, {
+      window.google.accounts.id.renderButton(target, {
         theme: "outline",
         size: "large",
         type: "standard",
         shape: "rectangular",
         text: "signin_with",
-        logo_alignment: "left",
+        logo_alignment: "center",
         width: Math.max(width, 240),
       });
       container.dataset.clientId = state.googleClientId;
