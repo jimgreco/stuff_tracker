@@ -78,6 +78,7 @@
     doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/>',
     photo: '<path d="M4 5h16v14H4z"/><circle cx="9" cy="10" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.2-1.2"/>',
+    apple: '<path d="M16.05 2.1c0 1-.39 1.96-1.08 2.68-.73.77-1.83 1.36-2.82 1.28-.12-.97.41-2.02 1.08-2.7.75-.77 2.03-1.35 2.82-1.26z"/><path d="M20.15 17.35c-.48 1.1-.72 1.6-1.35 2.57-.87 1.36-2.09 3.05-3.61 3.07-1.35.01-1.69-.88-3.52-.87-1.82.01-2.2.89-3.55.88-1.52-.02-2.68-1.54-3.55-2.9-2.43-3.82-2.68-8.34-1.08-10.68 1.14-1.65 2.94-2.63 4.62-2.63 1.71 0 2.79.9 4.2.9 1.37 0 2.21-.9 4.18-.9 1.49 0 3.07.81 4.2 2.22-3.69 2.02-3.09 7.29-.54 8.36z"/>',
     tag: '<path d="M20 13 13 20 4 11V4h7z"/><circle cx="8.5" cy="8.5" r="1"/>',
     heart: '<path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
     car: '<path d="M5 16h14l-1.5-5h-11z"/><path d="M7 11l2-4h6l2 4"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>',
@@ -269,6 +270,7 @@
     if (value.includes("car") || value.includes("truck")) return "car";
     if (value.includes("wrench") || value.includes("hammer") || value.includes("screwdriver")) return "tool";
     if (value.includes("cloud")) return "cloud";
+    if (value.includes("apple")) return "apple";
     if (value.includes("person")) return "person";
     if (value.includes("trash")) return "trash";
     if (value.includes("star")) return "star";
@@ -560,7 +562,7 @@
       controls.push(`<div class="provider-button-host" data-google-sign-in-host></div>`);
     }
     if (state.appleClientId) {
-      controls.push(`<button type="button" class="row-button provider-apple" data-action="apple-sign-in">Sign in with Apple</button>`);
+      controls.push(`<button type="button" class="row-button provider-apple" data-action="apple-sign-in">${svgIcon("apple", "provider-icon")}<span>Sign in with Apple</span></button>`);
     }
     if (isLocalHost() && !state.googleClientId && !state.appleClientId) {
       controls.push(`<button type="button" class="row-button" data-action="dev-sign-in">${svgIcon("person")} Dev Sign In</button>`);
@@ -785,7 +787,7 @@
       : `<span></span>`;
     return `
       <div class="sheet-backdrop">
-        <section class="sheet" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
+        <section class="sheet${options.sheetClass ? ` ${escapeAttr(options.sheetClass)}` : ""}" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
           <header class="sheet-header">
             <button type="button" class="sheet-close" data-action="close-sheet">${escapeHtml(options.closeLabel || "Done")}</button>
             <div class="sheet-title">${escapeHtml(title)}</div>
@@ -810,7 +812,7 @@
           </div>
         </section>
       `;
-      return sheetChrome("Sign in", body, { closeLabel: "Close" });
+      return sheetChrome("Sign in", body, { closeLabel: "Close", sheetClass: "sheet-auth" });
     }
 
     const userName = state.user ? state.user.name : "Not signed in";
@@ -1379,10 +1381,15 @@
     containers.forEach((container) => {
       if (container.dataset.clientId === state.googleClientId) return;
       container.innerHTML = "";
+      const width = Math.round(container.getBoundingClientRect().width || container.clientWidth || 320);
       window.google.accounts.id.renderButton(container, {
         theme: "outline",
         size: "large",
-        width: Math.max(container.clientWidth || 280, 240),
+        type: "standard",
+        shape: "rectangular",
+        text: "signin_with",
+        logo_alignment: "left",
+        width: Math.max(width, 240),
       });
       container.dataset.clientId = state.googleClientId;
     });
