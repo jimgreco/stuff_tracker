@@ -33,6 +33,7 @@
 			A025 /* SubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A125 /* SubscriptionStore.swift */; };
 			A026 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A126 /* LaunchScreen.storyboard */; };
 			A027 /* CubbyTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A127 /* CubbyTheme.swift */; };
+			A028 /* ScreenshotSeedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A128 /* ScreenshotSeedData.swift */; };
 		AGSI1 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI2 /* GoogleSignIn */; };
 		AGSI3 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AGSI4 /* GoogleSignInSwift */; };
 		T001 /* SyncUploadPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T101 /* SyncUploadPlannerTests.swift */; };
@@ -40,10 +41,19 @@
 		T003 /* ModelBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T103 /* ModelBehaviorTests.swift */; };
 		T004 /* LocationTreePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T104 /* LocationTreePresentationTests.swift */; };
 		T005 /* AccountBuildInfoPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T105 /* AccountBuildInfoPresentationTests.swift */; };
+		U001 /* StuffTrackerScreenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = U101 /* StuffTrackerScreenshots.swift */; };
+		U002 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = U102 /* SnapshotHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		TDEP_PROXY /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = APROJECT /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ATARGET;
+			remoteInfo = StuffTracker;
+		};
+		UDEP_PROXY /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = APROJECT /* Project object */;
 			proxyType = 1;
@@ -79,6 +89,7 @@
 			A125 /* SubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionStore.swift; sourceTree = "<group>"; };
 			A126 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 			A127 /* CubbyTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubbyTheme.swift; sourceTree = "<group>"; };
+			A128 /* ScreenshotSeedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotSeedData.swift; sourceTree = "<group>"; };
 		AAPP /* StuffTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StuffTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B37719F62FAD719C004BBAEC /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		B37719F72FAD719C004BBAEC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -89,6 +100,9 @@
 		T104 /* LocationTreePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTreePresentationTests.swift; sourceTree = "<group>"; };
 		T105 /* AccountBuildInfoPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountBuildInfoPresentationTests.swift; sourceTree = "<group>"; };
 		TAPP /* StuffTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StuffTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		U101 /* StuffTrackerScreenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StuffTrackerScreenshots.swift; sourceTree = "<group>"; };
+		U102 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
+		UAPP /* StuffTrackerScreenshots.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StuffTrackerScreenshots.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,6 +116,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		TFWK /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		UFWK /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -125,6 +146,7 @@
 			children = (
 				B37719F92FADFB7C004BBAEC /* StuffTracker.entitlements */,
 				A101 /* StuffTrackerApp.swift */,
+				A128 /* ScreenshotSeedData.swift */,
 				A117 /* Assets.xcassets */,
 				A126 /* LaunchScreen.storyboard */,
 				A123 /* PrivacyInfo.xcprivacy */,
@@ -173,6 +195,7 @@
 			children = (
 				AAPP /* StuffTracker.app */,
 				TAPP /* StuffTrackerTests.xctest */,
+				UAPP /* StuffTrackerScreenshots.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -182,6 +205,7 @@
 			children = (
 				AMAIN /* StuffTracker */,
 				TGROUP /* StuffTrackerTests */,
+				UGROUP /* StuffTrackerScreenshots */,
 				APRODUCTS /* Products */,
 				B37719F62FAD719C004BBAEC /* Info-Debug.plist */,
 				B37719F72FAD719C004BBAEC /* Info.plist */,
@@ -228,6 +252,15 @@
 				T105 /* AccountBuildInfoPresentationTests.swift */,
 			);
 			path = StuffTrackerTests;
+			sourceTree = "<group>";
+		};
+		UGROUP /* StuffTrackerScreenshots */ = {
+			isa = PBXGroup;
+			children = (
+				U101 /* StuffTrackerScreenshots.swift */,
+				U102 /* SnapshotHelper.swift */,
+			);
+			path = StuffTrackerScreenshots;
 			sourceTree = "<group>";
 		};
 		AVIEWS /* Views */ = {
@@ -284,6 +317,24 @@
 			productReference = TAPP /* StuffTrackerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		USCREENSHOTTARGET /* StuffTrackerScreenshots */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = UBCL /* Build configuration list for PBXNativeTarget "StuffTrackerScreenshots" */;
+			buildPhases = (
+				USRC /* Sources */,
+				UFWK /* Frameworks */,
+				URES /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				UDEP /* PBXTargetDependency */,
+			);
+			name = StuffTrackerScreenshots;
+			productName = StuffTrackerScreenshots;
+			productReference = UAPP /* StuffTrackerScreenshots.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -298,6 +349,10 @@
 						CreatedOnToolsVersion = 15.3;
 					};
 					TTESTTARGET = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = ATARGET;
+					};
+					USCREENSHOTTARGET = {
 						CreatedOnToolsVersion = 15.3;
 						TestTargetID = ATARGET;
 					};
@@ -321,6 +376,7 @@
 			targets = (
 				ATARGET /* StuffTracker */,
 				TTESTTARGET /* StuffTrackerTests */,
+				USCREENSHOTTARGET /* StuffTrackerScreenshots */,
 			);
 		};
 /* End PBXProject section */
@@ -337,6 +393,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		TRES /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		URES /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -397,6 +460,7 @@
 					A022 /* SyncUploadPlanner.swift in Sources */,
 					A024 /* SecureTokenStore.swift in Sources */,
 					A025 /* SubscriptionStore.swift in Sources */,
+					A028 /* ScreenshotSeedData.swift in Sources */,
 				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,6 +476,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		USRC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				U001 /* StuffTrackerScreenshots.swift in Sources */,
+				U002 /* SnapshotHelper.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -419,6 +492,11 @@
 			isa = PBXTargetDependency;
 			target = ATARGET /* StuffTracker */;
 			targetProxy = TDEP_PROXY /* PBXContainerItemProxy */;
+		};
+		UDEP /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ATARGET /* StuffTracker */;
+			targetProxy = UDEP_PROXY /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -625,6 +703,51 @@
 			};
 			name = Release;
 		};
+		UTDEBUG /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6JPQCD336;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jimgreco.stufftrackerScreenshots;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = StuffTracker;
+			};
+			name = Debug;
+		};
+		UTRELEASE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V6JPQCD336;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jimgreco.stufftrackerScreenshots;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = StuffTracker;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -651,6 +774,15 @@
 			buildConfigurations = (
 				TTDEBUG /* Debug */,
 				TTRELEASE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		UBCL /* Build configuration list for PBXNativeTarget "StuffTrackerScreenshots" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				UTDEBUG /* Debug */,
+				UTRELEASE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

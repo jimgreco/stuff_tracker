@@ -22,6 +22,10 @@ final class AuthStore: ObservableObject {
     nonisolated static let completedAuthenticationDefaultsKey = "has_completed_authentication"
 
     init() {
+        #if DEBUG
+        ScreenshotSeedData.prepareAuthenticationStateIfNeeded()
+        #endif
+
         let hasStoredSession = Self.hasStoredSession
         if hasStoredSession {
             Self.markAuthenticationCompleted()

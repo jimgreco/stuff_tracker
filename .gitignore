@@ -23,5 +23,12 @@ ios/StuffTracker.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xc
 *.hmap
 *.ipa
 
+# Fastlane generated output
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/README.md
+
 # Claude
 .claude

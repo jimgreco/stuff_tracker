@@ -59,7 +59,8 @@ final class APIEncodingTests: XCTestCase {
             modelNumber: "MX-1",
             warrantyExpiresDate: "2027-05-24",
             estimatedValueCents: 12999,
-            isFlagged: true
+            isFlagged: true,
+            sortOrder: nil
         )
 
         let json = try encodedJSON(body)
@@ -76,6 +77,7 @@ final class APIEncodingTests: XCTestCase {
         XCTAssertEqual(json["warranty_expires_date"] as? String, "2027-05-24")
         XCTAssertEqual(json["estimated_value_cents"] as? Int, 12999)
         XCTAssertEqual(json["is_flagged"] as? Bool, true)
+        XCTAssertFalse(json.keys.contains("sort_order"))
         XCTAssertFalse(json.keys.contains("tags"))
         XCTAssertFalse(json.keys.contains("purchase_date"))
     }

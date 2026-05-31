@@ -105,6 +105,10 @@ struct StuffTrackerApp: App {
         
         // Initialize local data manager
         _ = LocalDataManager.shared
+
+        #if DEBUG
+        ScreenshotSeedData.installIfNeeded()
+        #endif
     }
 
     var body: some Scene {

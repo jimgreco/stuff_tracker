@@ -1,0 +1,12 @@
+project("ios/StuffTracker.xcodeproj")
+scheme("StuffTrackerScreenshots")
+app_identifier("com.jimgreco.stufftracker")
+configuration("Debug")
+
+devices((ENV["SCREENSHOT_DEVICES"] || "iPhone 17 Pro Max,iPad Pro 13-inch (M5)").split(",").map(&:strip))
+languages(["en-US"])
+
+output_directory("fastlane/screenshots")
+clear_previous_screenshots(true)
+reinstall_app(true)
+override_status_bar(true)
