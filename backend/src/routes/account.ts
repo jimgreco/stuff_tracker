@@ -3,12 +3,18 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { AppStoreTransactionSyncSchema } from '../lib/schemas';
 import { accountPlan } from '../lib/entitlements';
 import { applySignedAppStoreTransaction, appStoreProductIds } from '../lib/appStore';
+import { isAdminEmail } from '../lib/adminUsers';
 
 const router = Router();
 router.use(requireAuth);
 
 router.get('/plan', async (req: AuthRequest, res: Response) => {
-  res.json(await accountPlan(req.user!.userId));
+  const isAdmin = isAdminEmail(req.user!.email);
+  res.json({
+    ...await accountPlan(req.user!.userId),
+    isAdmin,
+    is_admin: isAdmin,
+  });
 });
 
 router.get('/subscription-products', (_req: AuthRequest, res: Response) => {

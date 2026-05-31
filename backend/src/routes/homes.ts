@@ -62,8 +62,8 @@ router.get('/:homeId', async (req: AuthRequest, res: Response) => {
     pool.query(
       `SELECT id, home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
               documents, purchase_date, serial_number, model_number, warranty_expires_date,
-              estimated_value_cents, is_flagged, created_by
-       FROM items WHERE home_id = $1 ORDER BY name`,
+              estimated_value_cents, is_flagged, sort_order, created_by
+       FROM items WHERE home_id = $1 ORDER BY sort_order, name`,
       [homeId]
     ),
   ]);

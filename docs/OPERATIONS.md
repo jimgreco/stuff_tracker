@@ -131,6 +131,8 @@ curl -X POST "$API_ORIGIN/admin/entitlements" \
 
 Use `source` values `manual`, `promo`, or `admin`. Add an ISO `expires_at` value for time-limited grants.
 
+The web account sheet only exposes backend API URL settings to signed-in admin emails. Set `STUFF_ADMIN_EMAILS` to a comma-separated allowlist, for example `owner@example.com,ops@example.com`, in addition to `ADMIN_API_TOKEN` for server-side admin API calls.
+
 ## Production Health Monitoring
 
 The `Production Health` GitHub Actions workflow checks `/health/live` and `/health` on an hourly schedule. Set the `PRODUCTION_BASE_URL` repository secret to the public backend origin, with no trailing slash, to enable the check.

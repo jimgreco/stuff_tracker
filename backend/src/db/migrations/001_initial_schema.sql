@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS items (
   properties JSONB NOT NULL DEFAULT '[]'::jsonb,
   documents JSONB NOT NULL DEFAULT '[]'::jsonb,
   purchase_date DATE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

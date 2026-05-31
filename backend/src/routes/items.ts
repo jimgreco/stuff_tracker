@@ -84,6 +84,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     warranty_expires_date,
     estimated_value_cents,
     is_flagged,
+    sort_order,
   } = ItemSchema.parse(req.body);
   if (location_id) {
     const location = await pool.query(
@@ -105,9 +106,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     `INSERT INTO items (
        home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
        documents, purchase_date, serial_number, model_number, warranty_expires_date,
-       estimated_value_cents, is_flagged, created_by
+       estimated_value_cents, is_flagged, sort_order, created_by
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      RETURNING *`,
     [
       homeId,
@@ -125,6 +126,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       warranty_expires_date ?? null,
       estimated_value_cents ?? null,
       is_flagged ?? false,
+      sort_order ?? 0,
       req.user!.userId,
     ]
   );
@@ -168,6 +170,7 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     'warranty_expires_date',
     'estimated_value_cents',
     'is_flagged',
+    'sort_order',
   ] as const;
   for (const key of allowed) {
     if (key in updates) {

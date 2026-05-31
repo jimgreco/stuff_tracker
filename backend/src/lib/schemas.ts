@@ -42,6 +42,7 @@ export const ItemSchema = z.object({
   warranty_expires_date: DateStringSchema,
   estimated_value_cents: z.number().int().min(0).nullable().optional(),
   is_flagged: z.boolean().optional(),
+  sort_order: z.number().int().optional(),
 });
 
 export const ItemUploadSchema = z.preprocess((value) => {

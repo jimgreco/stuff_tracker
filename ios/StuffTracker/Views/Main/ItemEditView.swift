@@ -1053,7 +1053,8 @@ struct ItemEditView: View {
                     modelNumber: normalizedText(modelNumber),
                     warrantyExpiresDate: ItemDateCodec.string(from: warrantyExpiresDate),
                     estimatedValueCents: try normalizedEstimatedValueCents(),
-                    isFlagged: isFlagged
+                    isFlagged: isFlagged,
+                    sortOrder: item.sortOrder
                 )
 
                 homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)

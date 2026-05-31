@@ -11,6 +11,7 @@
   };
 
   const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
+  const APP_ICON_URL = "/assets/app-icon.png?v=20260531-ios-cubby";
   const STORED_TOKEN = localStorage.getItem(STORAGE.token) || "";
   const INITIAL_ITEM_LINK = parseItemDeepLink(window.location);
   const app = document.getElementById("app");
@@ -29,6 +30,9 @@
     toast: "",
     toastTimer: null,
     sheet: null,
+    actionMenu: null,
+    draggingItem: null,
+    suppressItemClick: false,
     adding: null,
     iconSearch: "",
     authConfigLoaded: false,
@@ -39,6 +43,9 @@
     deepLinkHandled: false,
     highlightedItemId: "",
   };
+
+  let activeDropZone = null;
+  let activeDropChip = null;
 
   if (!STORED_TOKEN) {
     state.collapsed = new Set();
@@ -315,13 +322,20 @@
     return ICON_SECTIONS.flatMap((section) => section.icons.map(([name, label]) => ({ ...section, name, label })));
   }
 
-  function render() {
+  function render(options = {}) {
     const active = document.activeElement;
     const activeId = active && active.id;
     const selectionStart = active && "selectionStart" in active ? active.selectionStart : null;
     const selectionEnd = active && "selectionEnd" in active ? active.selectionEnd : null;
+    const sheetBody = document.querySelector(".sheet-body");
+    const sheetScrollTop = options.preserveSheetScroll === false ? null : sheetBody?.scrollTop ?? null;
 
     app.innerHTML = renderApp();
+
+    if (sheetScrollTop !== null) {
+      const nextSheetBody = document.querySelector(".sheet-body");
+      if (nextSheetBody) nextSheetBody.scrollTop = sheetScrollTop;
+    }
 
     if (activeId) {
       const nextActive = document.getElementById(activeId);
@@ -336,6 +350,11 @@
     const addInput = document.querySelector("[data-add-input]");
     if (addInput && activeId !== "search-input") {
       addInput.focus();
+    }
+
+    if (options.focusSelector) {
+      const nextFocus = document.querySelector(options.focusSelector);
+      if (nextFocus) nextFocus.focus({ preventScroll: true });
     }
 
     requestAnimationFrame(updateBreadcrumb);
@@ -397,14 +416,14 @@
       <div class="marketing-page shared-link-page">
         <header class="marketing-nav">
           <a class="marketing-brand" href="/" aria-label="CubbyLog home">
-            <img src="/assets/app-icon.png" width="34" height="34" alt="">
+            <img src="${APP_ICON_URL}" width="34" height="34" alt="">
             <span>CubbyLog</span>
           </a>
           <button type="button" class="marketing-sign-in" data-action="open-account">Sign in</button>
         </header>
         <main class="shared-link-main">
           <section class="shared-link-panel">
-            <img class="shared-link-icon" src="/assets/app-icon.png" width="76" height="76" alt="">
+            <img class="shared-link-icon" src="${APP_ICON_URL}" width="76" height="76" alt="">
             <p class="marketing-kicker">Shared item</p>
             <h1>Open this shared item in CubbyLog</h1>
             <p class="shared-link-copy">Sign in with an account that can access this home, or open the link again from the iOS app.</p>
@@ -428,7 +447,7 @@
       <div class="marketing-page">
         <header class="marketing-nav">
           <a class="marketing-brand" href="#top" aria-label="CubbyLog home">
-            <img src="/assets/app-icon.png" width="34" height="34" alt="">
+            <img src="${APP_ICON_URL}" width="34" height="34" alt="">
             <span>CubbyLog</span>
           </a>
           <nav class="marketing-links" aria-label="Landing page">
@@ -552,7 +571,7 @@
     return `
       <section class="empty-state auth-required">
         <div class="empty-panel">
-          <img src="/assets/app-icon.png" alt="">
+          <img src="${APP_ICON_URL}" alt="">
           <h2>Bring your CubbyLog to the web</h2>
           <p>Sign in to see the same homes, rooms, and cubbies you keep on your phone.</p>
           <div class="auth-actions">
@@ -641,7 +660,7 @@
     return `
       <div class="empty-state">
         <div class="empty-panel">
-          <img src="/assets/app-icon.png" alt="">
+          <img src="${APP_ICON_URL}" alt="">
           <h2>Welcome to CubbyLog</h2>
           <p>Add one home to start building your friendly map of rooms, shelves, bins, and the things tucked inside.</p>
           <button type="button" class="primary-button" data-action="start-add" data-add-kind="home">
@@ -730,6 +749,7 @@
   }
 
   function renderNodeHeader({ key, title, icon, summary, kind, homeId, locationId, collapsed }) {
+    const actionMenuOpen = actionMenuMatches(kind, homeId, locationId || null);
     return `
       <div class="node-header">
         <button type="button" class="collapse-button ${collapsed ? "is-collapsed" : ""}" data-action="toggle-collapse" data-node-key="${escapeAttr(key)}" aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeAttr(title)}">
@@ -740,9 +760,26 @@
           <span class="node-title-text">${escapeHtml(title)}</span>
         </div>
         <div class="summary">${escapeHtml(summary)}</div>
-        <button type="button" class="menu-button" data-action="open-actions" data-kind="${escapeAttr(kind)}" data-home-id="${escapeAttr(homeId)}" ${locationId ? `data-location-id="${escapeAttr(locationId)}"` : ""} aria-label="Actions for ${escapeAttr(title)}">
+        <button type="button" class="menu-button ${actionMenuOpen ? "is-open" : ""}" data-action="open-actions" data-kind="${escapeAttr(kind)}" data-home-id="${escapeAttr(homeId)}" ${locationId ? `data-location-id="${escapeAttr(locationId)}"` : ""} aria-label="Actions for ${escapeAttr(title)}" aria-expanded="${actionMenuOpen ? "true" : "false"}">
           ${svgIcon("ellipsis")}
         </button>
+      </div>
+      ${actionMenuOpen ? renderInlineActionMenu() : ""}
+    `;
+  }
+
+  function actionMenuMatches(kind, homeId, locationId) {
+    const menu = state.actionMenu;
+    if (!menu) return false;
+    return menu.kind === kind && menu.homeId === homeId && (menu.locationId || null) === (locationId || null);
+  }
+
+  function renderInlineActionMenu() {
+    const target = targetForActionTarget(state.actionMenu);
+    if (!target) return "";
+    return `
+      <div class="inline-action-menu" data-action-menu role="menu" aria-label="Actions for ${escapeAttr(targetTitle(target))}">
+        ${actionRowsForTarget(state.actionMenu, "inline-action").join("")}
       </div>
     `;
   }
@@ -750,8 +787,8 @@
   function renderItemFlow(home, locationId) {
     const items = itemsIn(home, locationId);
     return `
-      <div class="item-flow">
-        ${items.map((item) => renderItemChip(home, item)).join("")}
+      <div class="item-flow" data-drop-zone data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(locationId || "")}">
+        ${items.map((item, index) => renderItemChip(home, item, index)).join("")}
         <button type="button" class="add-chip" data-action="start-add" data-add-kind="item" data-home-id="${escapeAttr(home.id)}" data-parent-id="${escapeAttr(locationId || "")}">
           ${svgIcon("plus")} <span>Add item</span>
         </button>
@@ -759,10 +796,10 @@
     `;
   }
 
-  function renderItemChip(home, item) {
+  function renderItemChip(home, item, index) {
     const highlighted = state.highlightedItemId === item.id;
     return `
-      <button type="button" class="item-chip ${highlighted ? "is-deep-linked" : ""}" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+      <button type="button" class="item-chip ${highlighted ? "is-deep-linked" : ""}" draggable="true" data-draggable-item data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}" aria-label="${escapeAttr(item.name)}. Drag to move.">
         ${svgIcon(item.icon || "circle.fill")}
         <span class="item-name">${escapeHtml(item.name)}</span>
         ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
@@ -792,11 +829,11 @@
   function renderSheet() {
     if (!state.sheet) return "";
     if (state.sheet.type === "account") return renderAccountSheet();
-    if (state.sheet.type === "actions") return renderActionsSheet();
     if (state.sheet.type === "rename") return renderRenameSheet();
     if (state.sheet.type === "iconPicker") return renderIconPickerSheet();
     if (state.sheet.type === "delete") return renderDeleteSheet();
     if (state.sheet.type === "itemEditor") return renderItemEditorSheet();
+    if (state.sheet.type === "locationPicker") return renderLocationPickerSheet();
     return "";
   }
 
@@ -804,11 +841,12 @@
     const save = options.saveFormId
       ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save">${escapeHtml(options.saveLabel || "Save")}</button>`
       : `<span></span>`;
+    const closeAction = options.closeAction || "close-sheet";
     return `
       <div class="sheet-backdrop">
         <section class="sheet${options.sheetClass ? ` ${escapeAttr(options.sheetClass)}` : ""}" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
           <header class="sheet-header">
-            <button type="button" class="sheet-close" data-action="close-sheet">${escapeHtml(options.closeLabel || "Done")}</button>
+            <button type="button" class="sheet-close" data-action="${escapeAttr(closeAction)}">${escapeHtml(options.closeLabel || "Done")}</button>
             <div class="sheet-title">${escapeHtml(title)}</div>
             ${save}
           </header>
@@ -823,7 +861,7 @@
     if (!connected) {
       const body = `
         <section class="sign-in-panel">
-          <img src="/assets/app-icon.png" width="76" height="76" alt="">
+          <img src="${APP_ICON_URL}" width="76" height="76" alt="">
           <h2>Welcome to CubbyLog</h2>
           <p>Sign in with Google or Apple to create your account and keep your home map in sync.</p>
           <div class="auth-actions">
@@ -849,17 +887,8 @@
         </div>
       </section>
       ${connected ? renderSubscriptionSection() : ""}
-      <form class="form-section" data-form="account-settings">
-        <h2 class="section-title">Backend</h2>
-        <div class="form-list">
-          <label class="form-row">
-            <span>API URL</span>
-            <input name="apiBaseUrl" value="${escapeAttr(state.apiBaseUrl)}" inputmode="url" autocomplete="url">
-          </label>
-          <button type="submit" class="row-button">${svgIcon("check")} Save API URL</button>
-          ${connected ? `<button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>` : ""}
-        </div>
-      </form>
+      ${connected ? renderSyncSection() : ""}
+      ${canManageApiSettings() ? renderApiSettingsSection() : ""}
       <section class="form-section">
         <h2 class="section-title">Account</h2>
         <div class="form-list">
@@ -870,6 +899,36 @@
       <p class="footnote">Version web.</p>
     `;
     return sheetChrome("Account", body);
+  }
+
+  function renderSyncSection() {
+    return `
+      <section class="form-section">
+        <h2 class="section-title">Sync</h2>
+        <div class="form-list">
+          <button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderApiSettingsSection() {
+    return `
+      <form class="form-section" data-form="account-settings">
+        <h2 class="section-title">Backend</h2>
+        <div class="form-list">
+          <label class="form-row">
+            <span>API URL</span>
+            <input name="apiBaseUrl" value="${escapeAttr(state.apiBaseUrl)}" inputmode="url" autocomplete="url">
+          </label>
+          <button type="submit" class="row-button">${svgIcon("check")} Save API URL</button>
+        </div>
+      </form>
+    `;
+  }
+
+  function canManageApiSettings() {
+    return Boolean(state.accountPlan?.isAdmin || state.accountPlan?.is_admin);
   }
 
   function renderSubscriptionSection() {
@@ -909,39 +968,67 @@
     return String(value || "").replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
-  function renderActionsSheet() {
-    const target = targetForSheet();
-    if (!target) return "";
-    const title = target.location ? target.location.name : target.home.name;
-    const rows = [];
-    rows.push(actionButton("rename-target", "pencil", "Rename"));
-    rows.push(actionButton("change-icon", "star", "Change Icon"));
-    if (state.sheet.kind === "home") {
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Floor", { addKind: "location", locationType: "floor" }));
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { addKind: "location", locationType: "room" }));
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { addKind: "item" }));
-    } else if (target.location.type === "floor") {
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { addKind: "location", locationType: "room" }));
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { addKind: "item" }));
-      rows.push(actionButton("sort-children", "sort", "Order Rooms by Name"));
+  function actionRowsForTarget(actionTarget, className = "sheet-action") {
+    const target = targetForActionTarget(actionTarget);
+    if (!target) return [];
+    const locationId = actionTarget.locationId || null;
+    const base = { homeId: actionTarget.homeId, parentId: locationId || "" };
+    const rows = [
+      actionButton("rename-target", "pencil", "Rename", {}, false, className),
+      actionButton("change-icon", "star", "Change Icon", {}, false, className),
+    ];
+    if (actionTarget.kind === "home") {
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Floor", { ...base, addKind: "location", locationType: "floor" }, false, className));
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { ...base, addKind: "location", locationType: "room" }, false, className));
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
+    } else if (target.location?.type === "floor") {
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { ...base, addKind: "location", locationType: "room" }, false, className));
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
+      rows.push(actionButton("sort-children", "sort", "Order Rooms by Name", {}, false, className));
     } else {
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Container", { addKind: "location", locationType: "container" }));
-      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { addKind: "item" }));
-      rows.push(actionButton("sort-children", "sort", "Order Containers by Name"));
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Container", { ...base, addKind: "location", locationType: "container" }, false, className));
+      rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
+      rows.push(actionButton("sort-children", "sort", "Order Containers by Name", {}, false, className));
     }
-    rows.push(actionButton("open-delete", "trash", "Delete", {}, true));
-    return sheetChrome(title, `<div class="action-list">${rows.join("")}</div>`);
+    rows.push(actionButton("open-delete", "trash", "Delete", {}, true, className));
+    return rows;
   }
 
-  function actionButton(action, icon, label, extra = {}, danger = false) {
+  function actionButton(action, icon, label, extra = {}, danger = false, className = "sheet-action") {
     const data = Object.entries(extra)
       .map(([key, value]) => `data-${toKebab(key)}="${escapeAttr(value)}"`)
       .join(" ");
     return `
-      <button type="button" class="sheet-action ${danger ? "danger" : ""}" data-action="${escapeAttr(action)}" ${data}>
+      <button type="button" class="${escapeAttr(className)} ${danger ? "danger" : ""}" data-action="${escapeAttr(action)}" ${data} ${className === "inline-action" ? 'role="menuitem"' : ""}>
         ${svgIcon(icon)} <span>${escapeHtml(label)}</span>
       </button>
     `;
+  }
+
+  function renderOptionalDateRow(field, label, value) {
+    const dateValue = value || "";
+    return `
+      <div class="form-row optional-date-row">
+        <span>${escapeHtml(label)}</span>
+        <div class="date-control">
+          ${dateValue
+            ? `<input name="${escapeAttr(field)}" type="date" value="${escapeAttr(dateValue)}">
+               <button type="button" class="date-action clear" data-action="clear-item-date" data-date-field="${escapeAttr(field)}">Clear</button>`
+            : `<input name="${escapeAttr(field)}" type="hidden" value="">
+               <button type="button" class="date-action" data-action="add-item-date" data-date-field="${escapeAttr(field)}">Add</button>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function isItemDateField(field) {
+    return field === "purchaseDate" || field === "warrantyExpiresDate";
+  }
+
+  function todayDateString() {
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 10);
   }
 
   function renderRenameSheet() {
@@ -1055,14 +1142,8 @@
               <span>Flagged</span>
               <input name="isFlagged" type="checkbox" ${draft.isFlagged ? "checked" : ""}>
             </label>
-            <label class="form-row">
-              <span>Purchase Date</span>
-              <input name="purchaseDate" type="date" value="${escapeAttr(draft.purchaseDate || "")}">
-            </label>
-            <label class="form-row">
-              <span>Warranty</span>
-              <input name="warrantyExpiresDate" type="date" value="${escapeAttr(draft.warrantyExpiresDate || "")}">
-            </label>
+            ${renderOptionalDateRow("purchaseDate", "Purchase Date", draft.purchaseDate)}
+            ${renderOptionalDateRow("warrantyExpiresDate", "Warranty Expires", draft.warrantyExpiresDate)}
             <label class="form-row">
               <span>Serial</span>
               <input name="serialNumber" value="${escapeAttr(draft.serialNumber || "")}" autocomplete="off">
@@ -1075,21 +1156,23 @@
               <span>Value</span>
               <input name="estimatedValue" inputmode="decimal" value="${escapeAttr(formatDollars(draft.estimatedValueCents))}">
             </label>
-            <label class="full-row">
-              <div class="row-label">Notes</div>
-              <textarea name="notes" rows="4">${escapeHtml(draft.notes || "")}</textarea>
+            <label class="form-row notes-row">
+              <span>Notes</span>
+              <textarea name="notes" rows="3">${escapeHtml(draft.notes || "")}</textarea>
             </label>
           </div>
         </section>
         <section class="form-section">
           <h2 class="section-title">Location</h2>
           <div class="form-list">
-            <label class="form-row">
+            <div class="form-row location-picker-row">
               <span>Stored In</span>
-              <select name="locationId">
-                ${locationOptions(home, draft.locationId).join("")}
-              </select>
-            </label>
+              <input type="hidden" name="locationId" value="${escapeAttr(draft.locationId || "")}">
+              <button type="button" class="location-select-button" data-action="open-location-picker" aria-label="Choose storage location">
+                <span>${escapeHtml(selectedLocationLabel(home, draft.locationId))}</span>
+                ${svgIcon("chevron")}
+              </button>
+            </div>
           </div>
         </section>
         <section class="form-section">
@@ -1111,6 +1194,68 @@
       </form>
     `;
     return sheetChrome("Edit Item", body, { closeLabel: "Cancel", saveFormId: "item-editor-form" });
+  }
+
+  function renderLocationPickerSheet() {
+    const home = findHome(state.sheet.homeId);
+    const item = findItem(state.sheet.homeId, state.sheet.itemId);
+    if (!home || !item) return "";
+
+    const draft = state.sheet.draft || cloneItem(item);
+    const path = Array.isArray(state.sheet.path) ? state.sheet.path : [];
+    const parentId = path[path.length - 1] || null;
+    const parent = parentId ? home.locations.find((location) => location.id === parentId) : null;
+    const children = childLocations(home, parentId);
+    const title = parent ? parent.name : "Select Location";
+    const selectedId = draft.locationId || null;
+    const body = `
+      <div class="location-picker">
+        <div class="location-picker-path">${escapeHtml(locationPathLabel(home, parentId))}</div>
+        <div class="location-choice-list">
+          ${renderLocationChoice({
+            icon: parent ? "check" : home.icon || "house.fill",
+            title: parent ? "Place here" : `${home.name} (top level)`,
+            subtitle: parent ? `Store in ${parent.name}` : "Store directly in this home",
+            locationId: parentId,
+            selected: selectedId === parentId,
+            action: "choose-item-location",
+          })}
+          ${children.map((location) => {
+            const hasChildren = childLocations(home, location.id).length > 0;
+            return renderLocationChoice({
+              icon: location.icon || defaultLocationIcon(location),
+              title: location.name,
+              subtitle: location.type,
+              locationId: location.id,
+              selected: selectedId === location.id,
+              action: hasChildren ? "drill-location" : "choose-item-location",
+              hasChildren,
+            });
+          }).join("")}
+        </div>
+      </div>
+    `;
+    return sheetChrome(title, body, {
+      closeLabel: parent ? "Back" : "Cancel",
+      closeAction: parent ? "location-picker-back" : "cancel-location-picker",
+      sheetClass: "sheet-location-picker",
+    });
+  }
+
+  function renderLocationChoice({ icon, title, subtitle, locationId, selected, action, hasChildren = false }) {
+    return `
+      <button type="button" class="location-choice ${selected ? "is-selected" : ""}" data-action="${escapeAttr(action)}" data-location-id="${escapeAttr(locationId || "")}">
+        <span class="location-choice-icon">${svgIcon(icon)}</span>
+        <span class="location-choice-copy">
+          <span class="location-choice-title">${escapeHtml(title)}</span>
+          <span class="location-choice-subtitle">${escapeHtml(formatLocationSubtitle(subtitle))}</span>
+        </span>
+        <span class="location-choice-trailing">
+          ${selected ? svgIcon("check") : ""}
+          ${hasChildren ? svgIcon("chevron") : ""}
+        </span>
+      </button>
+    `;
   }
 
   function renderPropertyRow(property, index) {
@@ -1163,17 +1308,39 @@
     `;
   }
 
-  function locationOptions(home, selectedId) {
-    const options = [`<option value="" ${!selectedId ? "selected" : ""}>No location</option>`];
-    function walk(parentId, depth) {
-      childLocations(home, parentId).forEach((location) => {
-        const prefix = Array(depth + 1).join("  ");
-        options.push(`<option value="${escapeAttr(location.id)}" ${location.id === selectedId ? "selected" : ""}>${escapeHtml(prefix + location.name)}</option>`);
-        walk(location.id, depth + 1);
-      });
+  function selectedLocationLabel(home, selectedId) {
+    if (!home) return "No location";
+    if (!selectedId) return home.name;
+    return locationPathLabel(home, selectedId) || home.name;
+  }
+
+  function locationPathLabel(home, locationId) {
+    if (!home || !locationId) return home?.name || "No location";
+    const path = [];
+    let current = home.locations.find((location) => location.id === locationId);
+    while (current) {
+      path.unshift(current.name);
+      current = current.parentId ? home.locations.find((location) => location.id === current.parentId) : null;
     }
-    walk(null, 0);
-    return options;
+    return path.length ? path.join(" › ") : home.name;
+  }
+
+  function initialLocationPickerPath(home, selectedId) {
+    if (!home || !selectedId) return [];
+    const ancestors = [];
+    let current = home.locations.find((location) => location.id === selectedId);
+    while (current) {
+      ancestors.unshift(current.id);
+      current = current.parentId ? home.locations.find((location) => location.id === current.parentId) : null;
+    }
+    ancestors.pop();
+    return ancestors;
+  }
+
+  function formatLocationSubtitle(value) {
+    const text = String(value || "");
+    if (!text) return "";
+    return text.replace(/\b\w/g, (match) => match.toUpperCase());
   }
 
   function filteredHomes() {
@@ -1329,12 +1496,19 @@
   }
 
   function targetForSheet() {
-    const sheet = state.sheet;
-    if (!sheet) return null;
-    const home = findHome(sheet.homeId);
+    return targetForActionTarget(state.sheet);
+  }
+
+  function targetForActionTarget(actionTarget) {
+    if (!actionTarget) return null;
+    const home = findHome(actionTarget.homeId);
     if (!home) return null;
-    const location = sheet.locationId ? home.locations.find((loc) => loc.id === sheet.locationId) : null;
+    const location = actionTarget.locationId ? home.locations.find((loc) => loc.id === actionTarget.locationId) : null;
     return { home, location };
+  }
+
+  function targetTitle(target) {
+    return target.location ? target.location.name : target.home.name;
   }
 
   function currentTargetIcon() {
@@ -1554,6 +1728,7 @@
       warranty_expires_date: item.warrantyExpiresDate || null,
       estimated_value_cents: Number.isInteger(item.estimatedValueCents) ? item.estimatedValueCents : null,
       is_flagged: Boolean(item.isFlagged),
+      sort_order: Number.isFinite(item.sortOrder) ? item.sortOrder : 0,
     };
   }
 
@@ -1616,6 +1791,82 @@
     };
     await apiRequest("POST", `/homes/${homeId}/items`, itemPayload(item));
     await loadServerHomes();
+  }
+
+  async function moveItem(homeId, itemId, targetLocationId, insertionIndex) {
+    const home = findHome(homeId);
+    const item = findItem(homeId, itemId);
+    if (!home || !item) return false;
+
+    const fromLocationId = item.locationId || null;
+    const toLocationId = targetLocationId || null;
+    const originalHomes = JSON.parse(JSON.stringify(state.homes));
+    const updates = itemMoveUpdates(home, item, toLocationId, insertionIndex);
+    if (!updates.length) return false;
+
+    updates.forEach(({ id: updateId, locationId, sortOrder }) => {
+      const candidate = home.items.find((homeItem) => homeItem.id === updateId);
+      if (candidate) {
+        candidate.locationId = locationId;
+        candidate.sortOrder = sortOrder;
+      }
+    });
+    persistData();
+    render();
+
+    try {
+      await Promise.all(updates.map((update) => apiRequest("PATCH", `/homes/${homeId}/items/${update.id}`, {
+        location_id: update.locationId,
+        sort_order: update.sortOrder,
+      })));
+      await loadServerHomes();
+      return true;
+    } catch (error) {
+      state.homes = originalHomes;
+      persistData();
+      throw error;
+    } finally {
+      if (fromLocationId !== toLocationId) {
+        state.collapsed.delete(nodeKey("home", homeId));
+        if (toLocationId) expandLocationPath(homeId, toLocationId);
+        persistCollapsed();
+      }
+    }
+  }
+
+  function itemMoveUpdates(home, item, toLocationId, insertionIndex) {
+    const fromLocationId = item.locationId || null;
+    const movingId = item.id;
+    const updates = new Map();
+    const queueUpdate = (candidate, locationId, sortOrder) => {
+      const nextLocationId = locationId || null;
+      const nextSortOrder = sortOrder;
+      if ((candidate.locationId || null) !== nextLocationId || candidate.sortOrder !== nextSortOrder) {
+        updates.set(candidate.id, {
+          id: candidate.id,
+          locationId: nextLocationId,
+          sortOrder: nextSortOrder,
+        });
+      }
+    };
+
+    if (fromLocationId !== toLocationId) {
+      itemsIn(home, fromLocationId)
+        .filter((candidate) => candidate.id !== movingId)
+        .forEach((candidate, index) => queueUpdate(candidate, fromLocationId, index));
+    }
+
+    const targetItems = itemsIn(home, toLocationId);
+    const sourceIndex = targetItems.findIndex((candidate) => candidate.id === movingId);
+    const siblings = targetItems.filter((candidate) => candidate.id !== movingId);
+    let destination = Number.isFinite(insertionIndex) ? insertionIndex : siblings.length;
+    if (sourceIndex >= 0 && sourceIndex < destination) destination -= 1;
+    destination = Math.min(Math.max(destination, 0), siblings.length);
+
+    siblings.splice(destination, 0, item);
+    siblings.forEach((candidate, index) => queueUpdate(candidate, toLocationId, index));
+
+    return Array.from(updates.values());
   }
 
   async function renameTarget(name) {
@@ -1725,8 +1976,8 @@
     };
   }
 
-  async function sortChildrenForTarget() {
-    const target = targetForSheet();
+  async function sortChildrenForTarget(actionTarget = state.sheet) {
+    const target = targetForActionTarget(actionTarget);
     if (!target) return;
     const parentId = target.location ? target.location.id : null;
     const sorted = childLocations(target.home, parentId).sort((a, b) => a.name.localeCompare(b.name));
@@ -1774,19 +2025,131 @@
     state.flaggedOnly = false;
     state.adding = null;
     state.collapsed.delete(nodeKey("home", home.id));
-
-    let locationId = item.locationId;
-    while (locationId) {
-      state.collapsed.delete(nodeKey("location", locationId));
-      const location = home.locations.find((candidate) => candidate.id === locationId);
-      locationId = location?.parentId || null;
-    }
+    expandLocationPath(home.id, item.locationId);
     persistCollapsed();
+  }
+
+  function expandLocationPath(homeId, locationId) {
+    const home = findHome(homeId);
+    if (!home) return;
+
+    let currentLocationId = locationId;
+    while (currentLocationId) {
+      state.collapsed.delete(nodeKey("location", currentLocationId));
+      const location = home.locations.find((candidate) => candidate.id === currentLocationId);
+      currentLocationId = location?.parentId || null;
+    }
   }
 
   function itemChipElement(homeId, itemId) {
     return Array.from(document.querySelectorAll(".item-chip[data-item-id]"))
       .find((element) => element.dataset.homeId === homeId && element.dataset.itemId === itemId);
+  }
+
+  function closestFromEvent(event, selector) {
+    const target = event.target;
+    if (target instanceof Element) return target.closest(selector);
+    return target?.parentElement?.closest(selector) || null;
+  }
+
+  function handleDragStart(event) {
+    const chip = closestFromEvent(event, "[data-draggable-item]");
+    if (!chip || !event.dataTransfer) return;
+
+    state.draggingItem = {
+      homeId: chip.dataset.homeId,
+      itemId: chip.dataset.itemId,
+      locationId: chip.dataset.locationId || null,
+    };
+    state.suppressItemClick = true;
+    chip.classList.add("is-dragging");
+    document.body.classList.add("is-dragging-item");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", JSON.stringify(state.draggingItem));
+  }
+
+  function handleDragOver(event) {
+    const dropTarget = currentItemDropTarget(event);
+    if (!dropTarget) {
+      clearDropTarget();
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    markDropTarget(dropTarget);
+  }
+
+  async function handleDrop(event) {
+    const dropTarget = currentItemDropTarget(event);
+    const draggingItem = state.draggingItem;
+    clearDropTarget();
+    state.draggingItem = null;
+    document.body.classList.remove("is-dragging-item");
+
+    if (!dropTarget || !draggingItem) return;
+    event.preventDefault();
+    await runMutation(async () => {
+      await moveItem(draggingItem.homeId, draggingItem.itemId, dropTarget.locationId, dropTarget.insertionIndex);
+    });
+  }
+
+  function handleDragEnd() {
+    clearDropTarget();
+    state.draggingItem = null;
+    document.body.classList.remove("is-dragging-item");
+    document.querySelectorAll(".item-chip.is-dragging").forEach((chip) => {
+      chip.classList.remove("is-dragging");
+    });
+    window.setTimeout(() => {
+      state.suppressItemClick = false;
+    }, 160);
+  }
+
+  function currentItemDropTarget(event) {
+    if (!state.draggingItem) return null;
+    const zone = closestFromEvent(event, "[data-drop-zone]");
+    if (!zone || zone.dataset.homeId !== state.draggingItem.homeId) return null;
+
+    const home = findHome(zone.dataset.homeId);
+    if (!home) return null;
+
+    const locationId = zone.dataset.locationId || null;
+    const targetItems = itemsIn(home, locationId);
+    let insertionIndex = targetItems.length;
+    let chip = closestFromEvent(event, "[data-draggable-item]");
+
+    if (chip && !zone.contains(chip)) chip = null;
+    if (chip) {
+      const targetIndex = targetItems.findIndex((item) => item.id === chip.dataset.itemId);
+      if (targetIndex >= 0) {
+        const rect = chip.getBoundingClientRect();
+        const after = event.clientX > rect.left + rect.width / 2;
+        insertionIndex = targetIndex + (after ? 1 : 0);
+        return { zone, chip, position: after ? "after" : "before", locationId, insertionIndex };
+      }
+    }
+
+    return { zone, chip: null, position: "inside", locationId, insertionIndex };
+  }
+
+  function markDropTarget(dropTarget) {
+    if (activeDropZone === dropTarget.zone && activeDropChip === dropTarget.chip) {
+      if (!dropTarget.chip || dropTarget.chip.classList.contains(`drop-${dropTarget.position}`)) return;
+    }
+
+    clearDropTarget();
+    activeDropZone = dropTarget.zone;
+    activeDropChip = dropTarget.chip;
+    activeDropZone.classList.add("is-drop-target");
+    if (activeDropChip) activeDropChip.classList.add(`drop-${dropTarget.position}`);
+  }
+
+  function clearDropTarget() {
+    if (activeDropZone) activeDropZone.classList.remove("is-drop-target");
+    if (activeDropChip) activeDropChip.classList.remove("drop-before", "drop-after");
+    activeDropZone = null;
+    activeDropChip = null;
   }
 
   function updateBreadcrumb() {
@@ -1817,6 +2180,7 @@
     const action = element.dataset.action;
     if (action === "open-account") {
       state.sheet = { type: "account" };
+      state.actionMenu = null;
       render();
       if (!state.token && !state.authConfigLoaded) {
         void loadAuthConfig();
@@ -1825,11 +2189,13 @@
     }
     if (action === "close-sheet") {
       state.sheet = null;
+      state.actionMenu = null;
       state.iconSearch = "";
       render();
       return;
     }
     if (action === "toggle-collapse") {
+      state.actionMenu = null;
       const key = element.dataset.nodeKey;
       if (state.collapsed.has(key)) state.collapsed.delete(key);
       else state.collapsed.add(key);
@@ -1839,31 +2205,35 @@
     }
     if (action === "toggle-flag-filter") {
       state.flaggedOnly = !state.flaggedOnly;
+      state.actionMenu = null;
       render();
       return;
     }
     if (action === "open-actions") {
-      state.sheet = {
-        type: "actions",
+      const nextMenu = {
         kind: element.dataset.kind,
         homeId: element.dataset.homeId,
         locationId: element.dataset.locationId || null,
       };
+      state.actionMenu = actionMenuMatches(nextMenu.kind, nextMenu.homeId, nextMenu.locationId) ? null : nextMenu;
+      state.sheet = null;
       render();
       return;
     }
     if (action === "start-add" || action === "start-add-from-sheet") {
       const currentSheet = state.sheet;
+      const currentMenu = state.actionMenu;
       state.adding = {
         kind: element.dataset.addKind,
-        homeId: element.dataset.homeId || currentSheet?.homeId || "",
-        parentId: element.dataset.parentId || currentSheet?.locationId || null,
+        homeId: element.dataset.homeId || currentSheet?.homeId || currentMenu?.homeId || "",
+        parentId: element.dataset.parentId || currentSheet?.locationId || currentMenu?.locationId || null,
         locationType: element.dataset.locationType || null,
       };
       if (element.dataset.addKind === "home") {
         state.adding = { kind: "home" };
       }
       state.sheet = null;
+      state.actionMenu = null;
       render();
       return;
     }
@@ -1873,13 +2243,15 @@
       return;
     }
     if (action === "rename-target") {
-      state.sheet = { ...state.sheet, type: "rename" };
+      state.sheet = { ...(state.sheet || state.actionMenu), type: "rename" };
+      state.actionMenu = null;
       render();
       return;
     }
     if (action === "change-icon") {
       state.iconSearch = "";
-      state.sheet = { ...state.sheet, type: "iconPicker" };
+      state.sheet = { ...(state.sheet || state.actionMenu), type: "iconPicker" };
+      state.actionMenu = null;
       render();
       return;
     }
@@ -1893,7 +2265,7 @@
       return;
     }
     if (action === "open-delete") {
-      const current = state.sheet || {};
+      const current = state.sheet || state.actionMenu || {};
       state.sheet = {
         type: "delete",
         kind: element.dataset.kind || current.kind,
@@ -1901,6 +2273,7 @@
         locationId: element.dataset.locationId || current.locationId || null,
         itemId: element.dataset.itemId || null,
       };
+      state.actionMenu = null;
       render();
       return;
     }
@@ -1912,7 +2285,9 @@
       return;
     }
     if (action === "open-item") {
+      if (state.suppressItemClick) return;
       const item = findItem(element.dataset.homeId, element.dataset.itemId);
+      state.actionMenu = null;
       state.sheet = {
         type: "itemEditor",
         homeId: element.dataset.homeId,
@@ -1920,6 +2295,65 @@
         draft: item ? cloneItem(item) : null,
       };
       render();
+      return;
+    }
+    if (action === "open-location-picker") {
+      const form = document.getElementById("item-editor-form");
+      if (form && state.sheet?.type === "itemEditor") {
+        const home = findHome(state.sheet.homeId);
+        const draft = readItemDraftFromForm(form);
+        state.sheet = {
+          type: "locationPicker",
+          homeId: state.sheet.homeId,
+          itemId: state.sheet.itemId,
+          draft,
+          path: initialLocationPickerPath(home, draft.locationId),
+        };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "cancel-location-picker") {
+      if (state.sheet?.type === "locationPicker") {
+        state.sheet = {
+          type: "itemEditor",
+          homeId: state.sheet.homeId,
+          itemId: state.sheet.itemId,
+          draft: state.sheet.draft,
+        };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "location-picker-back") {
+      if (state.sheet?.type === "locationPicker") {
+        const path = Array.isArray(state.sheet.path) ? state.sheet.path.slice(0, -1) : [];
+        state.sheet = { ...state.sheet, path };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "drill-location") {
+      if (state.sheet?.type === "locationPicker") {
+        const locationId = element.dataset.locationId || "";
+        const path = Array.isArray(state.sheet.path) ? state.sheet.path.slice() : [];
+        if (locationId) path.push(locationId);
+        state.sheet = { ...state.sheet, path };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "choose-item-location") {
+      if (state.sheet?.type === "locationPicker") {
+        const draft = { ...state.sheet.draft, locationId: element.dataset.locationId || null };
+        state.sheet = {
+          type: "itemEditor",
+          homeId: state.sheet.homeId,
+          itemId: state.sheet.itemId,
+          draft,
+        };
+        render({ preserveSheetScroll: false });
+      }
       return;
     }
     if (action === "set-item-icon") {
@@ -1934,9 +2368,10 @@
       const form = document.getElementById("item-editor-form");
       if (form && state.sheet?.type === "itemEditor") {
         const draft = readItemDraftFromForm(form);
-        draft.properties.push({ id: id(), key: "", value: "" });
+        const propertyId = id();
+        draft.properties.push({ id: propertyId, key: "", value: "" });
         state.sheet.draft = draft;
-        render();
+        render({ focusSelector: `[data-property-id="${propertyId}"] [data-property-key]` });
       }
       return;
     }
@@ -1950,10 +2385,23 @@
       }
       return;
     }
+    if (action === "add-item-date" || action === "clear-item-date") {
+      const form = document.getElementById("item-editor-form");
+      const field = element.dataset.dateField || "";
+      if (form && state.sheet?.type === "itemEditor" && isItemDateField(field)) {
+        const draft = readItemDraftFromForm(form);
+        draft[field] = action === "add-item-date" ? draft[field] || todayDateString() : null;
+        state.sheet.draft = draft;
+        render(action === "add-item-date" ? { focusSelector: `input[name="${field}"]` } : {});
+      }
+      return;
+    }
     if (action === "sort-children") {
+      const actionTarget = state.actionMenu || state.sheet;
       await runMutation(async () => {
-        await sortChildrenForTarget();
+        await sortChildrenForTarget(actionTarget);
         state.sheet = null;
+        state.actionMenu = null;
       }, "Locations sorted");
       return;
     }
@@ -2029,6 +2477,11 @@
     }
 
     if (kind === "account-settings") {
+      if (!canManageApiSettings()) {
+        showToast("Admin access required");
+        render();
+        return;
+      }
       const nextUrl = form.elements.apiBaseUrl.value.trim().replace(/\/$/, "");
       state.apiBaseUrl = nextUrl || DEFAULT_API_BASE_URL;
       state.authConfigLoaded = false;
@@ -2071,7 +2524,13 @@
 
   document.addEventListener("click", (event) => {
     const actionElement = event.target.closest("[data-action]");
-    if (!actionElement) return;
+    if (!actionElement) {
+      if (state.actionMenu && !event.target.closest("[data-action-menu]")) {
+        state.actionMenu = null;
+        render();
+      }
+      return;
+    }
     event.preventDefault();
     void handleAction(actionElement);
   });
@@ -2079,6 +2538,12 @@
     void handleSubmit(event);
   });
   document.addEventListener("input", handleInput);
+  document.addEventListener("dragstart", handleDragStart);
+  document.addEventListener("dragover", handleDragOver);
+  document.addEventListener("drop", (event) => {
+    void handleDrop(event);
+  });
+  document.addEventListener("dragend", handleDragEnd);
   window.addEventListener("scroll", updateBreadcrumb, { passive: true });
   window.addEventListener("resize", updateBreadcrumb);
   window.addEventListener("load", () => requestAnimationFrame(renderProviderSignInButtons));
