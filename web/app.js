@@ -30,6 +30,8 @@
     toast: "",
     toastTimer: null,
     sheet: null,
+    photoPreview: null,
+    isUploadingAttachment: false,
     actionMenu: null,
     draggingItem: null,
     suppressItemClick: false,
@@ -406,6 +408,7 @@
           ${!state.isLoading && !isFiltering ? renderAddHomeArea() : ""}
         </main>
         ${renderSheet()}
+        ${renderPhotoPreviewModal()}
         ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
       </div>
     `;
@@ -798,12 +801,28 @@
 
   function renderItemChip(home, item, index) {
     const highlighted = state.highlightedItemId === item.id;
+    const photoUrl = firstPhotoUrl(item);
     return `
-      <button type="button" class="item-chip ${highlighted ? "is-deep-linked" : ""}" draggable="true" data-draggable-item data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}" aria-label="${escapeAttr(item.name)}. Drag to move.">
-        ${svgIcon(item.icon || "circle.fill")}
-        <span class="item-name">${escapeHtml(item.name)}</span>
-        ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
-        ${item.quantity > 1 ? `<span class="quantity">x${escapeHtml(item.quantity)}</span>` : ""}
+      <span class="item-chip ${highlighted ? "is-deep-linked" : ""}" draggable="true" data-draggable-item data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}">
+        ${photoUrl ? renderPhotoThumbnailButton(photoUrl, `${item.name} photo`, "item-chip-photo") : ""}
+        <button type="button" class="item-chip-main" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" aria-label="${escapeAttr(item.name)}. Drag to move.">
+          ${svgIcon(item.icon || "circle.fill")}
+          <span class="item-name">${escapeHtml(item.name)}</span>
+          ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
+          ${item.quantity > 1 ? `<span class="quantity">x${escapeHtml(item.quantity)}</span>` : ""}
+        </button>
+      </span>
+    `;
+  }
+
+  function firstPhotoUrl(item) {
+    return Array.isArray(item.photoUrls) && item.photoUrls.length ? item.photoUrls[0] : "";
+  }
+
+  function renderPhotoThumbnailButton(url, title, className = "") {
+    return `
+      <button type="button" class="photo-thumbnail-button ${escapeAttr(className)}" data-action="open-photo-preview" data-photo-url="${escapeAttr(url)}" data-photo-title="${escapeAttr(title)}" aria-label="Open ${escapeAttr(title)}">
+        <img src="${escapeAttr(url)}" alt="${escapeAttr(title)}" loading="lazy">
       </button>
     `;
   }
@@ -837,9 +856,27 @@
     return "";
   }
 
+  function renderPhotoPreviewModal() {
+    if (!state.photoPreview?.url) return "";
+    const title = state.photoPreview.title || "Photo";
+    return `
+      <div class="photo-modal-backdrop">
+        <section class="photo-modal" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
+          <header class="photo-modal-header">
+            <div class="photo-modal-title">${escapeHtml(title)}</div>
+            <button type="button" class="photo-modal-close" data-action="close-photo-preview" aria-label="Close photo preview">${svgIcon("x")}</button>
+          </header>
+          <div class="photo-modal-image-wrap">
+            <img src="${escapeAttr(state.photoPreview.url)}" alt="${escapeAttr(title)}">
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
   function sheetChrome(title, body, options = {}) {
     const save = options.saveFormId
-      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save">${escapeHtml(options.saveLabel || "Save")}</button>`
+      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save" ${state.isUploadingAttachment ? "disabled" : ""}>${escapeHtml(options.saveLabel || "Save")}</button>`
       : `<span></span>`;
     const closeAction = options.closeAction || "close-sheet";
     return `
@@ -1182,7 +1219,7 @@
             <button type="button" class="row-button" data-action="add-property">${svgIcon("plus")} Add Property</button>
           </div>
         </section>
-        ${renderAttachmentsSection("Photos", draft.photoUrls, "photo")}
+        ${renderPhotoSection(draft.name, draft.photoUrls)}
         ${renderDocumentSection(draft.documents)}
         <section class="form-section">
           <div class="form-list">
@@ -1290,18 +1327,65 @@
     `;
   }
 
+  function renderPhotoSection(itemName, urls) {
+    const photoUrls = Array.isArray(urls) ? urls : [];
+    const uploadLabel = state.isUploadingAttachment ? "Uploading..." : "Add Photos";
+    return `
+      <section class="form-section">
+        <h2 class="section-title">Photos</h2>
+        <div class="form-list">
+          ${photoUrls.length ? `
+            <div class="photo-thumbnail-grid">
+              ${photoUrls.map((url, index) => `
+                <div class="photo-thumb-wrap">
+                  ${renderPhotoThumbnailButton(url, `${itemName || "Item"} photo ${index + 1}`, "photo-grid-thumb")}
+                  <button type="button" class="attachment-remove" data-action="remove-photo" data-index="${escapeAttr(index)}" aria-label="Remove photo">
+                    ${svgIcon("x")}
+                  </button>
+                </div>
+              `).join("")}
+            </div>
+          ` : ""}
+          <div class="attachment-upload-row">
+            <label class="attachment-upload-button ${state.isUploadingAttachment ? "is-disabled" : ""}">
+              ${svgIcon("photo")} <span>${escapeHtml(uploadLabel)}</span>
+              <input type="file" accept="image/*" multiple data-upload-kind="photo" ${state.isUploadingAttachment ? "disabled" : ""}>
+            </label>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   function renderDocumentSection(documents) {
-    if (!documents || !documents.length) return "";
+    const itemDocuments = Array.isArray(documents) ? documents : [];
+    const uploadLabel = state.isUploadingAttachment ? "Uploading..." : "Upload Documents";
     return `
       <section class="form-section">
         <h2 class="section-title">Documents</h2>
         <div class="form-list">
-          <div class="attachment-list">
-            ${documents.map((document) => `
-              <a class="attachment-link" href="${escapeAttr(document.url)}" target="_blank" rel="noreferrer">
-                ${svgIcon("doc")} <span>${escapeHtml(document.name)}</span>
-              </a>
-            `).join("")}
+          ${itemDocuments.length ? `
+            <div class="attachment-list">
+              ${itemDocuments.map((document, index) => {
+                const name = document.name || `Document ${index + 1}`;
+                return `
+                  <div class="attachment-row">
+                    <a class="attachment-link" href="${escapeAttr(document.url)}" target="_blank" rel="noreferrer">
+                      ${svgIcon("doc")} <span>${escapeHtml(name)}</span>
+                    </a>
+                    <button type="button" class="attachment-remove" data-action="remove-document" data-index="${escapeAttr(index)}" aria-label="Remove ${escapeAttr(name)}">
+                      ${svgIcon("x")}
+                    </button>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+          <div class="attachment-upload-row">
+            <label class="attachment-upload-button ${state.isUploadingAttachment ? "is-disabled" : ""}">
+              ${svgIcon("doc")} <span>${escapeHtml(uploadLabel)}</span>
+              <input type="file" multiple data-upload-kind="document" ${state.isUploadingAttachment ? "disabled" : ""}>
+            </label>
           </div>
         </div>
       </section>
@@ -1545,6 +1629,82 @@
 
     if (response.status === 204) return null;
     return response.json();
+  }
+
+  async function uploadItemAttachment(homeId, kind, file) {
+    if (!file || file.size <= 0) {
+      throw new Error(`${file?.name || "File"} is empty`);
+    }
+
+    const contentType = uploadContentTypeForFile(kind, file);
+    if (kind === "photo" && !contentType.startsWith("image/")) {
+      throw new Error("Photos must use an image file type");
+    }
+
+    const upload = normalizeUploadResponse(await apiRequest("POST", `/homes/${homeId}/items/uploads`, {
+      kind,
+      file_name: uploadFileName(kind, file),
+      content_type: contentType,
+      size_bytes: file.size,
+    }));
+
+    const response = await fetch(upload.uploadUrl, {
+      method: "PUT",
+      headers: upload.headers,
+      body: file,
+    });
+
+    if (!response.ok) {
+      throw new Error(await uploadErrorMessage(response));
+    }
+
+    return upload;
+  }
+
+  function normalizeUploadResponse(upload) {
+    const normalized = {
+      uploadUrl: upload?.uploadUrl ?? upload?.upload_url ?? "",
+      fileUrl: upload?.fileUrl ?? upload?.file_url ?? "",
+      key: upload?.key ?? "",
+      headers: Object.fromEntries(Object.entries(upload?.headers || {}).map(([key, value]) => [key, String(value)])),
+    };
+    if (!normalized.uploadUrl || !normalized.fileUrl || !normalized.key) {
+      throw new Error("Upload response was missing file details");
+    }
+    return normalized;
+  }
+
+  function uploadFileName(kind, file) {
+    const name = String(file.name || "").trim();
+    return name || `${kind}-attachment`;
+  }
+
+  function uploadContentTypeForFile(kind, file) {
+    if (file.type) return file.type;
+    const name = String(file.name || "").toLowerCase();
+    if (kind === "photo") {
+      if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+      if (name.endsWith(".png")) return "image/png";
+      if (name.endsWith(".heic")) return "image/heic";
+      if (name.endsWith(".heif")) return "image/heif";
+      if (name.endsWith(".webp")) return "image/webp";
+      if (name.endsWith(".gif")) return "image/gif";
+    }
+    if (name.endsWith(".pdf")) return "application/pdf";
+    if (name.endsWith(".zip")) return "application/zip";
+    if (name.endsWith(".txt")) return "text/plain";
+    if (name.endsWith(".csv")) return "text/csv";
+    return "application/octet-stream";
+  }
+
+  async function uploadErrorMessage(response) {
+    const fallback = `Upload failed with HTTP ${response.status}`;
+    try {
+      const text = await response.text();
+      return text.trim() || fallback;
+    } catch {
+      return fallback;
+    }
   }
 
   async function loadAuthConfig() {
@@ -2189,9 +2349,42 @@
     }
     if (action === "close-sheet") {
       state.sheet = null;
+      state.photoPreview = null;
       state.actionMenu = null;
       state.iconSearch = "";
       render();
+      return;
+    }
+    if (action === "open-photo-preview") {
+      const form = document.getElementById("item-editor-form");
+      if (form && state.sheet?.type === "itemEditor") {
+        state.sheet.draft = readItemDraftFromForm(form);
+      }
+      state.photoPreview = {
+        url: element.dataset.photoUrl || "",
+        title: element.dataset.photoTitle || "Photo",
+      };
+      render();
+      return;
+    }
+    if (action === "close-photo-preview") {
+      state.photoPreview = null;
+      render();
+      return;
+    }
+    if (action === "remove-photo" || action === "remove-document") {
+      const form = document.getElementById("item-editor-form");
+      if (form && state.sheet?.type === "itemEditor") {
+        const draft = readItemDraftFromForm(form);
+        const index = Number(element.dataset.index);
+        if (action === "remove-photo") {
+          draft.photoUrls = draft.photoUrls.filter((_, candidateIndex) => candidateIndex !== index);
+        } else {
+          draft.documents = draft.documents.filter((_, candidateIndex) => candidateIndex !== index);
+        }
+        state.sheet.draft = draft;
+        render();
+      }
       return;
     }
     if (action === "toggle-collapse") {
@@ -2510,6 +2703,67 @@
     }
   }
 
+  async function handleAttachmentFileChange(event) {
+    const input = event.target.closest?.("input[type='file'][data-upload-kind]");
+    if (!input) return;
+
+    const files = Array.from(input.files || []);
+    input.value = "";
+    if (!files.length || state.isUploadingAttachment) return;
+
+    const kind = input.dataset.uploadKind;
+    const form = document.getElementById("item-editor-form");
+    if (!form || state.sheet?.type !== "itemEditor" || !["photo", "document"].includes(kind)) return;
+
+    state.sheet.draft = readItemDraftFromForm(form);
+    state.isUploadingAttachment = true;
+    render();
+
+    try {
+      const uploads = [];
+      for (const file of files) {
+        uploads.push({ file, upload: await uploadItemAttachment(form.dataset.homeId, kind, file) });
+      }
+
+      if (state.sheet?.type !== "itemEditor") return;
+
+      const currentForm = document.getElementById("item-editor-form");
+      const draft = currentForm && state.sheet?.type === "itemEditor"
+        ? readItemDraftFromForm(currentForm)
+        : state.sheet?.draft || {};
+
+      if (kind === "photo") {
+        draft.photoUrls = [
+          ...(draft.photoUrls || []),
+          ...uploads.map(({ upload }) => upload.fileUrl),
+        ];
+      } else {
+        draft.documents = [
+          ...(draft.documents || []),
+          ...uploads.map(({ file, upload }) => ({
+            id: upload.key,
+            url: upload.fileUrl,
+            name: uploadFileName("document", file),
+            contentType: uploadContentTypeForFile("document", file),
+          })),
+        ];
+      }
+
+      state.sheet.draft = draft;
+      showToast(attachmentUploadSuccessMessage(kind, uploads.length));
+    } catch (error) {
+      showToast(error.message || String(error));
+    } finally {
+      state.isUploadingAttachment = false;
+      render();
+    }
+  }
+
+  function attachmentUploadSuccessMessage(kind, count) {
+    if (count === 1) return kind === "photo" ? "Photo added" : "Document uploaded";
+    return kind === "photo" ? `${count} photos added` : `${count} documents uploaded`;
+  }
+
   function handleInput(event) {
     if (event.target.id === "search-input") {
       state.search = event.target.value;
@@ -2525,6 +2779,11 @@
   document.addEventListener("click", (event) => {
     const actionElement = event.target.closest("[data-action]");
     if (!actionElement) {
+      if (state.photoPreview && event.target.classList?.contains("photo-modal-backdrop")) {
+        state.photoPreview = null;
+        render();
+        return;
+      }
       if (state.actionMenu && !event.target.closest("[data-action-menu]")) {
         state.actionMenu = null;
         render();
@@ -2538,6 +2797,15 @@
     void handleSubmit(event);
   });
   document.addEventListener("input", handleInput);
+  document.addEventListener("change", (event) => {
+    void handleAttachmentFileChange(event);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.photoPreview) {
+      state.photoPreview = null;
+      render();
+    }
+  });
   document.addEventListener("dragstart", handleDragStart);
   document.addEventListener("dragover", handleDragOver);
   document.addEventListener("drop", (event) => {

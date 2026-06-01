@@ -39,8 +39,11 @@ struct AccountView: View {
                 }
 
                 tutorialSection
+                    .cubbySheetRows()
                 appBuildSection
+                    .cubbySheetRows(prominence: 0.55)
             }
+            .cubbySheetChrome()
             .navigationTitle("Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -83,7 +86,7 @@ struct AccountView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .textSelection(.enabled)
         }
-        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private var tutorialSection: some View {
@@ -107,23 +110,31 @@ struct AccountView: View {
                         AsyncImage(url: url) { image in
                             image.resizable().scaledToFill()
                         } placeholder: {
-                            Circle().fill(Color.gray.opacity(0.3))
+                            Circle().fill(CubbyTheme.greenSoft.opacity(0.72))
                         }
                         .frame(width: 60, height: 60)
                         .clipShape(Circle())
+                        .overlay {
+                            Circle().stroke(CubbyTheme.floorBorder, lineWidth: 1)
+                        }
                     } else {
                         Circle()
-                            .fill(Color.gray.opacity(0.3))
+                            .fill(CubbyTheme.greenSoft.opacity(0.78))
                             .frame(width: 60, height: 60)
                             .overlay {
                                 Image(systemName: "person.fill")
                                     .font(.title)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(CubbyTheme.green)
+                            }
+                            .overlay {
+                                Circle().stroke(CubbyTheme.floorBorder, lineWidth: 1)
                             }
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(user.name).font(.headline)
+                        Text(user.name)
+                            .font(.headline)
+                            .foregroundStyle(CubbyTheme.warmInk)
                         Text(user.email)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -132,6 +143,7 @@ struct AccountView: View {
                 .padding(.vertical, 8)
             }
         }
+        .cubbySheetRows(prominence: 1.04)
 
         subscriptionSection
 
@@ -146,7 +158,7 @@ struct AccountView: View {
                     }
                 } else {
                     Label("Connected", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(CubbyTheme.green)
                 }
             }
 
@@ -175,7 +187,7 @@ struct AccountView: View {
             if syncManager.deferredServerChangeCount > 0 {
                 HStack {
                     Label("Server Changes Held", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(CubbyTheme.amber)
                     Spacer()
                     Text("\(syncManager.deferredServerChangeCount)")
                         .foregroundStyle(.secondary)
@@ -196,6 +208,7 @@ struct AccountView: View {
             }
             .disabled(syncManager.isSyncing)
         }
+        .cubbySheetRows()
 
         if let error = subscriptionStore.errorMessage {
             Section("Subscription Error") {
@@ -203,6 +216,7 @@ struct AccountView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            .cubbySheetRows(prominence: 0.96)
         }
 
         Section("Sharing") {
@@ -218,6 +232,7 @@ struct AccountView: View {
                 }
             }
         }
+        .cubbySheetRows()
 
         if let error = syncManager.syncError {
             Section("Error") {
@@ -225,6 +240,7 @@ struct AccountView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            .cubbySheetRows(prominence: 0.96)
         }
 
         Section {
@@ -252,6 +268,7 @@ struct AccountView: View {
                 }
             }
         }
+        .cubbySheetRows(prominence: 0.92)
     }
 
     @ViewBuilder
@@ -262,7 +279,7 @@ struct AccountView: View {
                     Text("Plan")
                     Spacer()
                     Label(plan.isPaid ? "Paid" : "Free", systemImage: plan.isPaid ? "checkmark.seal.fill" : "circle")
-                        .foregroundStyle(plan.isPaid ? .green : .secondary)
+                        .foregroundStyle(plan.isPaid ? CubbyTheme.green : .secondary)
                 }
 
                 if !plan.isPaid {
@@ -340,6 +357,7 @@ struct AccountView: View {
                 }
             }
         }
+        .cubbySheetRows()
     }
 
     private func quotaRow(title: String, used: Int, limit: Int) -> some View {
@@ -347,7 +365,7 @@ struct AccountView: View {
             Text(title)
             Spacer()
             Text("\(used)/\(limit)")
-                .foregroundStyle(used >= limit ? .orange : .secondary)
+                .foregroundStyle(used >= limit ? CubbyTheme.amber : .secondary)
         }
     }
 
@@ -363,11 +381,17 @@ struct AccountView: View {
             VStack(spacing: 16) {
                 Image(systemName: "cloud.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(CubbyTheme.green)
+                    .padding(18)
+                    .background(CubbyTheme.greenSoft.opacity(0.72), in: Circle())
+                    .overlay {
+                        Circle().stroke(CubbyTheme.floorBorder, lineWidth: 1)
+                    }
                     .padding(.top, 20)
 
                 Text("Sign in to sync your data")
                     .font(.headline)
+                    .foregroundStyle(CubbyTheme.warmInk)
 
                 Text("Your data is saved locally. Sign in to sync across devices and share with others.")
                     .font(.subheadline)
@@ -397,7 +421,7 @@ struct AccountView: View {
             }
         }
         .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
+        .listRowBackground(CubbySheetRowBackground(prominence: 1.04))
 
         if let error = authStore.errorMessage {
             Section {
@@ -405,6 +429,7 @@ struct AccountView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            .cubbySheetRows(prominence: 0.96)
         }
     }
 
@@ -490,10 +515,10 @@ struct GoogleSignInButtonCompact: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(Color(.systemBackground))
+            .background(CubbyTheme.paper)
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.separator), lineWidth: 1)
+                    .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
             )
             .cornerRadius(10)
         }
@@ -557,11 +582,17 @@ struct MergeChoiceView: View {
             VStack(spacing: 24) {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.system(size: 48))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(CubbyTheme.green)
+                    .padding(18)
+                    .background(CubbyTheme.greenSoft.opacity(0.72), in: Circle())
+                    .overlay {
+                        Circle().stroke(CubbyTheme.floorBorder, lineWidth: 1)
+                    }
                     .padding(.top, 40)
 
                 Text("You have data on both this device and the server")
                     .font(.headline)
+                    .foregroundStyle(CubbyTheme.warmInk)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
@@ -583,11 +614,11 @@ struct MergeChoiceView: View {
                                 .font(.headline)
                             Text("Combine local and server data")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white.opacity(0.82))
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
+                        .background(CubbyTheme.green)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
@@ -609,7 +640,11 @@ struct MergeChoiceView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.secondarySystemBackground))
+                        .background(CubbyTheme.paper)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
@@ -630,7 +665,11 @@ struct MergeChoiceView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.secondarySystemBackground))
+                        .background(CubbyTheme.paper)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
@@ -638,8 +677,13 @@ struct MergeChoiceView: View {
 
                 Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(CubbySheetBackground())
             .navigationTitle("Sync Data")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(CubbyTheme.green)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

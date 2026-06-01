@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
+import CryptoKit
 
 private enum ItemEditError: LocalizedError {
     case signInRequired
@@ -92,7 +93,7 @@ private struct ReorderInsertionLine: View {
             }
 
             Capsule()
-                .fill(isVisible ? Color.accentColor : Color.clear)
+                .fill(isVisible ? CubbyTheme.green : Color.clear)
                 .frame(height: 2)
 
             if edge == .top {
@@ -248,13 +249,21 @@ struct ItemEditView: View {
         NavigationStack {
             Form {
                 detailsSection
+                    .cubbySheetRows()
                 lifecycleSection
+                    .cubbySheetRows()
                 locationSection
+                    .cubbySheetRows()
                 propertiesSection
+                    .cubbySheetRows()
                 photosSection
+                    .cubbySheetRows()
                 documentsSection
+                    .cubbySheetRows()
                 deleteSection
+                    .cubbySheetRows(prominence: 0.92)
             }
+            .cubbySheetChrome()
             .navigationTitle("Edit Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -393,7 +402,7 @@ struct ItemEditView: View {
             Toggle(isOn: $isFlagged) {
                 Label("Flagged", systemImage: "flag.fill")
             }
-            .tint(.orange)
+            .tint(CubbyTheme.amber)
 
             TextField("Notes", text: $notes, axis: .vertical)
                 .lineLimit(3...6)
@@ -968,6 +977,9 @@ struct ItemEditView: View {
                             contentType: photo.contentType,
                             data: photo.data
                         )
+                        if let uploadedURL = URL(string: upload.fileUrl) {
+                            await RemotePhotoCache.shared.store(photo.data, for: uploadedURL)
+                        }
                         nextPhotoUrls.append(upload.fileUrl)
                     }
                 }
@@ -1112,24 +1124,135 @@ private struct PhotoAttachmentViewer: View {
 private struct RemotePhotoImage: View {
     let url: URL
     let contentMode: ContentMode
+    @State private var image: UIImage?
+    @State private var didFail = false
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
-                ProgressView()
-                    .tint(.secondary)
-            case .success(let image):
-                image
+        Group {
+            if let image {
+                Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
-            case .failure:
+            } else if didFail {
                 Label("Photo unavailable", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
-            @unknown default:
-                EmptyView()
+            } else {
+                ProgressView()
+                    .tint(.secondary)
             }
         }
+        .task(id: url) {
+            await loadImage()
+        }
+    }
+
+    @MainActor
+    private func loadImage() async {
+        image = nil
+        didFail = false
+
+        do {
+            let data = try await RemotePhotoCache.shared.data(for: url)
+            guard let loadedImage = UIImage(data: data) else {
+                throw RemotePhotoCacheError.invalidImageData
+            }
+            image = loadedImage
+        } catch is CancellationError {
+        } catch {
+            didFail = true
+        }
+    }
+}
+
+private enum RemotePhotoCacheError: Error {
+    case invalidImageData
+    case requestFailed
+}
+
+private actor RemotePhotoCache {
+    static let shared = RemotePhotoCache()
+
+    private let memoryCache = NSCache<NSString, NSData>()
+    private let cacheDirectory: URL
+    private var inFlight: [String: Task<Data, Error>] = [:]
+
+    init() {
+        let baseDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        cacheDirectory = baseDirectory.appendingPathComponent("RemotePhotoCache", isDirectory: true)
+    }
+
+    func data(for url: URL) async throws -> Data {
+        let key = Self.cacheKey(for: url)
+        if let cachedData = memoryCache.object(forKey: key as NSString) {
+            return cachedData as Data
+        }
+
+        if let diskData = try? Data(contentsOf: fileURL(forKey: key)), !diskData.isEmpty {
+            memoryCache.setObject(diskData as NSData, forKey: key as NSString)
+            return diskData
+        }
+
+        if let task = inFlight[key] {
+            return try await task.value
+        }
+
+        let task = Task<Data, Error> {
+            try await Self.fetchData(from: url)
+        }
+        inFlight[key] = task
+
+        do {
+            let data = try await task.value
+            inFlight[key] = nil
+            cache(data, forKey: key)
+            return data
+        } catch {
+            inFlight[key] = nil
+            throw error
+        }
+    }
+
+    func store(_ data: Data, for url: URL) {
+        let key = Self.cacheKey(for: url)
+        inFlight[key]?.cancel()
+        inFlight[key] = nil
+        cache(data, forKey: key)
+    }
+
+    private func cache(_ data: Data, forKey key: String) {
+        guard !data.isEmpty else { return }
+        memoryCache.setObject(data as NSData, forKey: key as NSString)
+        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? data.write(to: fileURL(forKey: key), options: .atomic)
+    }
+
+    private func fileURL(forKey key: String) -> URL {
+        cacheDirectory.appendingPathComponent(key, isDirectory: false)
+    }
+
+    private static func fetchData(from url: URL) async throws -> Data {
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            throw RemotePhotoCacheError.requestFailed
+        }
+        return data
+    }
+
+    private static func cacheKey(for url: URL) -> String {
+        let stableIdentity = stableIdentity(for: url)
+        let digest = SHA256.hash(data: Data(stableIdentity.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func stableIdentity(for url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        components.query = nil
+        components.fragment = nil
+        return components.string ?? url.absoluteString
     }
 }
 
@@ -1481,11 +1604,12 @@ private struct LocationTreeLevel: View {
                     Spacer()
                     if selectedId == parentId {
                         Image(systemName: "checkmark")
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(CubbyTheme.green)
                     }
                 }
             }
             .foregroundStyle(.primary)
+            .cubbySheetRows()
 
             if !children.isEmpty {
                 Section {
@@ -1502,7 +1626,7 @@ private struct LocationTreeLevel: View {
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(CubbyTheme.green)
                                     }
                                 }
                             }
@@ -1515,14 +1639,16 @@ private struct LocationTreeLevel: View {
                                     Spacer()
                                     if selectedId == loc.id {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(CubbyTheme.green)
                                     }
                                 }
                             }
                         }
                     }
                 }
+                .cubbySheetRows()
             }
         }
+        .cubbySheetChrome()
     }
 }

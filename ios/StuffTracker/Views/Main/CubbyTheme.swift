@@ -114,6 +114,37 @@ struct CubbyWallBackground: View {
     }
 }
 
+struct CubbySheetBackground: View {
+    var body: some View {
+        ZStack {
+            CubbyWallBackground()
+
+            LinearGradient(
+                colors: [
+                    CubbyTheme.paper.opacity(0.34),
+                    Color.white.opacity(0.10),
+                    CubbyTheme.paperDeep.opacity(0.24),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct CubbySheetRowBackground: View {
+    var prominence: Double = 1
+
+    var body: some View {
+        ZStack {
+            CubbyTheme.paper.opacity(0.88 * prominence)
+            CubbySurfaceBackground(kind: .container)
+                .opacity(0.22 * prominence)
+        }
+    }
+}
+
 struct CubbySurfaceBackground: View {
     let kind: CubbySurfaceKind
 
@@ -159,5 +190,23 @@ struct WoodgrainOverlay: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    func cubbySheetChrome() -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .background(CubbySheetBackground())
+            .listSectionSpacing(14)
+            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .tint(CubbyTheme.green)
+    }
+
+    func cubbySheetRows(prominence: Double = 1) -> some View {
+        self
+            .listRowBackground(CubbySheetRowBackground(prominence: prominence))
+            .listRowSeparatorTint(CubbyTheme.floorBorder.opacity(0.68))
     }
 }

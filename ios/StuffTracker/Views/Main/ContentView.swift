@@ -54,6 +54,36 @@ final class FirstRunTutorialController: ObservableObject {
     }
 }
 
+@MainActor
+final class ItemAddComposerController: ObservableObject {
+    @Published var isPresented = false
+    @Published var name = ""
+    private(set) var homeId = ""
+    private(set) var locationId: String?
+
+    var canSubmit: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var submittedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func present(homeId: String, locationId: String?) {
+        self.homeId = homeId
+        self.locationId = locationId
+        name = ""
+        isPresented = true
+    }
+
+    func dismiss() {
+        isPresented = false
+        name = ""
+        homeId = ""
+        locationId = nil
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
     @EnvironmentObject private var deepLinkStore: DeepLinkStore
@@ -61,6 +91,7 @@ struct ContentView: View {
     @StateObject private var homeStore = HomeStore()
     @StateObject private var collapseStore = HierarchyCollapseStore()
     @StateObject private var itemSelection = ItemSelectionController()
+    @StateObject private var itemComposer = ItemAddComposerController()
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
     @State private var isAddingHome = false
@@ -146,6 +177,7 @@ struct ContentView: View {
                                     }
                                 }
                                 .padding()
+                                .padding(.bottom, 52)
                             }
                             .coordinateSpace(name: "scroll")
                             .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
@@ -170,6 +202,15 @@ struct ContentView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !itemSelection.isSelecting {
+                    BottomSearchControls(
+                        searchText: $searchText,
+                        showFlaggedOnly: $showFlaggedOnly,
+                        isSearchFocused: $isSearchFocused
+                    )
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if itemSelection.isSelecting {
                     SelectionActionBar(
@@ -180,11 +221,12 @@ struct ContentView: View {
                         onFlag: { setSelectedItemsFlagged() },
                         onDelete: { requestDeleteSelectedItems() }
                     )
-                } else {
-                    BottomSearchControls(
-                        searchText: $searchText,
-                        showFlaggedOnly: $showFlaggedOnly,
-                        isSearchFocused: $isSearchFocused
+                } else if itemComposer.isPresented {
+                    ItemAddComposerBar(
+                        text: $itemComposer.name,
+                        canSubmit: itemComposer.canSubmit,
+                        onCancel: { itemComposer.dismiss() },
+                        onSubmit: { submitComposedItem() }
                     )
                 }
             }
@@ -299,12 +341,22 @@ struct ContentView: View {
             }
         }
         .environmentObject(itemSelection)
+        .environmentObject(itemComposer)
         .preferredColorScheme(.light)
     }
 
     private func dismissSearchInput() {
         guard isSearchFocused else { return }
         isSearchFocused = false
+    }
+
+    private func submitComposedItem() {
+        guard itemComposer.canSubmit else { return }
+        let name = itemComposer.submittedName
+        let homeId = itemComposer.homeId
+        let locationId = itemComposer.locationId
+        itemComposer.dismiss()
+        homeStore.createItem(homeId: homeId, name: name, locationId: locationId)
     }
 
     private var selectedHomeForActions: HomeDetail? {
@@ -833,6 +885,58 @@ private struct DismissButton: View {
     }
 }
 
+private struct ItemAddComposerBar: View {
+    @Binding var text: String
+    let canSubmit: Bool
+    let onCancel: () -> Void
+    let onSubmit: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            TextField("Item name", text: $text)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit {
+                    if canSubmit {
+                        onSubmit()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .padding(.horizontal, 14)
+                .itemComposerFieldSurface()
+
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.bold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Cancel adding item")
+
+            Button(action: onSubmit) {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.bold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canSubmit ? CubbyTheme.green : .secondary)
+            .disabled(!canSubmit)
+            .accessibilityLabel("Add item")
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .itemComposerBarSurface()
+        .onAppear {
+            isFocused = true
+        }
+    }
+}
+
 private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
@@ -908,6 +1012,38 @@ private struct BottomFlagFilterButton: View {
     }
 }
 
+private struct ItemComposerBarSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = Rectangle()
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(CubbyTheme.paper.opacity(0.24), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content
+                .background(CubbyTheme.paper.opacity(0.96), in: shape)
+        }
+    }
+}
+
+private struct ItemComposerFieldSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(CubbyTheme.paper.opacity(0.30), in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.stroke(Color.white.opacity(0.24), lineWidth: 0.75))
+        } else {
+            content
+                .background(CubbyTheme.paper, in: shape)
+                .overlay(shape.stroke(CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75))
+        }
+    }
+}
+
 private struct BottomSearchFieldSurfaceModifier: ViewModifier {
     let isFocused: Bool
 
@@ -965,6 +1101,14 @@ private extension View {
 
     func selectionActionButtonSurface(tint: Color, isEnabled: Bool) -> some View {
         modifier(SelectionActionButtonSurfaceModifier(tint: tint, isEnabled: isEnabled))
+    }
+
+    func itemComposerBarSurface() -> some View {
+        modifier(ItemComposerBarSurfaceModifier())
+    }
+
+    func itemComposerFieldSurface() -> some View {
+        modifier(ItemComposerFieldSurfaceModifier())
     }
 
     func bottomSearchFieldSurface(isFocused: Bool) -> some View {
@@ -1650,7 +1794,6 @@ struct DragTrashZone: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: isTargeted ? 82 : 44)
-        .contentShape(Rectangle())
         .accessibilityHidden(!isTargeted)
         .animation(.easeInOut(duration: 0.18), value: isTargeted)
         .dropDestination(for: DraggedItem.self) { items, _ in

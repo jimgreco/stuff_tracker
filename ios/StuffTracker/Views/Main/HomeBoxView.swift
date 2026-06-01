@@ -302,11 +302,10 @@ struct HomeBoxView: View {
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
+    @EnvironmentObject private var itemComposer: ItemAddComposerController
     @State private var isAddingFloor = false
     @State private var isAddingRoom = false
-    @State private var isAddingItem = false
     @State private var newName = ""
-    @State private var newItemName = ""
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -464,8 +463,7 @@ struct HomeBoxView: View {
                 // Items after containers
                 let homeItems = home.items(in: nil)
                 ItemChipsView(items: homeItems, homeStore: homeStore, homeId: home.id, locationId: nil) {
-                    newItemName = ""
-                    isAddingItem = true
+                    itemComposer.present(homeId: home.id, locationId: nil)
                 }
                 .padding(.horizontal, 14)
 
@@ -484,14 +482,6 @@ struct HomeBoxView: View {
                         newName = ""; isAddingRoom = false
                         Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: nil, type: "room") }
                     } onCancel: { newName = ""; isAddingRoom = false }
-                    .padding(.horizontal, 14).padding(.top, 8)
-                }
-                if isAddingItem {
-                    InlineAddField(placeholder: "Item name", text: $newItemName) {
-                        let name = newItemName
-                        newItemName = ""; isAddingItem = false
-                        Task { await homeStore.createItem(homeId: homeId, name: name, locationId: nil) }
-                    } onCancel: { newItemName = ""; isAddingItem = false }
                     .padding(.horizontal, 14).padding(.top, 8)
                 }
             }
@@ -551,10 +541,9 @@ struct FloorBoxView: View {
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
+    @EnvironmentObject private var itemComposer: ItemAddComposerController
     @State private var isAddingRoom = false
-    @State private var isAddingItem = false
     @State private var newName = ""
-    @State private var newItemName = ""
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -682,8 +671,7 @@ struct FloorBoxView: View {
                 // Items after containers
                 let floorItems = home.items(in: floor.id)
                 ItemChipsView(items: floorItems, homeStore: homeStore, homeId: home.id, locationId: floor.id) {
-                    newItemName = ""
-                    isAddingItem = true
+                    itemComposer.present(homeId: home.id, locationId: floor.id)
                 }
                 .padding(.horizontal, 12)
 
@@ -692,13 +680,6 @@ struct FloorBoxView: View {
                         let name = newName; newName = ""; isAddingRoom = false
                         Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: floor.id, type: "room") }
                     } onCancel: { newName = ""; isAddingRoom = false }
-                    .padding(.horizontal, 12).padding(.top, 6)
-                }
-                if isAddingItem {
-                    InlineAddField(placeholder: "Item name", text: $newItemName) {
-                        let name = newItemName; newItemName = ""; isAddingItem = false
-                        Task { await homeStore.createItem(homeId: home.id, name: name, locationId: floor.id) }
-                    } onCancel: { newItemName = ""; isAddingItem = false }
                     .padding(.horizontal, 12).padding(.top, 6)
                 }
             }
@@ -757,10 +738,9 @@ struct RoomBoxView: View {
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
+    @EnvironmentObject private var itemComposer: ItemAddComposerController
     @State private var isAddingContainer = false
-    @State private var isAddingItem = false
     @State private var newName = ""
-    @State private var newItemName = ""
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -878,8 +858,7 @@ struct RoomBoxView: View {
                 // Items after containers
                 let roomItems = home.items(in: room.id)
                 ItemChipsView(items: roomItems, homeStore: homeStore, homeId: home.id, locationId: room.id) {
-                    newItemName = ""
-                    isAddingItem = true
+                    itemComposer.present(homeId: home.id, locationId: room.id)
                 }
                 .padding(.horizontal, 12)
 
@@ -888,13 +867,6 @@ struct RoomBoxView: View {
                         let name = newName; newName = ""; isAddingContainer = false
                         Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: room.id, type: "container") }
                     } onCancel: { newName = ""; isAddingContainer = false }
-                    .padding(.horizontal, 12).padding(.top, 6)
-                }
-                if isAddingItem {
-                    InlineAddField(placeholder: "Item name", text: $newItemName) {
-                        let name = newItemName; newItemName = ""; isAddingItem = false
-                        Task { await homeStore.createItem(homeId: home.id, name: name, locationId: room.id) }
-                    } onCancel: { newItemName = ""; isAddingItem = false }
                     .padding(.horizontal, 12).padding(.top, 6)
                 }
             }
@@ -953,10 +925,9 @@ struct ContainerBoxView: View {
     @ObservedObject var collapseStore: HierarchyCollapseStore
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
+    @EnvironmentObject private var itemComposer: ItemAddComposerController
     @State private var isAddingChild = false
-    @State private var isAddingItem = false
     @State private var newName = ""
-    @State private var newItemName = ""
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -1062,8 +1033,7 @@ struct ContainerBoxView: View {
                 // Items after containers
                 let containerItems = home.items(in: container.id)
                 ItemChipsView(items: containerItems, homeStore: homeStore, homeId: home.id, locationId: container.id) {
-                    newItemName = ""
-                    isAddingItem = true
+                    itemComposer.present(homeId: home.id, locationId: container.id)
                 }
                 .padding(.horizontal, 10)
 
@@ -1072,13 +1042,6 @@ struct ContainerBoxView: View {
                         let name = newName; newName = ""; isAddingChild = false
                         Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: container.id, type: "container") }
                     } onCancel: { newName = ""; isAddingChild = false }
-                    .padding(.horizontal, 10).padding(.top, 4)
-                }
-                if isAddingItem {
-                    InlineAddField(placeholder: "Item name", text: $newItemName) {
-                        let name = newItemName; newItemName = ""; isAddingItem = false
-                        Task { await homeStore.createItem(homeId: home.id, name: name, locationId: container.id) }
-                    } onCancel: { newItemName = ""; isAddingItem = false }
                     .padding(.horizontal, 10).padding(.top, 4)
                 }
             }
