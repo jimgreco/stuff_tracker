@@ -66,6 +66,48 @@ jobs:
           done
           xcodebuild -version
 
+      - name: Prepare iOS simulator
+        if: steps.changes.outputs.run_tests == 'true'
+        id: simulator
+        run: |
+          set -euo pipefail
+
+          runtime=$(xcrun simctl list runtimes --json | ruby -rjson -e '
+            def version_key(value)
+              value.to_s.scan(/\d+/).map(&:to_i)
+            end
+
+            runtimes = JSON.parse(STDIN.read).fetch("runtimes").select do |runtime|
+              runtime["isAvailable"] && runtime["platform"] == "iOS"
+            end
+            selected = runtimes.max_by { |runtime| version_key(runtime["version"]) }
+            abort("No available iOS simulator runtime found") unless selected
+            puts selected.fetch("identifier")
+          ')
+
+          device_type=$(xcrun simctl list devicetypes --json | ruby -rjson -e '
+            data = JSON.parse(STDIN.read)
+            types = data.fetch("devicetypes").select { |type| type["name"].to_s.include?("iPhone") }
+            preferred = [
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15"
+            ]
+            selected = preferred.filter_map { |identifier| types.find { |type| type["identifier"] == identifier } }.first
+            selected ||= types.reverse.find { |type| type["name"].to_s.include?("Pro") }
+            selected ||= types.last
+            abort("No iPhone simulator device type found") unless selected
+            puts selected.fetch("identifier")
+          ')
+
+          udid=$(xcrun simctl create "StuffTracker CI" "$device_type" "$runtime")
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+
       - name: Run iOS tests
         if: steps.changes.outputs.run_tests == 'true'
         working-directory: ios
@@ -75,7 +117,7 @@ jobs:
             -scheme StuffTracker \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -destination '${{ steps.simulator.outputs.destination }}' \
             test
 
   build:
