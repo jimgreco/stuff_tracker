@@ -138,85 +138,42 @@ private struct ReorderRowFrameReporter: ViewModifier {
     }
 }
 
-private struct SwipeToDeleteRow<Content: View>: View {
-    private let actionWidth: CGFloat = 96
+private struct RemovableEditorRow<Content: View>: View {
+    private let accessibilityLabel: String
     private let onDelete: () -> Void
     private let content: Content
 
-    @State private var offsetX: CGFloat = 0
-    @State private var gestureStartOffsetX: CGFloat?
-
-    init(onDelete: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+    init(
+        accessibilityLabel: String,
+        onDelete: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.accessibilityLabel = accessibilityLabel
         self.onDelete = onDelete
         self.content = content()
     }
 
     var body: some View {
-        ZStack(alignment: .trailing) {
+        HStack(alignment: .center, spacing: 12) {
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Button(role: .destructive) {
-                delete()
+                withAnimation {
+                    onDelete()
+                }
             } label: {
-                Label("Delete", systemImage: "trash")
+                Image(systemName: "xmark.circle.fill")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: actionWidth)
-                    .frame(maxHeight: .infinity)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(Color.red)
-            .opacity(offsetX < 0 ? 1 : 0)
-
-            content
-                .background(Color(.secondarySystemGroupedBackground))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .offset(x: offsetX)
-                .allowsHitTesting(offsetX == 0)
+            .accessibilityLabel(accessibilityLabel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .simultaneousGesture(swipeGesture)
-        .simultaneousGesture(TapGesture().onEnded {
-            guard offsetX < 0 else { return }
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
-                offsetX = 0
-            }
-        })
-        .clipped()
-    }
-
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .onChanged { value in
-                guard isHorizontalSwipe(value) || offsetX < 0 else { return }
-                if gestureStartOffsetX == nil {
-                    gestureStartOffsetX = offsetX
-                }
-
-                let baseOffset = gestureStartOffsetX ?? 0
-                offsetX = min(0, max(-actionWidth, baseOffset + value.translation.width))
-            }
-            .onEnded { value in
-                defer { gestureStartOffsetX = nil }
-                guard isHorizontalSwipe(value) || offsetX < 0 else { return }
-
-                let baseOffset = gestureStartOffsetX ?? 0
-                let predictedOffset = baseOffset + value.predictedEndTranslation.width
-
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
-                    offsetX = predictedOffset < -actionWidth * 0.35 ? -actionWidth : 0
-                }
-            }
-    }
-
-    private func isHorizontalSwipe(_ value: DragGesture.Value) -> Bool {
-        abs(value.translation.width) > abs(value.translation.height) * 1.15
-    }
-
-    private func delete() {
-        withAnimation {
-            offsetX = 0
-            onDelete()
-        }
     }
 }
 
@@ -491,7 +448,7 @@ struct ItemEditView: View {
         let propertyID = property.wrappedValue.id
         let isDropTarget = propertyDropTargetID == propertyID
 
-        SwipeToDeleteRow {
+        RemovableEditorRow(accessibilityLabel: "Remove Property") {
             properties.removeAll { $0.id == propertyID }
         } content: {
             VStack(spacing: 0) {
@@ -554,7 +511,7 @@ struct ItemEditView: View {
         let attachmentID = attachment.id
         let isDropTarget = photoDropTargetID == attachmentID
 
-        SwipeToDeleteRow {
+        RemovableEditorRow(accessibilityLabel: "Remove Photo") {
             photoAttachments.removeAll { $0.id == attachmentID }
         } content: {
             VStack(spacing: 0) {
@@ -608,7 +565,7 @@ struct ItemEditView: View {
         let contentType = attachment.wrappedValue.document?.contentType ?? attachment.wrappedValue.pendingDocument?.contentType
         let isDropTarget = documentDropTargetID == attachmentID
 
-        SwipeToDeleteRow {
+        RemovableEditorRow(accessibilityLabel: "Remove Document") {
             documentAttachments.removeAll { $0.id == attachmentID }
         } content: {
             VStack(spacing: 0) {
