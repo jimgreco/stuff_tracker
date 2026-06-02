@@ -257,14 +257,15 @@ struct ContentView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if isSearchFocused && !itemSelection.isSelecting {
-                    BottomSearchControls(
-                        searchText: $searchText,
-                        showFlaggedOnly: $showFlaggedOnly,
-                        isSearchFocused: $isSearchFocused
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            .overlay {
+                if shouldShowSearchControls {
+                    SearchControlsPositioner(isFocused: isSearchFocused) {
+                        BottomSearchControls(
+                            searchText: $searchText,
+                            showFlaggedOnly: $showFlaggedOnly,
+                            isSearchFocused: $isSearchFocused
+                        )
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -295,13 +296,6 @@ struct ContentView: View {
                         onCancel: { hierarchyComposer.dismiss() },
                         onSubmit: { submitComposedHierarchy() }
                     )
-                } else if !isSearchFocused {
-                    BottomSearchControls(
-                        searchText: $searchText,
-                        showFlaggedOnly: $showFlaggedOnly,
-                        isSearchFocused: $isSearchFocused
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
@@ -720,6 +714,10 @@ struct ContentView: View {
         !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly
     }
 
+    private var shouldShowSearchControls: Bool {
+        !itemSelection.isSelecting && !itemComposer.isPresented && !hierarchyComposer.isPresented
+    }
+
     private var emptyFilterTitle: String {
         showFlaggedOnly ? "No Flags" : "No Results"
     }
@@ -754,6 +752,26 @@ private struct SearchDismissTapShield: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onDismiss)
             .accessibilityHidden(true)
+    }
+}
+
+private struct SearchControlsPositioner<Content: View>: View {
+    let isFocused: Bool
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !isFocused {
+                Spacer(minLength: 0)
+            }
+
+            content()
+
+            if isFocused {
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -1095,12 +1113,6 @@ private struct BottomSearchControls: View {
         HStack(spacing: isSearchFocused ? 0 : 10) {
             if !isSearchFocused {
                 BottomFlagFilterButton(isOn: $showFlaggedOnly)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .scale(scale: 0.78, anchor: .leading).combined(with: .opacity)
-                        )
-                    )
             }
 
             HStack(spacing: 8) {
@@ -1137,8 +1149,6 @@ private struct BottomSearchControls: View {
         .padding(.horizontal, isSearchFocused ? 10 : 14)
         .padding(.top, isSearchFocused ? 10 : 8)
         .padding(.bottom, isSearchFocused ? 10 : 8)
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isSearchFocused)
-        .animation(.easeInOut(duration: 0.18), value: searchText.isEmpty)
     }
 }
 
