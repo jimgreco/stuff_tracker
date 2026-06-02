@@ -264,9 +264,12 @@ struct ItemEditView: View {
                     .cubbySheetRows(prominence: 0.92)
             }
             .cubbySheetChrome()
-            .navigationTitle("Edit Item")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Edit Item")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
@@ -1545,9 +1548,12 @@ private struct LocationTreeSheet: View {
                 selectedId: $selectedId,
                 dismiss: dismiss
             )
-            .navigationTitle("Select Location")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Select Location")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
@@ -1560,10 +1566,12 @@ private struct LocationTreeSheet: View {
                     selectedId: $selectedId,
                     dismiss: dismiss
                 )
-                .navigationTitle(loc?.name ?? "")
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
+                .cubbyNavigationTitle(loc?.name ?? "")
             }
         }
+        .cubbyNavigationBarChrome()
         .onAppear {
             path = LocationTreePresentation.initialNavigationPath(home: home, selectedId: selectedId)
         }

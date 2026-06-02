@@ -44,9 +44,12 @@ struct AccountView: View {
                     .cubbySheetRows(prominence: 0.55)
             }
             .cubbySheetChrome()
-            .navigationTitle("Account")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Account")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -679,10 +682,13 @@ struct MergeChoiceView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(CubbySheetBackground())
-            .navigationTitle("Sync Data")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .cubbyNavigationBarChrome()
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Sync Data")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }

@@ -255,11 +255,14 @@ struct IconPickerView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Choose Icon")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .cubbyNavigationBarChrome()
             .searchable(text: $searchText, prompt: "Search icon names")
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Choose Icon")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }

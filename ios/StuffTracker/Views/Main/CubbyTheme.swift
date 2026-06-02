@@ -193,13 +193,102 @@ struct WoodgrainOverlay: View {
     }
 }
 
+struct CubbyNavigationBrandTitle: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            CubbyNavigationBrandMark()
+
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(CubbyTheme.warmInk)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct CubbyNavigationBrandMark: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        ZStack {
+            shape
+                .fill(CubbyTheme.surfaceGradient(for: .home))
+
+            WoodgrainOverlay(opacity: 0.12)
+                .clipShape(shape)
+
+            VStack(spacing: 0) {
+                CubbyShelfLip(kind: .home, height: 3)
+                Spacer(minLength: 0)
+                CubbyShelfLip(kind: .container, height: 2)
+            }
+            .clipShape(shape)
+
+            HStack(alignment: .bottom, spacing: 2) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(CubbyTheme.green.opacity(0.86))
+                    .frame(width: 4, height: 13)
+
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(CubbyTheme.paper.opacity(0.92))
+                    .frame(width: 4, height: 16)
+
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(CubbyTheme.paperDeep.opacity(0.94))
+                    .frame(width: 11, height: 9)
+                    .overlay(alignment: .top) {
+                        Capsule()
+                            .fill(CubbyTheme.shelfShadow.opacity(0.18))
+                            .frame(width: 6, height: 2)
+                            .padding(.top, 2)
+                    }
+            }
+            .padding(.horizontal, 5)
+            .padding(.bottom, 5)
+        }
+        .frame(width: 26, height: 26)
+        .overlay(shape.stroke(CubbyTheme.homeBorder.opacity(0.86), lineWidth: 0.75))
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 4, y: 2)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct CubbyNavigationTitleModifier: ViewModifier {
+    let title: String
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: title)
+                }
+            }
+    }
+}
+
 extension View {
     func cubbyNavigationBarChrome() -> some View {
         self
-            .toolbarBackground(CubbyTheme.surfaceGradient(for: .container), for: .navigationBar)
+            .toolbarBackground(CubbyTheme.surfaceGradient(for: .floor), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .tint(CubbyTheme.green)
+    }
+
+    func cubbyNavigationBarChrome(title: String) -> some View {
+        self
+            .navigationTitle("")
+            .cubbyNavigationBarChrome()
+            .cubbyNavigationTitle(title)
+    }
+
+    func cubbyNavigationTitle(_ title: String) -> some View {
+        self
+            .modifier(CubbyNavigationTitleModifier(title: title))
     }
 
     func cubbySheetChrome() -> some View {
@@ -208,6 +297,14 @@ extension View {
             .background(CubbySheetBackground())
             .listSectionSpacing(14)
             .cubbyNavigationBarChrome()
+    }
+
+    func cubbySheetChrome(title: String) -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .background(CubbySheetBackground())
+            .listSectionSpacing(14)
+            .cubbyNavigationBarChrome(title: title)
     }
 
     func cubbySheetRows(prominence: Double = 1) -> some View {

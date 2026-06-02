@@ -172,6 +172,7 @@ struct ContentView: View {
     @State private var deepLinkScrollTargetID: String?
     @State private var breadcrumbPath: [String] = []
     @FocusState private var isSearchFocused: Bool
+    @State private var isSearchInputPresented = false
 
     var body: some View {
         if authStore.isRestoringSession {
@@ -246,25 +247,14 @@ struct ContentView: View {
             }
             .background(CubbyWallBackground())
             .overlay(alignment: .top) {
-                if !isSearchFocused {
+                if !isSearchInputPresented {
                     BreadcrumbBar(path: breadcrumbPath)
                 }
             }
             .overlay {
-                if isSearchFocused {
+                if isSearchInputPresented {
                     SearchDismissTapShield {
                         dismissSearchInput()
-                    }
-                }
-            }
-            .overlay {
-                if shouldShowSearchControls {
-                    SearchControlsPositioner(isFocused: isSearchFocused) {
-                        BottomSearchControls(
-                            searchText: $searchText,
-                            showFlaggedOnly: $showFlaggedOnly,
-                            isSearchFocused: $isSearchFocused
-                        )
                     }
                 }
             }
@@ -296,6 +286,15 @@ struct ContentView: View {
                         onCancel: { hierarchyComposer.dismiss() },
                         onSubmit: { submitComposedHierarchy() }
                     )
+                } else if shouldShowSearchControls {
+                    BottomSearchControls(
+                        searchText: $searchText,
+                        showFlaggedOnly: $showFlaggedOnly,
+                        isSearchPresented: isSearchInputPresented,
+                        isSearchFocused: $isSearchFocused,
+                        onActivateSearch: { activateSearchInput() },
+                        onSubmitSearch: { dismissSearchInput() }
+                    )
                 }
             }
             .overlay(alignment: .bottom) {
@@ -303,10 +302,13 @@ struct ContentView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 76)
             }
-            .navigationTitle("CubbyLog")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .cubbyNavigationBarChrome()
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "CubbyLog")
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     if itemSelection.isSelecting {
                         Button {
@@ -325,7 +327,7 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        if isSearchFocused {
+                        if isSearchInputPresented {
                             dismissSearchInput()
                         } else {
                             showAccountSheet = true
@@ -423,8 +425,17 @@ struct ContentView: View {
     }
 
     private func dismissSearchInput() {
-        guard isSearchFocused else { return }
+        guard isSearchInputPresented || isSearchFocused else { return }
         isSearchFocused = false
+        isSearchInputPresented = false
+    }
+
+    private func activateSearchInput() {
+        guard shouldShowSearchControls else { return }
+        isSearchInputPresented = true
+        DispatchQueue.main.async {
+            isSearchFocused = true
+        }
     }
 
     private func submitComposedItem() {
@@ -502,6 +513,7 @@ struct ContentView: View {
         searchText = ""
         showFlaggedOnly = false
         isSearchFocused = false
+        isSearchInputPresented = false
         itemSelection.clearSelection()
         itemComposer.dismiss()
         hierarchyComposer.dismiss()
@@ -755,26 +767,6 @@ private struct SearchDismissTapShield: View {
     }
 }
 
-private struct SearchControlsPositioner<Content: View>: View {
-    let isFocused: Bool
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if !isFocused {
-                Spacer(minLength: 0)
-            }
-
-            content()
-
-            if isFocused {
-                Spacer(minLength: 0)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 private struct SelectionActionBar: View {
     let selectedCount: Int
     let canMove: Bool
@@ -922,9 +914,12 @@ private struct BulkItemMoveSheet: View {
     var body: some View {
         NavigationStack(path: $path) {
             BulkItemMoveLevel(home: home, parentId: nil, onMove: onMove, dismissSheet: { dismiss() })
-                .navigationTitle(title)
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        CubbyNavigationBrandTitle(title: title)
+                    }
                     ToolbarItem(placement: .cancellationAction) {
                         DismissButton()
                     }
@@ -932,8 +927,9 @@ private struct BulkItemMoveSheet: View {
                 .navigationDestination(for: String.self) { locId in
                     let loc = home.locations.first(where: { $0.id == locId })
                     BulkItemMoveLevel(home: home, parentId: locId, onMove: onMove, dismissSheet: { dismiss() })
-                        .navigationTitle(loc?.name ?? "")
+                        .navigationTitle("")
                         .navigationBarTitleDisplayMode(.inline)
+                        .cubbyNavigationTitle(loc?.name ?? "")
                 }
         }
         .cubbyNavigationBarChrome()
@@ -1107,18 +1103,33 @@ private struct HierarchyAddChipSurfaceModifier: ViewModifier {
 private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
+    let isSearchPresented: Bool
     @FocusState.Binding var isSearchFocused: Bool
+    let onActivateSearch: () -> Void
+    let onSubmitSearch: () -> Void
 
     var body: some View {
-        HStack(spacing: isSearchFocused ? 0 : 10) {
-            if !isSearchFocused {
+        HStack(spacing: isSearchPresented ? 0 : 10) {
+            if !isSearchPresented {
                 BottomFlagFilterButton(isOn: $showFlaggedOnly)
             }
 
+            searchField
+            .frame(maxWidth: .infinity)
+            .frame(height: isSearchPresented ? 52 : 48)
+            .padding(.horizontal, isSearchPresented ? 15 : 13)
+            .bottomSearchFieldSurface(isFocused: isSearchPresented)
+        }
+        .padding(.horizontal, isSearchPresented ? 10 : 14)
+        .padding(.top, isSearchPresented ? 10 : 8)
+        .padding(.bottom, isSearchPresented ? 10 : 8)
+    }
+
+    @ViewBuilder
+    private var searchField: some View {
+        if isSearchPresented {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                searchIcon
 
                 TextField("Search stuff...", text: $searchText)
                     .textInputAutocapitalization(.never)
@@ -1126,29 +1137,57 @@ private struct BottomSearchControls: View {
                     .submitLabel(.search)
                     .focused($isSearchFocused)
                     .onSubmit {
-                        isSearchFocused = false
+                        onSubmitSearch()
                     }
 
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
+                clearSearchButton
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: isSearchFocused ? 52 : 48)
-            .padding(.horizontal, isSearchFocused ? 15 : 13)
-            .bottomSearchFieldSurface(isFocused: isSearchFocused)
+        } else {
+            HStack(spacing: 8) {
+                Button {
+                    onActivateSearch()
+                } label: {
+                    HStack(spacing: 8) {
+                        searchIcon
+
+                        Text(searchText.isEmpty ? "Search stuff..." : searchText)
+                            .lineLimit(1)
+                            .foregroundStyle(searchText.isEmpty ? .secondary : .primary)
+
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                    .accessibilityHidden(true)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("Search stuff...")
+                .accessibilityAddTraits(.isButton)
+
+                clearSearchButton
+            }
         }
-        .padding(.horizontal, isSearchFocused ? 10 : 14)
-        .padding(.top, isSearchFocused ? 10 : 8)
-        .padding(.bottom, isSearchFocused ? 10 : 8)
+    }
+
+    private var searchIcon: some View {
+        Image(systemName: "magnifyingglass")
+            .font(.body)
+            .foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private var clearSearchButton: some View {
+        if !searchText.isEmpty {
+            Button {
+                searchText = ""
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Clear search")
+        }
     }
 }
 
@@ -1210,11 +1249,19 @@ private struct BottomSearchFieldSurfaceModifier: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 
         if #available(iOS 26.0, *) {
-            content
-                .background(CubbyTheme.paper.opacity(isFocused ? 0.30 : 0.22), in: shape)
-                .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.stroke(Color.white.opacity(isFocused ? 0.36 : 0.22), lineWidth: 0.75))
-                .shadow(color: CubbyTheme.shelfShadow.opacity(isFocused ? 0.18 : 0.12), radius: isFocused ? 18 : 12, y: 6)
+            if isFocused {
+                content
+                    .background(CubbyTheme.paper.opacity(0.30), in: shape)
+                    .glassEffect(.regular, in: shape)
+                    .overlay(shape.stroke(Color.white.opacity(0.36), lineWidth: 0.75))
+                    .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 18, y: 6)
+            } else {
+                content
+                    .background(CubbyTheme.paper.opacity(0.22), in: shape)
+                    .glassEffect(.regular.interactive(), in: shape)
+                    .overlay(shape.stroke(Color.white.opacity(0.22), lineWidth: 0.75))
+                    .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 6)
+            }
         } else {
             content
                 .background(CubbyTheme.paper.opacity(0.96), in: shape)

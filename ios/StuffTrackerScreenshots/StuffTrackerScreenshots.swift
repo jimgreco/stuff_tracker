@@ -29,15 +29,18 @@ final class StuffTrackerScreenshots: XCTestCase {
         snapshot("02-Flagged-Items")
 
         app.buttons["Showing flagged items"].tap()
+        let searchButton = app.buttons["Search stuff..."]
+        XCTAssertTrue(searchButton.waitForExistence(timeout: 5))
+        searchButton.tap()
+
         let searchField = app.textFields["Search stuff..."]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
-        searchField.tap()
         app.typeText("camera\n")
         XCTAssertTrue(app.staticTexts["Camera Bag"].waitForExistence(timeout: 5))
         snapshot("03-Search")
 
         app.staticTexts["Camera Bag"].tap()
-        XCTAssertTrue(app.navigationBars["Edit Item"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Name"].waitForExistence(timeout: 5))
         snapshot("04-Item-Details")
     }
 }
