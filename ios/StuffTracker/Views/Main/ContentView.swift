@@ -84,6 +84,76 @@ final class ItemAddComposerController: ObservableObject {
     }
 }
 
+@MainActor
+final class HierarchyAddComposerController: ObservableObject {
+    enum Target: Equatable {
+        case home
+        case location(homeId: String, parentId: String?, type: Location.LocationType)
+    }
+
+    @Published var isPresented = false
+    @Published var name = ""
+    private(set) var target: Target?
+
+    var canSubmit: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var submittedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var placeholder: String {
+        switch target {
+        case .home:
+            return "Home name"
+        case .location(_, _, let type):
+            return "\(type.displayName) name"
+        case nil:
+            return "Name"
+        }
+    }
+
+    var submitAccessibilityLabel: String {
+        switch target {
+        case .home:
+            return "Add home"
+        case .location(_, _, let type):
+            return "Add \(type.displayName.lowercased())"
+        case nil:
+            return "Add"
+        }
+    }
+
+    func presentHome() {
+        target = .home
+        name = ""
+        isPresented = true
+    }
+
+    func presentLocation(homeId: String, parentId: String?, type: Location.LocationType) {
+        target = .location(homeId: homeId, parentId: parentId, type: type)
+        name = ""
+        isPresented = true
+    }
+
+    func dismiss() {
+        isPresented = false
+        name = ""
+        target = nil
+    }
+}
+
+private extension Location.LocationType {
+    var displayName: String {
+        switch self {
+        case .floor: return "Floor"
+        case .room: return "Room"
+        case .container: return "Container"
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
     @EnvironmentObject private var deepLinkStore: DeepLinkStore
@@ -92,10 +162,9 @@ struct ContentView: View {
     @StateObject private var collapseStore = HierarchyCollapseStore()
     @StateObject private var itemSelection = ItemSelectionController()
     @StateObject private var itemComposer = ItemAddComposerController()
+    @StateObject private var hierarchyComposer = HierarchyAddComposerController()
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
-    @State private var isAddingHome = false
-    @State private var newHomeName = ""
     @State private var showAccountSheet = false
     @State private var showBulkMoveSheet = false
     @State private var showBulkDeleteConfirm = false
@@ -149,27 +218,11 @@ struct ContentView: View {
                                     }
 
                                     if !isFiltering {
-                                        if isAddingHome {
-                                            InlineAddField(placeholder: "Home name", text: $newHomeName) {
-                                                let name = newHomeName
-                                                newHomeName = ""
-                                                isAddingHome = false
-                                                Task { await homeStore.createHome(name: name) }
-                                            } onCancel: {
-                                                newHomeName = ""
-                                                isAddingHome = false
-                                            }
-                                        }
-
                                         HStack {
-                                            Button {
-                                                isAddingHome = true
-                                            } label: {
-                                                Label("Add home", systemImage: "plus")
-                                                    .font(.callout)
-                                                    .foregroundStyle(.secondary)
+                                            HierarchyAddChip(title: "Add Home") {
+                                                presentHomeComposer()
                                             }
-                                            Spacer()
+                                            Spacer(minLength: 0)
                                         }
                                         .padding(.bottom, 8)
 
@@ -177,7 +230,7 @@ struct ContentView: View {
                                     }
                                 }
                                 .padding()
-                                .padding(.bottom, 52)
+                                .padding(.bottom, 104)
                             }
                             .coordinateSpace(name: "scroll")
                             .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
@@ -193,7 +246,9 @@ struct ContentView: View {
             }
             .background(CubbyWallBackground())
             .overlay(alignment: .top) {
-                BreadcrumbBar(path: breadcrumbPath)
+                if !isSearchFocused {
+                    BreadcrumbBar(path: breadcrumbPath)
+                }
             }
             .overlay {
                 if isSearchFocused {
@@ -203,12 +258,13 @@ struct ContentView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                if !itemSelection.isSelecting {
+                if isSearchFocused && !itemSelection.isSelecting {
                     BottomSearchControls(
                         searchText: $searchText,
                         showFlaggedOnly: $showFlaggedOnly,
                         isSearchFocused: $isSearchFocused
                     )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -222,12 +278,30 @@ struct ContentView: View {
                         onDelete: { requestDeleteSelectedItems() }
                     )
                 } else if itemComposer.isPresented {
-                    ItemAddComposerBar(
+                    AddComposerBar(
+                        placeholder: "Item name",
                         text: $itemComposer.name,
                         canSubmit: itemComposer.canSubmit,
+                        submitAccessibilityLabel: "Add item",
                         onCancel: { itemComposer.dismiss() },
                         onSubmit: { submitComposedItem() }
                     )
+                } else if hierarchyComposer.isPresented {
+                    AddComposerBar(
+                        placeholder: hierarchyComposer.placeholder,
+                        text: $hierarchyComposer.name,
+                        canSubmit: hierarchyComposer.canSubmit,
+                        submitAccessibilityLabel: hierarchyComposer.submitAccessibilityLabel,
+                        onCancel: { hierarchyComposer.dismiss() },
+                        onSubmit: { submitComposedHierarchy() }
+                    )
+                } else if !isSearchFocused {
+                    BottomSearchControls(
+                        searchText: $searchText,
+                        showFlaggedOnly: $showFlaggedOnly,
+                        isSearchFocused: $isSearchFocused
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
@@ -237,9 +311,7 @@ struct ContentView: View {
             }
             .navigationTitle("CubbyLog")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .tint(CubbyTheme.green)
+            .cubbyNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if itemSelection.isSelecting {
@@ -339,9 +411,20 @@ struct ContentView: View {
                 itemSelection.prune(validItemIds: Set(homes.flatMap(\.items).map(\.id)))
                 openPendingDeepLinkIfPossible()
             }
+            .onReceive(itemComposer.$isPresented) { isPresented in
+                guard isPresented else { return }
+                hierarchyComposer.dismiss()
+                dismissSearchInput()
+            }
+            .onReceive(hierarchyComposer.$isPresented) { isPresented in
+                guard isPresented else { return }
+                itemComposer.dismiss()
+                dismissSearchInput()
+            }
         }
         .environmentObject(itemSelection)
         .environmentObject(itemComposer)
+        .environmentObject(hierarchyComposer)
         .preferredColorScheme(.light)
     }
 
@@ -357,6 +440,25 @@ struct ContentView: View {
         let locationId = itemComposer.locationId
         itemComposer.dismiss()
         homeStore.createItem(homeId: homeId, name: name, locationId: locationId)
+    }
+
+    private func presentHomeComposer() {
+        dismissSearchInput()
+        itemComposer.dismiss()
+        hierarchyComposer.presentHome()
+    }
+
+    private func submitComposedHierarchy() {
+        guard hierarchyComposer.canSubmit, let target = hierarchyComposer.target else { return }
+        let name = hierarchyComposer.submittedName
+        hierarchyComposer.dismiss()
+
+        switch target {
+        case .home:
+            homeStore.createHome(name: name)
+        case .location(let homeId, let parentId, let type):
+            homeStore.createLocation(homeId: homeId, name: name, parentId: parentId, type: type.rawValue)
+        }
     }
 
     private var selectedHomeForActions: HomeDetail? {
@@ -407,7 +509,8 @@ struct ContentView: View {
         showFlaggedOnly = false
         isSearchFocused = false
         itemSelection.clearSelection()
-        isAddingHome = false
+        itemComposer.dismiss()
+        hierarchyComposer.dismiss()
 
         collapseStore.setCollapsed(false, for: .home(home.id))
 
@@ -815,6 +918,7 @@ private struct BulkItemMoveSheet: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
         }
+        .cubbyNavigationBarChrome()
     }
 }
 
@@ -885,16 +989,18 @@ private struct DismissButton: View {
     }
 }
 
-private struct ItemAddComposerBar: View {
+private struct AddComposerBar: View {
+    let placeholder: String
     @Binding var text: String
     let canSubmit: Bool
+    let submitAccessibilityLabel: String
     let onCancel: () -> Void
     let onSubmit: () -> Void
     @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
-            TextField("Item name", text: $text)
+            TextField(placeholder, text: $text)
                 .textInputAutocapitalization(.words)
                 .submitLabel(.done)
                 .focused($isFocused)
@@ -925,7 +1031,7 @@ private struct ItemAddComposerBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(canSubmit ? CubbyTheme.green : .secondary)
             .disabled(!canSubmit)
-            .accessibilityLabel("Add item")
+            .accessibilityLabel(submitAccessibilityLabel)
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -933,6 +1039,49 @@ private struct ItemAddComposerBar: View {
         .itemComposerBarSurface()
         .onAppear {
             isFocused = true
+        }
+    }
+}
+
+private struct HierarchyAddChip: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CubbyTheme.green.opacity(0.78))
+
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .hierarchyAddChipSurface()
+        .contentShape(Rectangle())
+        .accessibilityLabel(title)
+    }
+}
+
+private struct HierarchyAddChipSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        if #available(iOS 26.0, *) {
+            content
+                .background(CubbyTheme.green.opacity(0.075), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.18), lineWidth: 0.5))
+        } else {
+            content
+                .background(CubbyTheme.green.opacity(0.08), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.20), lineWidth: 0.5))
         }
     }
 }
@@ -1117,6 +1266,10 @@ private extension View {
 
     func bottomFlagFilterSurface(isOn: Bool) -> some View {
         modifier(BottomFlagFilterSurfaceModifier(isOn: isOn))
+    }
+
+    func hierarchyAddChipSurface() -> some View {
+        modifier(HierarchyAddChipSurfaceModifier())
     }
 }
 

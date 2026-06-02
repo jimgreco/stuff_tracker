@@ -194,14 +194,20 @@ struct WoodgrainOverlay: View {
 }
 
 extension View {
+    func cubbyNavigationBarChrome() -> some View {
+        self
+            .toolbarBackground(CubbyTheme.surfaceGradient(for: .container), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .tint(CubbyTheme.green)
+    }
+
     func cubbySheetChrome() -> some View {
         self
             .scrollContentBackground(.hidden)
             .background(CubbySheetBackground())
             .listSectionSpacing(14)
-            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .tint(CubbyTheme.green)
+            .cubbyNavigationBarChrome()
     }
 
     func cubbySheetRows(prominence: Double = 1) -> some View {

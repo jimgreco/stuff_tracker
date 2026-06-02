@@ -303,9 +303,7 @@ struct HomeBoxView: View {
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
     @EnvironmentObject private var itemComposer: ItemAddComposerController
-    @State private var isAddingFloor = false
-    @State private var isAddingRoom = false
-    @State private var newName = ""
+    @EnvironmentObject private var hierarchyComposer: HierarchyAddComposerController
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -358,7 +356,7 @@ struct HomeBoxView: View {
                     isRenaming: $isRenaming,
                     renameName: $renameName
                 ) { newName in
-                    Task { await homeStore.renameHome(home.id, name: newName) }
+                    homeStore.renameHome(home.id, name: newName)
                 }
                 .draggable(DraggedHome(id: home.id))
                 Spacer()
@@ -382,15 +380,13 @@ struct HomeBoxView: View {
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
-                            newName = ""
-                            isAddingFloor = true
+                            hierarchyComposer.presentLocation(homeId: home.id, parentId: nil, type: .floor)
                         } label: {
                             Label("Add Floor", systemImage: "plus")
                         }
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
-                            newName = ""
-                            isAddingRoom = true
+                            hierarchyComposer.presentLocation(homeId: home.id, parentId: nil, type: .room)
                         } label: {
                             Label("Add Room", systemImage: "plus")
                         }
@@ -407,7 +403,7 @@ struct HomeBoxView: View {
                         Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
-                            else { Task { await homeStore.deleteHome(home.id) } }
+                            else { homeStore.deleteHome(home.id) }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -466,24 +462,6 @@ struct HomeBoxView: View {
                     itemComposer.present(homeId: home.id, locationId: nil)
                 }
                 .padding(.horizontal, 14)
-
-                // Inline add fields
-                if isAddingFloor {
-                    InlineAddField(placeholder: "Floor name", text: $newName) {
-                        let name = newName
-                        newName = ""; isAddingFloor = false
-                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: nil, type: "floor") }
-                    } onCancel: { newName = ""; isAddingFloor = false }
-                    .padding(.horizontal, 14).padding(.top, 8)
-                }
-                if isAddingRoom {
-                    InlineAddField(placeholder: "Room name", text: $newName) {
-                        let name = newName
-                        newName = ""; isAddingRoom = false
-                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: nil, type: "room") }
-                    } onCancel: { newName = ""; isAddingRoom = false }
-                    .padding(.horizontal, 14).padding(.top, 8)
-                }
             }
         }
         .padding(.bottom, 10)
@@ -522,7 +500,7 @@ struct HomeBoxView: View {
                 }
         }
         .alert("Delete \(home.name)?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) { Task { await homeStore.deleteHome(home.id) } }
+            Button("Delete", role: .destructive) { homeStore.deleteHome(home.id) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will delete all rooms, containers, and items inside this home.")
@@ -542,8 +520,7 @@ struct FloorBoxView: View {
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
     @EnvironmentObject private var itemComposer: ItemAddComposerController
-    @State private var isAddingRoom = false
-    @State private var newName = ""
+    @EnvironmentObject private var hierarchyComposer: HierarchyAddComposerController
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -595,7 +572,7 @@ struct FloorBoxView: View {
                     isFlagged: floor.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
-                    Task { await homeStore.renameLocation(homeId: home.id, locationId: floor.id, name: newName) }
+                    homeStore.renameLocation(homeId: home.id, locationId: floor.id, name: newName)
                 }
                 .draggable(DraggedLocation(id: floor.id, homeId: home.id, parentId: floor.parentId))
                 Spacer()
@@ -615,8 +592,7 @@ struct FloorBoxView: View {
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
-                            newName = ""
-                            isAddingRoom = true
+                            hierarchyComposer.presentLocation(homeId: home.id, parentId: floor.id, type: .room)
                         } label: { Label("Add Room", systemImage: "plus") }
                         Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: floor.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
@@ -624,7 +600,7 @@ struct FloorBoxView: View {
                         Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
-                            else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: floor.id) } }
+                            else { homeStore.deleteLocation(homeId: home.id, locationId: floor.id) }
                         } label: { Label("Delete", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
                 }
@@ -674,14 +650,6 @@ struct FloorBoxView: View {
                     itemComposer.present(homeId: home.id, locationId: floor.id)
                 }
                 .padding(.horizontal, 12)
-
-                if isAddingRoom {
-                    InlineAddField(placeholder: "Room name", text: $newName) {
-                        let name = newName; newName = ""; isAddingRoom = false
-                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: floor.id, type: "room") }
-                    } onCancel: { newName = ""; isAddingRoom = false }
-                    .padding(.horizontal, 12).padding(.top, 6)
-                }
             }
         }
         .padding(.bottom, 8)
@@ -720,7 +688,7 @@ struct FloorBoxView: View {
                 }
         }
         .alert("Delete \(floor.name)?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) { Task { await homeStore.deleteLocation(homeId: home.id, locationId: floor.id) } }
+            Button("Delete", role: .destructive) { homeStore.deleteLocation(homeId: home.id, locationId: floor.id) }
             Button("Cancel", role: .cancel) {}
         } message: {
             let d = descendantCount(of: floor.id, in: home)
@@ -739,8 +707,7 @@ struct RoomBoxView: View {
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
     @EnvironmentObject private var itemComposer: ItemAddComposerController
-    @State private var isAddingContainer = false
-    @State private var newName = ""
+    @EnvironmentObject private var hierarchyComposer: HierarchyAddComposerController
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -793,7 +760,7 @@ struct RoomBoxView: View {
                     isFlagged: room.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
-                    Task { await homeStore.renameLocation(homeId: home.id, locationId: room.id, name: newName) }
+                    homeStore.renameLocation(homeId: home.id, locationId: room.id, name: newName)
                 }
                 .draggable(DraggedLocation(id: room.id, homeId: home.id, parentId: room.parentId))
                 Spacer()
@@ -813,8 +780,7 @@ struct RoomBoxView: View {
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
-                            newName = ""
-                            isAddingContainer = true
+                            hierarchyComposer.presentLocation(homeId: home.id, parentId: room.id, type: .container)
                         } label: { Label("Add Container", systemImage: "plus") }
                         Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: room.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
@@ -822,7 +788,7 @@ struct RoomBoxView: View {
                         Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
-                            else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: room.id) } }
+                            else { homeStore.deleteLocation(homeId: home.id, locationId: room.id) }
                         } label: { Label("Delete", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
                 }
@@ -861,14 +827,6 @@ struct RoomBoxView: View {
                     itemComposer.present(homeId: home.id, locationId: room.id)
                 }
                 .padding(.horizontal, 12)
-
-                if isAddingContainer {
-                    InlineAddField(placeholder: "Container name", text: $newName) {
-                        let name = newName; newName = ""; isAddingContainer = false
-                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: room.id, type: "container") }
-                    } onCancel: { newName = ""; isAddingContainer = false }
-                    .padding(.horizontal, 12).padding(.top, 6)
-                }
             }
         }
         .padding(.bottom, 8)
@@ -907,7 +865,7 @@ struct RoomBoxView: View {
                 }
         }
         .alert("Delete \(room.name)?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) { Task { await homeStore.deleteLocation(homeId: home.id, locationId: room.id) } }
+            Button("Delete", role: .destructive) { homeStore.deleteLocation(homeId: home.id, locationId: room.id) }
             Button("Cancel", role: .cancel) {}
         } message: {
             let d = descendantCount(of: room.id, in: home)
@@ -926,8 +884,7 @@ struct ContainerBoxView: View {
     let isSearchActive: Bool
     @EnvironmentObject private var itemSelection: ItemSelectionController
     @EnvironmentObject private var itemComposer: ItemAddComposerController
-    @State private var isAddingChild = false
-    @State private var newName = ""
+    @EnvironmentObject private var hierarchyComposer: HierarchyAddComposerController
     @State private var isDropTargeted = false
     @State private var isRenaming = false
     @State private var renameName = ""
@@ -979,7 +936,7 @@ struct ContainerBoxView: View {
                     isFlagged: container.isFlagged,
                     isRenaming: $isRenaming, renameName: $renameName
                 ) { newName in
-                    Task { await homeStore.renameLocation(homeId: home.id, locationId: container.id, name: newName) }
+                    homeStore.renameLocation(homeId: home.id, locationId: container.id, name: newName)
                 }
                 .draggable(DraggedLocation(id: container.id, homeId: home.id, parentId: container.parentId))
                 Spacer()
@@ -999,8 +956,7 @@ struct ContainerBoxView: View {
                         Divider()
                         Button {
                             collapseStore.setCollapsed(false, for: collapseNode)
-                            newName = ""
-                            isAddingChild = true
+                            hierarchyComposer.presentLocation(homeId: home.id, parentId: container.id, type: .container)
                         } label: { Label("Add Container", systemImage: "plus") }
                         Divider()
                         Button { homeStore.sortItemsByName(homeId: home.id, locationId: container.id) } label: { Label("Order items by name", systemImage: "textformat.abc") }
@@ -1008,7 +964,7 @@ struct ContainerBoxView: View {
                         Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
-                            else { Task { await homeStore.deleteLocation(homeId: home.id, locationId: container.id) } }
+                            else { homeStore.deleteLocation(homeId: home.id, locationId: container.id) }
                         } label: { Label("Delete", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis").font(.caption).foregroundStyle(.secondary).padding(6) }
                 }
@@ -1036,14 +992,6 @@ struct ContainerBoxView: View {
                     itemComposer.present(homeId: home.id, locationId: container.id)
                 }
                 .padding(.horizontal, 10)
-
-                if isAddingChild {
-                    InlineAddField(placeholder: "Container name", text: $newName) {
-                        let name = newName; newName = ""; isAddingChild = false
-                        Task { await homeStore.createLocation(homeId: home.id, name: name, parentId: container.id, type: "container") }
-                    } onCancel: { newName = ""; isAddingChild = false }
-                    .padding(.horizontal, 10).padding(.top, 4)
-                }
             }
         }
         .padding(.bottom, 6)
@@ -1081,7 +1029,7 @@ struct ContainerBoxView: View {
                 }
         }
         .alert("Delete \(container.name)?", isPresented: $showDeleteConfirm) {
-            Button("Delete", role: .destructive) { Task { await homeStore.deleteLocation(homeId: home.id, locationId: container.id) } }
+            Button("Delete", role: .destructive) { homeStore.deleteLocation(homeId: home.id, locationId: container.id) }
             Button("Cancel", role: .cancel) {}
         } message: {
             let d = descendantCount(of: container.id, in: home)

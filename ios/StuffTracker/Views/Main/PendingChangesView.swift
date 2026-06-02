@@ -63,6 +63,7 @@ struct PendingChangesView: View {
         }
         .navigationTitle("Pending Changes")
         .navigationBarTitleDisplayMode(.inline)
+        .cubbyNavigationBarChrome()
     }
 
     private func locationIcon(for type: String) -> String {

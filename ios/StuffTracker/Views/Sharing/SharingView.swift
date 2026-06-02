@@ -64,6 +64,7 @@ struct SharingView: View {
         }
         .navigationTitle("Sharing")
         .navigationBarTitleDisplayMode(.inline)
+        .cubbyNavigationBarChrome()
         .sheet(isPresented: $showInvite) {
             InviteSheet(
                 email: $inviteEmail,
@@ -247,6 +248,7 @@ struct InviteSheet: View {
             }
             .navigationTitle("Invite Member")
             .navigationBarTitleDisplayMode(.inline)
+            .cubbyNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

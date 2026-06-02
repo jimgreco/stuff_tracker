@@ -681,9 +681,7 @@ struct MergeChoiceView: View {
             .background(CubbySheetBackground())
             .navigationTitle("Sync Data")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(CubbyTheme.paper.opacity(0.94), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .tint(CubbyTheme.green)
+            .cubbyNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -257,6 +257,7 @@ struct IconPickerView: View {
             }
             .navigationTitle("Choose Icon")
             .navigationBarTitleDisplayMode(.inline)
+            .cubbyNavigationBarChrome()
             .searchable(text: $searchText, prompt: "Search icon names")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
