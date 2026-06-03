@@ -8,23 +8,23 @@ enum CubbySurfaceKind {
 }
 
 enum CubbyTheme {
-    static let wallTop = Color(red: 0.98, green: 0.91, blue: 0.82)
-    static let wallMiddle = Color(red: 0.96, green: 0.84, blue: 0.70)
-    static let wallBottom = Color(red: 0.88, green: 0.69, blue: 0.48)
-    static let warmInk = Color(red: 0.18, green: 0.12, blue: 0.08)
-    static let green = Color(red: 0.18, green: 0.34, blue: 0.29)
-    static let greenSoft = Color(red: 0.82, green: 0.90, blue: 0.82)
-    static let amber = Color(red: 0.78, green: 0.43, blue: 0.20)
-    static let paper = Color(red: 1.00, green: 0.97, blue: 0.91)
-    static let paperDeep = Color(red: 0.96, green: 0.88, blue: 0.76)
-    static let shelfShadow = Color(red: 0.31, green: 0.18, blue: 0.09)
-    static let darkWoodTop = Color(red: 0.61, green: 0.35, blue: 0.16)
-    static let darkWoodMiddle = Color(red: 0.36, green: 0.17, blue: 0.07)
-    static let darkWoodBottom = Color(red: 0.17, green: 0.07, blue: 0.03)
-    static let homeBorder = Color(red: 0.54, green: 0.31, blue: 0.15).opacity(0.34)
-    static let floorBorder = Color(red: 0.60, green: 0.38, blue: 0.19).opacity(0.24)
-    static let roomBorder = Color(red: 0.62, green: 0.43, blue: 0.24).opacity(0.18)
-    static let containerBorder = Color(red: 0.55, green: 0.38, blue: 0.20).opacity(0.16)
+    static let wallTop = Color(red: 0.98, green: 0.94, blue: 0.86)
+    static let wallMiddle = Color(red: 0.94, green: 0.86, blue: 0.72)
+    static let wallBottom = Color(red: 0.86, green: 0.72, blue: 0.54)
+    static let warmInk = Color(red: 0.16, green: 0.11, blue: 0.08)
+    static let green = Color(red: 0.28, green: 0.39, blue: 0.33)
+    static let greenSoft = Color(red: 0.84, green: 0.88, blue: 0.80)
+    static let amber = Color(red: 0.66, green: 0.42, blue: 0.22)
+    static let paper = Color(red: 0.99, green: 0.96, blue: 0.88)
+    static let paperDeep = Color(red: 0.90, green: 0.82, blue: 0.68)
+    static let shelfShadow = Color(red: 0.24, green: 0.16, blue: 0.10)
+    static let darkWoodTop = Color(red: 0.43, green: 0.27, blue: 0.17)
+    static let darkWoodMiddle = Color(red: 0.28, green: 0.17, blue: 0.11)
+    static let darkWoodBottom = Color(red: 0.15, green: 0.08, blue: 0.05)
+    static let homeBorder = Color(red: 0.42, green: 0.28, blue: 0.18).opacity(0.34)
+    static let floorBorder = Color(red: 0.46, green: 0.33, blue: 0.21).opacity(0.24)
+    static let roomBorder = Color(red: 0.48, green: 0.36, blue: 0.24).opacity(0.18)
+    static let containerBorder = Color(red: 0.44, green: 0.34, blue: 0.23).opacity(0.16)
 
     static var navigationWoodGradient: LinearGradient {
         LinearGradient(
@@ -50,9 +50,9 @@ enum CubbyTheme {
         case .home:
             return LinearGradient(
                 colors: [
-                    Color(red: 0.95, green: 0.77, blue: 0.51),
-                    Color(red: 0.88, green: 0.60, blue: 0.34),
-                    Color(red: 0.74, green: 0.45, blue: 0.23),
+                    Color(red: 0.86, green: 0.67, blue: 0.44),
+                    Color(red: 0.74, green: 0.52, blue: 0.33),
+                    Color(red: 0.60, green: 0.38, blue: 0.24),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -60,8 +60,8 @@ enum CubbyTheme {
         case .floor:
             return LinearGradient(
                 colors: [
-                    Color(red: 0.99, green: 0.89, blue: 0.73),
-                    Color(red: 0.94, green: 0.77, blue: 0.54),
+                    Color(red: 0.97, green: 0.88, blue: 0.72),
+                    Color(red: 0.88, green: 0.72, blue: 0.52),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -69,8 +69,8 @@ enum CubbyTheme {
         case .room:
             return LinearGradient(
                 colors: [
-                    Color(red: 1.00, green: 0.96, blue: 0.88),
-                    Color(red: 0.98, green: 0.89, blue: 0.76),
+                    Color(red: 0.99, green: 0.95, blue: 0.86),
+                    Color(red: 0.92, green: 0.84, blue: 0.70),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -78,8 +78,8 @@ enum CubbyTheme {
         case .container:
             return LinearGradient(
                 colors: [
-                    Color(red: 1.00, green: 0.98, blue: 0.93),
-                    Color(red: 0.96, green: 0.89, blue: 0.78),
+                    Color(red: 0.99, green: 0.97, blue: 0.90),
+                    Color(red: 0.91, green: 0.85, blue: 0.73),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -92,8 +92,8 @@ enum CubbyTheme {
         case .home:
             return LinearGradient(
                 colors: [
-                    Color.white.opacity(0.36),
-                    Color(red: 0.44, green: 0.24, blue: 0.11).opacity(0.20),
+                    Color.white.opacity(0.30),
+                    shelfShadow.opacity(0.22),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -101,8 +101,8 @@ enum CubbyTheme {
         case .floor, .room, .container:
             return LinearGradient(
                 colors: [
-                    Color.white.opacity(0.48),
-                    Color(red: 0.57, green: 0.35, blue: 0.16).opacity(0.12),
+                    Color.white.opacity(0.42),
+                    shelfShadow.opacity(0.12),
                 ],
                 startPoint: .top,
                 endPoint: .bottom

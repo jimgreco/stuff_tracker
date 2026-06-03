@@ -381,7 +381,7 @@ struct ItemChip: View {
             if item.isFlagged {
                 Image(systemName: "flag.fill")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(CubbyTheme.amber)
                     .accessibilityLabel("Flagged")
             }
 
@@ -446,7 +446,7 @@ private struct ItemChipSurfaceModifier: ViewModifier {
         if isSelected {
             return CubbyTheme.green
         }
-        return showUnsyncedOutline ? .orange : CubbyTheme.containerBorder
+        return showUnsyncedOutline ? CubbyTheme.amber : CubbyTheme.containerBorder
     }
 
     private var backgroundColor: Color {

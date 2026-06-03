@@ -314,15 +314,17 @@ struct ContentView: View {
                         Button {
                             itemSelection.clearSelection()
                         } label: {
-                            Text("Done")
+                            CubbyToolbarTextButtonLabel(title: "Done")
                         }
+                        .buttonStyle(.plain)
                     } else {
                         Button {
                             dismissSearchInput()
                             itemSelection.startSelecting()
                         } label: {
-                            Text("Select")
+                            CubbyToolbarTextButtonLabel(title: "Select")
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -335,17 +337,25 @@ struct ContentView: View {
                     } label: {
                         if let avatarUrl = authStore.currentUser?.avatarUrl,
                            let url = URL(string: avatarUrl) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Image(systemName: "person.circle.fill")
+                            CubbyToolbarAvatarButtonLabel {
+                                AsyncImage(url: url) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(CubbyTheme.paper.opacity(0.82))
+                                }
                             }
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
                         } else {
-                            Image(systemName: authStore.isAuthenticated ? "person.circle.fill" : "person.circle")
+                            CubbyToolbarAvatarButtonLabel {
+                                Image(systemName: authStore.isAuthenticated ? "person.circle.fill" : "person.circle")
+                                    .font(.title3)
+                                    .foregroundStyle(CubbyTheme.paper.opacity(0.82))
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Account")
                 }
             }
             .sheet(isPresented: $showAccountSheet) {
@@ -767,6 +777,59 @@ private struct SearchDismissTapShield: View {
     }
 }
 
+private struct CubbyToolbarTextButtonLabel: View {
+    let title: String
+
+    var body: some View {
+        let shape = Capsule(style: .continuous)
+
+        Text(title)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(CubbyTheme.paper.opacity(0.76))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 15)
+            .frame(width: 78, height: 38)
+            .background {
+                ZStack {
+                    shape.fill(CubbyTheme.navigationWoodGradient)
+                    WoodgrainOverlay(opacity: 0.08)
+                        .clipShape(shape)
+                    shape.fill(Color.white.opacity(0.03))
+                }
+            }
+            .overlay(shape.stroke(CubbyTheme.paper.opacity(0.07), lineWidth: 0.75))
+            .contentShape(shape)
+    }
+}
+
+private struct CubbyToolbarAvatarButtonLabel<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        let shape = Circle()
+
+        content
+            .frame(width: 28, height: 28)
+            .clipShape(shape)
+            .frame(width: 38, height: 38)
+            .background {
+                ZStack {
+                    shape.fill(CubbyTheme.navigationWoodGradient)
+                    WoodgrainOverlay(opacity: 0.08)
+                        .clipShape(shape)
+                    shape.fill(Color.white.opacity(0.03))
+                }
+            }
+            .overlay(shape.stroke(CubbyTheme.paper.opacity(0.07), lineWidth: 0.75))
+            .contentShape(shape)
+    }
+}
+
 private struct SelectionActionBar: View {
     let selectedCount: Int
     let canMove: Bool
@@ -805,7 +868,7 @@ private struct SelectionActionBar: View {
             SelectionActionButton(
                 title: isUnflagAction ? "Unflag" : "Flag",
                 systemImage: isUnflagAction ? "flag.slash" : "flag.fill",
-                tint: .orange,
+                tint: CubbyTheme.amber,
                 isEnabled: hasSelection,
                 action: onFlag
             )
@@ -1203,7 +1266,7 @@ private struct BottomFlagFilterButton: View {
                 .symbolRenderingMode(.monochrome)
                 .frame(width: 48, height: 48)
         }
-        .foregroundStyle(isOn ? .orange : .secondary)
+        .foregroundStyle(isOn ? CubbyTheme.amber : .secondary)
         .bottomFlagFilterSurface(isOn: isOn)
         .accessibilityLabel(isOn ? "Showing flagged items" : "Show flagged items")
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -1280,10 +1343,10 @@ private struct BottomFlagFilterSurfaceModifier: ViewModifier {
         if #available(iOS 26.0, *) {
             if isOn {
                 content
-                    .background(Color.orange.opacity(0.14), in: shape)
-                    .glassEffect(.regular.tint(.orange).interactive(), in: shape)
-                    .overlay(shape.stroke(Color.orange.opacity(0.28), lineWidth: 0.75))
-                    .shadow(color: Color.orange.opacity(0.18), radius: 12, y: 5)
+                    .background(CubbyTheme.amber.opacity(0.14), in: shape)
+                    .glassEffect(.regular.tint(CubbyTheme.amber).interactive(), in: shape)
+                    .overlay(shape.stroke(CubbyTheme.amber.opacity(0.28), lineWidth: 0.75))
+                    .shadow(color: CubbyTheme.amber.opacity(0.18), radius: 12, y: 5)
             } else {
                 content
                     .background(CubbyTheme.paper.opacity(0.22), in: shape)
@@ -1293,8 +1356,8 @@ private struct BottomFlagFilterSurfaceModifier: ViewModifier {
             }
         } else {
             content
-                .background(isOn ? Color.orange.opacity(0.14) : CubbyTheme.paper, in: shape)
-                .overlay(shape.stroke(isOn ? Color.orange.opacity(0.32) : CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75))
+                .background(isOn ? CubbyTheme.amber.opacity(0.14) : CubbyTheme.paper, in: shape)
+                .overlay(shape.stroke(isOn ? CubbyTheme.amber.opacity(0.32) : CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75))
                 .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 10, y: 4)
         }
     }

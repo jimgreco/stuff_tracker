@@ -244,7 +244,7 @@ private struct RenameableHeader: View {
             HStack(spacing: 6) {
                 if isFlagged {
                     Image(systemName: "flag.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(CubbyTheme.amber)
                         .accessibilityLabel("Flagged")
                 }
                 Image(systemName: icon)
@@ -267,7 +267,7 @@ private struct RenameableHeader: View {
             HStack(spacing: 5) {
                 if isFlagged {
                     Image(systemName: "flag.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(CubbyTheme.amber)
                         .accessibilityLabel("Flagged")
                 }
                 Label(name, systemImage: icon)
