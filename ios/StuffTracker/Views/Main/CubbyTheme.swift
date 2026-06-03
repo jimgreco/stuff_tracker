@@ -18,10 +18,32 @@ enum CubbyTheme {
     static let paper = Color(red: 1.00, green: 0.97, blue: 0.91)
     static let paperDeep = Color(red: 0.96, green: 0.88, blue: 0.76)
     static let shelfShadow = Color(red: 0.31, green: 0.18, blue: 0.09)
+    static let darkWoodTop = Color(red: 0.61, green: 0.35, blue: 0.16)
+    static let darkWoodMiddle = Color(red: 0.36, green: 0.17, blue: 0.07)
+    static let darkWoodBottom = Color(red: 0.17, green: 0.07, blue: 0.03)
     static let homeBorder = Color(red: 0.54, green: 0.31, blue: 0.15).opacity(0.34)
     static let floorBorder = Color(red: 0.60, green: 0.38, blue: 0.19).opacity(0.24)
     static let roomBorder = Color(red: 0.62, green: 0.43, blue: 0.24).opacity(0.18)
     static let containerBorder = Color(red: 0.55, green: 0.38, blue: 0.20).opacity(0.16)
+
+    static var navigationWoodGradient: LinearGradient {
+        LinearGradient(
+            colors: [darkWoodTop, darkWoodMiddle, darkWoodBottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    static var navigationCellGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                paper,
+                paperDeep.opacity(0.72),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 
     static func surfaceGradient(for kind: CubbySurfaceKind) -> LinearGradient {
         switch kind {
@@ -202,7 +224,7 @@ struct CubbyNavigationBrandTitle: View {
 
             Text(title)
                 .font(.headline.weight(.semibold))
-                .foregroundStyle(CubbyTheme.warmInk)
+                .foregroundStyle(CubbyTheme.paper)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
@@ -216,44 +238,69 @@ private struct CubbyNavigationBrandMark: View {
 
         ZStack {
             shape
-                .fill(CubbyTheme.surfaceGradient(for: .home))
+                .fill(CubbyTheme.navigationWoodGradient)
 
-            WoodgrainOverlay(opacity: 0.12)
+            WoodgrainOverlay(opacity: 0.18)
                 .clipShape(shape)
 
-            VStack(spacing: 0) {
-                CubbyShelfLip(kind: .home, height: 3)
-                Spacer(minLength: 0)
-                CubbyShelfLip(kind: .container, height: 2)
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.32),
+                            Color.white.opacity(0.08),
+                            CubbyTheme.shelfShadow.opacity(0.22),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            VStack(spacing: 2) {
+                HStack(spacing: 2) {
+                    CubbyNavigationCell(accent: CubbyTheme.green)
+                    CubbyNavigationCell(accent: CubbyTheme.paperDeep)
+                }
+
+                HStack(spacing: 2) {
+                    CubbyNavigationCell(accent: CubbyTheme.amber)
+                    CubbyNavigationCell(accent: CubbyTheme.paper)
+                }
             }
-            .clipShape(shape)
-
-            HStack(alignment: .bottom, spacing: 2) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(CubbyTheme.green.opacity(0.86))
-                    .frame(width: 4, height: 13)
-
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(CubbyTheme.paper.opacity(0.92))
-                    .frame(width: 4, height: 16)
-
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(CubbyTheme.paperDeep.opacity(0.94))
-                    .frame(width: 11, height: 9)
-                    .overlay(alignment: .top) {
-                        Capsule()
-                            .fill(CubbyTheme.shelfShadow.opacity(0.18))
-                            .frame(width: 6, height: 2)
-                            .padding(.top, 2)
-                    }
-            }
-            .padding(.horizontal, 5)
-            .padding(.bottom, 5)
+            .padding(4)
         }
-        .frame(width: 26, height: 26)
-        .overlay(shape.stroke(CubbyTheme.homeBorder.opacity(0.86), lineWidth: 0.75))
-        .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 4, y: 2)
+        .frame(width: 28, height: 28)
+        .overlay(shape.stroke(Color.white.opacity(0.24), lineWidth: 0.75))
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.28), radius: 4, y: 2)
         .accessibilityHidden(true)
+    }
+}
+
+private struct CubbyNavigationCell: View {
+    let accent: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+            .fill(CubbyTheme.navigationCellGradient)
+            .overlay(alignment: .bottomTrailing) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                accent,
+                                accent.opacity(0.52),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 5, height: 5)
+                    .padding(1.5)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .stroke(CubbyTheme.shelfShadow.opacity(0.22), lineWidth: 0.5)
+            }
     }
 }
 
@@ -273,10 +320,10 @@ private struct CubbyNavigationTitleModifier: ViewModifier {
 extension View {
     func cubbyNavigationBarChrome() -> some View {
         self
-            .toolbarBackground(CubbyTheme.surfaceGradient(for: .floor), for: .navigationBar)
+            .toolbarBackground(CubbyTheme.navigationWoodGradient, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.light, for: .navigationBar)
-            .tint(CubbyTheme.green)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .tint(CubbyTheme.paper)
     }
 
     func cubbyNavigationBarChrome(title: String) -> some View {
