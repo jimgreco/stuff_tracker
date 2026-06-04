@@ -28,6 +28,9 @@ export function createApp() {
   configureTrustProxy(app);
 
   app.use(helmet({
+    crossOriginOpenerPolicy: {
+      policy: 'same-origin-allow-popups',
+    },
     contentSecurityPolicy: {
       directives: {
         'connect-src': ["'self'", 'https://accounts.google.com', 'https://appleid.apple.com'],

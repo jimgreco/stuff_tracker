@@ -34,6 +34,16 @@ test('app generates request ids when incoming ids are invalid', async (t) => {
   assert.match(response.headers.get('x-request-id') ?? '', /^[a-f0-9-]{36}$/);
 });
 
+test('app allows OAuth popups to return credentials to the web shell', async (t) => {
+  const server = await listen();
+  t.after(() => close(server));
+
+  const response = await fetch(`${serverBaseUrl(server)}/`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+});
+
 test('app serves the mobile web shell at root, /web, and item links', async (t) => {
   const server = await listen();
   t.after(() => close(server));

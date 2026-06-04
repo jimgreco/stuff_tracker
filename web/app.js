@@ -39,6 +39,9 @@
     actionMenu: null,
     draggingItem: null,
     suppressItemClick: false,
+    selectionMode: false,
+    selectedHomeId: "",
+    selectedItemIds: new Set(),
     adding: null,
     iconSearch: "",
     authConfigLoaded: false,
@@ -231,8 +234,73 @@
     state.token = "";
     state.refreshToken = "";
     state.user = null;
+    resetSelectionMode();
     clearCachedData();
     persistSession();
+  }
+
+  function resetSelectionMode() {
+    state.selectionMode = false;
+    state.selectedHomeId = "";
+    state.selectedItemIds.clear();
+  }
+
+  function selectedIds() {
+    return Array.from(state.selectedItemIds);
+  }
+
+  function selectionCount() {
+    return state.selectedItemIds.size;
+  }
+
+  function selectedHome() {
+    return state.selectedHomeId ? findHome(state.selectedHomeId) : null;
+  }
+
+  function hasSelectableItems() {
+    return state.homes.some((home) => (home.items || []).length > 0);
+  }
+
+  function isItemSelected(homeId, itemId) {
+    return state.selectedHomeId === homeId && state.selectedItemIds.has(itemId);
+  }
+
+  function toggleItemSelection(homeId, itemId) {
+    const item = findItem(homeId, itemId);
+    if (!item) return false;
+
+    if (!state.selectionMode) {
+      state.selectionMode = true;
+    }
+    if (state.selectedHomeId && state.selectedHomeId !== homeId) {
+      showToast("Select items from one home at a time");
+      return false;
+    }
+
+    state.selectedHomeId = homeId;
+    if (state.selectedItemIds.has(itemId)) {
+      state.selectedItemIds.delete(itemId);
+      if (!state.selectedItemIds.size) state.selectedHomeId = "";
+    } else {
+      state.selectedItemIds.add(itemId);
+    }
+    state.actionMenu = null;
+    return true;
+  }
+
+  function pruneSelection() {
+    if (!state.selectedHomeId) return;
+    const home = findHome(state.selectedHomeId);
+    if (!home) {
+      state.selectedHomeId = "";
+      state.selectedItemIds.clear();
+      return;
+    }
+    const validIds = new Set(home.items.map((item) => item.id));
+    state.selectedItemIds.forEach((itemId) => {
+      if (!validIds.has(itemId)) state.selectedItemIds.delete(itemId);
+    });
+    if (!state.selectedItemIds.size) state.selectedHomeId = "";
   }
 
   function isLocalHost() {
@@ -397,11 +465,16 @@
     const homes = filteredHomes();
     const isFiltering = state.search.trim().length > 0 || state.flaggedOnly;
     return `
-      <div class="mobile-shell">
+      <div class="mobile-shell ${state.selectionMode ? "has-selection-bar" : ""}">
         <header class="top-bar">
           <div class="nav-row">
-            <div class="nav-spacer" aria-hidden="true"></div>
-            <div class="nav-title">CubbyLog</div>
+            <button type="button" class="nav-selection-button" data-action="${state.selectionMode ? "end-selection" : "start-selection"}" ${!state.selectionMode && !hasSelectableItems() ? "disabled" : ""}>
+              ${state.selectionMode ? "Done" : "Select"}
+            </button>
+            <div class="nav-title">
+              <img src="${APP_ICON_URL}" width="28" height="28" alt="">
+              <span>CubbyLog</span>
+            </div>
             <button type="button" class="icon-button avatar-button" data-action="open-account" aria-label="Account">
               ${renderAvatar()}
             </button>
@@ -432,6 +505,7 @@
         </main>
         ${renderSheet()}
         ${renderPhotoPreviewModal()}
+        ${state.selectionMode ? renderSelectionBar() : ""}
         ${state.toast ? `<div class="toast" role="status">${escapeHtml(state.toast)}</div>` : ""}
       </div>
     `;
@@ -649,6 +723,35 @@
     return svgIcon("person");
   }
 
+  function renderSelectionBar() {
+    const count = selectionCount();
+    const label = count === 1 ? "1 item selected" : count ? `${count} items selected` : "Select items";
+    const home = selectedHome();
+    const disabled = count ? "" : "disabled";
+    return `
+      <div class="selection-action-bar" role="toolbar" aria-label="Selection actions">
+        <div class="selection-summary">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(home?.name || "Choose items in one home")}</span>
+        </div>
+        <div class="selection-actions">
+          <button type="button" class="selection-action" data-action="open-selection-move" ${disabled} aria-label="Move selected items">
+            ${svgIcon("drawer")}<span>Move</span>
+          </button>
+          <button type="button" class="selection-action" data-action="set-selected-flagged" data-flagged="true" ${disabled} aria-label="Flag selected items">
+            ${svgIcon("flag")}<span>Flag</span>
+          </button>
+          <button type="button" class="selection-action" data-action="set-selected-flagged" data-flagged="false" ${disabled} aria-label="Remove flags from selected items">
+            ${svgIcon("x")}<span>Unflag</span>
+          </button>
+          <button type="button" class="selection-action danger" data-action="open-bulk-delete" ${disabled} aria-label="Delete selected items">
+            ${svgIcon("trash")}<span>Delete</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderStatus() {
     return `
       <div class="status-strip">
@@ -824,11 +927,24 @@
 
   function renderItemChip(home, item, index) {
     const highlighted = state.highlightedItemId === item.id;
+    const selected = isItemSelected(home.id, item.id);
+    const locked = state.selectionMode && state.selectedHomeId && state.selectedHomeId !== home.id;
     const photoUrl = firstPhotoUrl(item);
+    const chipClasses = [
+      "item-chip",
+      highlighted ? "is-deep-linked" : "",
+      state.selectionMode ? "is-selection-mode" : "",
+      selected ? "is-selected" : "",
+      locked ? "is-selection-locked" : "",
+    ].filter(Boolean).join(" ");
+    const action = state.selectionMode ? "toggle-item-selection" : "open-item";
+    const draggable = !state.selectionMode || selected;
+    const selectionLabel = selected ? "Deselect" : "Select";
     return `
-      <span class="item-chip ${highlighted ? "is-deep-linked" : ""}" draggable="true" data-draggable-item data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}">
+      <span class="${chipClasses}" draggable="${draggable ? "true" : "false"}" data-draggable-item data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}">
         ${photoUrl ? renderPhotoThumbnailButton(photoUrl, `${item.name} photo`, "item-chip-photo") : ""}
-        <button type="button" class="item-chip-main" data-action="open-item" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" aria-label="${escapeAttr(item.name)}. Drag to move.">
+        <button type="button" class="item-chip-main" data-action="${action}" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" ${state.selectionMode ? `aria-pressed="${selected ? "true" : "false"}"` : ""} aria-label="${state.selectionMode ? `${selectionLabel} ${escapeAttr(item.name)}` : `${escapeAttr(item.name)}. Drag to move.`}">
+          ${state.selectionMode ? `<span class="selection-check" aria-hidden="true">${selected ? svgIcon("check") : ""}</span>` : ""}
           ${svgIcon(item.icon || "circle.fill")}
           <span class="item-name">${escapeHtml(item.name)}</span>
           ${item.isFlagged ? `<span class="item-flag" aria-label="Flagged">${svgIcon("flag.fill")}</span>` : ""}
@@ -874,8 +990,10 @@
     if (state.sheet.type === "rename") return renderRenameSheet();
     if (state.sheet.type === "iconPicker") return renderIconPickerSheet();
     if (state.sheet.type === "delete") return renderDeleteSheet();
+    if (state.sheet.type === "bulkDelete") return renderBulkDeleteSheet();
     if (state.sheet.type === "itemEditor") return renderItemEditorSheet();
     if (state.sheet.type === "locationPicker") return renderLocationPickerSheet();
+    if (state.sheet.type === "selectionMove") return renderSelectionMoveSheet();
     return "";
   }
 
@@ -1163,6 +1281,64 @@
       </section>
     `;
     return sheetChrome("Confirm Delete", body, { closeLabel: "Cancel" });
+  }
+
+  function renderBulkDeleteSheet() {
+    const count = selectionCount();
+    const label = count === 1 ? "1 item" : `${count} items`;
+    const body = `
+      <section class="form-section">
+        <div class="form-list">
+          <div class="full-row">
+            <strong>Delete ${escapeHtml(label)}?</strong>
+            <p class="footnote">This removes the selected items from the current data set.</p>
+          </div>
+          <button type="button" class="row-button danger" data-action="confirm-bulk-delete" ${count ? "" : "disabled"}>${svgIcon("trash")} Delete</button>
+        </div>
+      </section>
+    `;
+    return sheetChrome("Confirm Delete", body, { closeLabel: "Cancel" });
+  }
+
+  function renderSelectionMoveSheet() {
+    const home = selectedHome();
+    const count = selectionCount();
+    if (!home || !count) return "";
+
+    const path = Array.isArray(state.sheet.path) ? state.sheet.path : [];
+    const parentId = path[path.length - 1] || null;
+    const parentLocation = parentId ? home.locations.find((location) => location.id === parentId) : null;
+    const children = childLocations(home, parentId);
+    const targetTitle = parentLocation ? parentLocation.name : home.name;
+    const targetIcon = parentLocation ? parentLocation.icon || defaultLocationIcon(parentLocation) : home.icon || "house.fill";
+    const body = `
+      <section class="form-section">
+        <div class="form-list">
+          ${path.length ? `<button type="button" class="row-button" data-action="selection-location-back">${svgIcon("chevron")} Back</button>` : ""}
+          <button type="button" class="row-button" data-action="move-selected-to-location" data-location-id="${escapeAttr(parentId || "")}">
+            ${svgIcon(targetIcon)} <span>Move to ${escapeHtml(targetTitle)}</span>
+          </button>
+        </div>
+      </section>
+      <section class="form-section">
+        <h2 class="section-title">Locations</h2>
+        <div class="location-choice-list">
+          ${children.length ? children.map((location) => {
+            const hasChildren = childLocations(home, location.id).length > 0;
+            return renderLocationChoice({
+              icon: location.icon || defaultLocationIcon(location),
+              title: location.name,
+              subtitle: formatLocationSubtitle(location.type),
+              locationId: location.id,
+              selected: false,
+              action: hasChildren ? "drill-selection-location" : "move-selected-to-location",
+              hasChildren,
+            });
+          }).join("") : `<div class="full-row"><p class="footnote">No deeper locations here.</p></div>`}
+        </div>
+      </section>
+    `;
+    return sheetChrome("Move Items", body, { closeLabel: "Cancel" });
   }
 
   function renderItemEditorSheet() {
@@ -1894,6 +2070,7 @@
     const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
     state.homes = details.map(normalizeHomeDetail);
     state.homesLoaded = true;
+    pruneSelection();
     persistData();
   }
 
@@ -2082,6 +2259,44 @@
     }
   }
 
+  async function moveItems(homeId, itemIds, targetLocationId, insertionIndex) {
+    const home = findHome(homeId);
+    const uniqueIds = Array.from(new Set(itemIds)).filter(Boolean);
+    if (!home || !uniqueIds.length) return false;
+
+    const selectedSet = new Set(uniqueIds);
+    const originalHomes = JSON.parse(JSON.stringify(state.homes));
+    const updates = itemGroupMoveUpdates(home, uniqueIds, selectedSet, targetLocationId || null, insertionIndex);
+    if (!updates.length) return false;
+
+    updates.forEach(({ id: updateId, locationId, sortOrder }) => {
+      const candidate = home.items.find((homeItem) => homeItem.id === updateId);
+      if (candidate) {
+        candidate.locationId = locationId;
+        candidate.sortOrder = sortOrder;
+      }
+    });
+    persistData();
+    render();
+
+    try {
+      await Promise.all(updates.map((update) => apiRequest("PATCH", `/homes/${homeId}/items/${update.id}`, {
+        location_id: update.locationId,
+        sort_order: update.sortOrder,
+      })));
+      await loadServerHomes();
+      return true;
+    } catch (error) {
+      state.homes = originalHomes;
+      persistData();
+      throw error;
+    } finally {
+      state.collapsed.delete(nodeKey("home", homeId));
+      if (targetLocationId) expandLocationPath(homeId, targetLocationId);
+      persistCollapsed();
+    }
+  }
+
   function itemMoveUpdates(home, item, toLocationId, insertionIndex) {
     const fromLocationId = item.locationId || null;
     const movingId = item.id;
@@ -2113,6 +2328,44 @@
 
     siblings.splice(destination, 0, item);
     siblings.forEach((candidate, index) => queueUpdate(candidate, toLocationId, index));
+
+    return Array.from(updates.values());
+  }
+
+  function itemGroupMoveUpdates(home, orderedItemIds, selectedSet, toLocationId, insertionIndex) {
+    const selectedItems = orderedItemIds
+      .map((itemId) => home.items.find((item) => item.id === itemId))
+      .filter((item) => item && selectedSet.has(item.id));
+    if (!selectedItems.length) return [];
+
+    const updates = new Map();
+    const sourceLocationIds = new Set(selectedItems.map((item) => item.locationId || null));
+    const impactedLocationIds = new Set([...sourceLocationIds, toLocationId || null]);
+    const queueUpdate = (candidate, locationId, sortOrder) => {
+      const nextLocationId = locationId || null;
+      if ((candidate.locationId || null) !== nextLocationId || candidate.sortOrder !== sortOrder) {
+        updates.set(candidate.id, {
+          id: candidate.id,
+          locationId: nextLocationId,
+          sortOrder,
+        });
+      }
+    };
+
+    impactedLocationIds.forEach((locationId) => {
+      if ((locationId || null) === (toLocationId || null)) return;
+      itemsIn(home, locationId)
+        .filter((item) => !selectedSet.has(item.id))
+        .forEach((item, index) => queueUpdate(item, locationId, index));
+    });
+
+    const targetItems = itemsIn(home, toLocationId);
+    const siblings = targetItems.filter((item) => !selectedSet.has(item.id));
+    const targetIndex = Number.isFinite(insertionIndex) ? insertionIndex : targetItems.length;
+    const selectedBeforeTarget = targetItems.slice(0, targetIndex).filter((item) => selectedSet.has(item.id)).length;
+    const destination = Math.min(Math.max(targetIndex - selectedBeforeTarget, 0), siblings.length);
+    siblings.splice(destination, 0, ...selectedItems);
+    siblings.forEach((item, index) => queueUpdate(item, toLocationId || null, index));
 
     return Array.from(updates.values());
   }
@@ -2175,6 +2428,40 @@
     if (!home || !item) return;
     await apiRequest("DELETE", `/homes/${homeId}/items/${itemId}`);
     await loadServerHomes();
+  }
+
+  async function deleteItems(homeId, itemIds) {
+    const home = findHome(homeId);
+    const uniqueIds = Array.from(new Set(itemIds)).filter((itemId) => findItem(homeId, itemId));
+    if (!home || !uniqueIds.length) return;
+    await Promise.all(uniqueIds.map((itemId) => apiRequest("DELETE", `/homes/${homeId}/items/${itemId}`)));
+    await loadServerHomes();
+  }
+
+  async function setItemsFlagged(homeId, itemIds, isFlagged) {
+    const home = findHome(homeId);
+    const items = Array.from(new Set(itemIds))
+      .map((itemId) => findItem(homeId, itemId))
+      .filter(Boolean);
+    if (!home || !items.length) return;
+
+    const originalHomes = JSON.parse(JSON.stringify(state.homes));
+    items.forEach((item) => {
+      item.isFlagged = isFlagged;
+    });
+    persistData();
+    render();
+
+    try {
+      await Promise.all(items.map((item) => apiRequest("PATCH", `/homes/${homeId}/items/${item.id}`, {
+        is_flagged: isFlagged,
+      })));
+      await loadServerHomes();
+    } catch (error) {
+      state.homes = originalHomes;
+      persistData();
+      throw error;
+    }
   }
 
   async function saveItemFromForm(form) {
@@ -2304,9 +2591,13 @@
     const chip = closestFromEvent(event, "[data-draggable-item]");
     if (!chip || !event.dataTransfer) return;
 
+    const homeId = chip.dataset.homeId;
+    const itemId = chip.dataset.itemId;
+    const itemIds = state.selectionMode && isItemSelected(homeId, itemId) ? selectedIds() : [itemId];
     state.draggingItem = {
-      homeId: chip.dataset.homeId,
-      itemId: chip.dataset.itemId,
+      homeId,
+      itemId,
+      itemIds,
       locationId: chip.dataset.locationId || null,
     };
     state.suppressItemClick = true;
@@ -2338,7 +2629,13 @@
     if (!dropTarget || !draggingItem) return;
     event.preventDefault();
     await runMutation(async () => {
-      await moveItem(draggingItem.homeId, draggingItem.itemId, dropTarget.locationId, dropTarget.insertionIndex);
+      const itemIds = Array.isArray(draggingItem.itemIds) && draggingItem.itemIds.length ? draggingItem.itemIds : [draggingItem.itemId];
+      if (itemIds.length > 1) {
+        await moveItems(draggingItem.homeId, itemIds, dropTarget.locationId, dropTarget.insertionIndex);
+      } else {
+        await moveItem(draggingItem.homeId, draggingItem.itemId, dropTarget.locationId, dropTarget.insertionIndex);
+      }
+      if (state.selectionMode) resetSelectionMode();
     });
   }
 
@@ -2435,6 +2732,21 @@
       }
       return;
     }
+    if (action === "start-selection") {
+      state.selectionMode = true;
+      state.actionMenu = null;
+      state.sheet = null;
+      state.adding = null;
+      render();
+      return;
+    }
+    if (action === "end-selection") {
+      resetSelectionMode();
+      state.actionMenu = null;
+      state.sheet = null;
+      render();
+      return;
+    }
     if (action === "close-sheet") {
       state.sheet = null;
       state.photoPreview = null;
@@ -2444,6 +2756,14 @@
       return;
     }
     if (action === "open-photo-preview") {
+      if (state.selectionMode) {
+        const chip = element.closest("[data-draggable-item]");
+        if (chip) {
+          toggleItemSelection(chip.dataset.homeId, chip.dataset.itemId);
+          render();
+          return;
+        }
+      }
       const form = document.getElementById("item-editor-form");
       if (form && state.sheet?.type === "itemEditor") {
         state.sheet.draft = readItemDraftFromForm(form);
@@ -2487,6 +2807,11 @@
     if (action === "toggle-flag-filter") {
       state.flaggedOnly = !state.flaggedOnly;
       state.actionMenu = null;
+      render();
+      return;
+    }
+    if (action === "toggle-item-selection") {
+      toggleItemSelection(element.dataset.homeId, element.dataset.itemId);
       render();
       return;
     }
@@ -2565,8 +2890,75 @@
       }, "Deleted");
       return;
     }
+    if (action === "open-selection-move") {
+      if (!selectionCount()) return;
+      state.sheet = { type: "selectionMove", path: [] };
+      state.actionMenu = null;
+      render();
+      return;
+    }
+    if (action === "selection-location-back") {
+      if (state.sheet?.type === "selectionMove") {
+        const path = Array.isArray(state.sheet.path) ? state.sheet.path.slice(0, -1) : [];
+        state.sheet = { ...state.sheet, path };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "drill-selection-location") {
+      if (state.sheet?.type === "selectionMove") {
+        const locationId = element.dataset.locationId || "";
+        const path = Array.isArray(state.sheet.path) ? state.sheet.path.slice() : [];
+        if (locationId) path.push(locationId);
+        state.sheet = { ...state.sheet, path };
+        render({ preserveSheetScroll: false });
+      }
+      return;
+    }
+    if (action === "move-selected-to-location") {
+      const homeId = state.selectedHomeId;
+      const itemIds = selectedIds();
+      const locationId = element.dataset.locationId || null;
+      await runMutation(async () => {
+        await moveItems(homeId, itemIds, locationId);
+        resetSelectionMode();
+        state.sheet = null;
+      }, "Moved items");
+      return;
+    }
+    if (action === "set-selected-flagged") {
+      const homeId = state.selectedHomeId;
+      const itemIds = selectedIds();
+      const isFlagged = element.dataset.flagged === "true";
+      await runMutation(async () => {
+        await setItemsFlagged(homeId, itemIds, isFlagged);
+      }, isFlagged ? "Flagged" : "Unflagged");
+      return;
+    }
+    if (action === "open-bulk-delete") {
+      if (!selectionCount()) return;
+      state.sheet = { type: "bulkDelete" };
+      state.actionMenu = null;
+      render();
+      return;
+    }
+    if (action === "confirm-bulk-delete") {
+      const homeId = state.selectedHomeId;
+      const itemIds = selectedIds();
+      await runMutation(async () => {
+        await deleteItems(homeId, itemIds);
+        resetSelectionMode();
+        state.sheet = null;
+      }, "Deleted");
+      return;
+    }
     if (action === "open-item") {
       if (state.suppressItemClick) return;
+      if (state.selectionMode) {
+        toggleItemSelection(element.dataset.homeId, element.dataset.itemId);
+        render();
+        return;
+      }
       const item = findItem(element.dataset.homeId, element.dataset.itemId);
       state.actionMenu = null;
       state.sheet = {
