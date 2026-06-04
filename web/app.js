@@ -4,6 +4,7 @@
   const STORAGE = {
     apiBaseUrl: "stuffTrackerMobileWeb.apiBaseUrl",
     token: "stuffTrackerMobileWeb.token",
+    refreshToken: "stuffTrackerMobileWeb.refreshToken",
     user: "stuffTrackerMobileWeb.user",
     homes: "stuffTrackerMobileWeb.homes",
     deletedItems: "stuffTrackerMobileWeb.deletedItems",
@@ -13,15 +14,18 @@
   const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
   const APP_ICON_URL = "/assets/app-icon.png?v=20260531-ios-cubby";
   const STORED_TOKEN = localStorage.getItem(STORAGE.token) || "";
+  const STORED_REFRESH_TOKEN = localStorage.getItem(STORAGE.refreshToken) || "";
+  const HAS_STORED_SESSION = Boolean(STORED_TOKEN || STORED_REFRESH_TOKEN);
   const INITIAL_ITEM_LINK = parseItemDeepLink(window.location);
   const app = document.getElementById("app");
 
   const state = {
     apiBaseUrl: localStorage.getItem(STORAGE.apiBaseUrl) || DEFAULT_API_BASE_URL,
     token: STORED_TOKEN,
-    user: STORED_TOKEN ? readJson(STORAGE.user, null) : null,
+    refreshToken: STORED_REFRESH_TOKEN,
+    user: HAS_STORED_SESSION ? readJson(STORAGE.user, null) : null,
     accountPlan: null,
-    homes: STORED_TOKEN ? readJson(STORAGE.homes, []) : [],
+    homes: HAS_STORED_SESSION ? readJson(STORAGE.homes, []) : [],
     homesLoaded: false,
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
@@ -48,8 +52,9 @@
 
   let activeDropZone = null;
   let activeDropChip = null;
+  let activeTokenRefresh = null;
 
-  if (!STORED_TOKEN) {
+  if (!HAS_STORED_SESSION) {
     state.collapsed = new Set();
     localStorage.removeItem(STORAGE.user);
     localStorage.removeItem(STORAGE.homes);
@@ -186,6 +191,12 @@
       localStorage.removeItem(STORAGE.token);
     }
 
+    if (state.refreshToken) {
+      localStorage.setItem(STORAGE.refreshToken, state.refreshToken);
+    } else {
+      localStorage.removeItem(STORAGE.refreshToken);
+    }
+
     if (state.user) {
       writeJson(STORAGE.user, state.user);
     } else {
@@ -210,6 +221,18 @@
 
   function persistCollapsed() {
     writeJson(STORAGE.collapsed, Array.from(state.collapsed));
+  }
+
+  function hasAuthSession() {
+    return Boolean(state.token || state.refreshToken);
+  }
+
+  function clearSession() {
+    state.token = "";
+    state.refreshToken = "";
+    state.user = null;
+    clearCachedData();
+    persistSession();
   }
 
   function isLocalHost() {
@@ -364,7 +387,7 @@
   }
 
   function renderApp() {
-    if (!state.token) {
+    if (!hasAuthSession()) {
       if (state.pendingItemLink) {
         return renderSharedItemFallback();
       }
@@ -894,7 +917,7 @@
   }
 
   function renderAccountSheet() {
-    const connected = Boolean(state.token);
+    const connected = hasAuthSession();
     if (!connected) {
       const body = `
         <section class="sign-in-panel">
@@ -1606,29 +1629,93 @@
   }
 
   async function apiRequest(method, path, body) {
-    const response = await fetch(`${state.apiBaseUrl}${path}`, {
+    let response = await sendApiRequest(method, path, body);
+
+    if (response.status === 401 && isRefreshableRequest(path)) {
+      if (state.refreshToken && await refreshAccessToken()) {
+        response = await sendApiRequest(method, path, body);
+      } else {
+        clearSession();
+        throw new Error("Session expired. Please sign in again.");
+      }
+    }
+
+    return parseApiResponse(response);
+  }
+
+  function sendApiRequest(method, path, body) {
+    const headers = {
+      "Content-Type": "application/json",
+      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+    };
+
+    return fetch(`${state.apiBaseUrl}${path}`, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-      },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+  }
 
+  function isRefreshableRequest(path) {
+    return ![
+      "/auth/config",
+      "/auth/google",
+      "/auth/apple",
+      "/auth/dev",
+      "/auth/refresh",
+    ].includes(path);
+  }
+
+  async function refreshAccessToken() {
+    if (!state.refreshToken) return false;
+
+    if (!activeTokenRefresh) {
+      activeTokenRefresh = (async () => {
+        const response = await fetch(`${state.apiBaseUrl}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: state.refreshToken }),
+        });
+
+        if (!response.ok) {
+          const message = await apiErrorMessage(response);
+          clearSession();
+          throw new Error(response.status === 401 ? "Session expired. Please sign in again." : message);
+        }
+
+        applyAuthResponse(await response.json());
+        return true;
+      })().finally(() => {
+        activeTokenRefresh = null;
+      });
+    }
+
+    return activeTokenRefresh;
+  }
+
+  async function parseApiResponse(response) {
     if (!response.ok) {
-      let message = `HTTP ${response.status}`;
-      try {
-        const parsed = await response.json();
-        message = parsed.error || parsed.message || message;
-      } catch {
-        const text = await response.text();
-        if (text.trim()) message = text.trim();
-      }
-      throw new Error(message);
+      throw new Error(await apiErrorMessage(response));
     }
 
     if (response.status === 204) return null;
     return response.json();
+  }
+
+  async function apiErrorMessage(response) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const text = await response.text();
+      if (!text.trim()) return message;
+      try {
+        const parsed = JSON.parse(text);
+        return parsed.error || parsed.message || text.trim();
+      } catch {
+        return text.trim();
+      }
+    } catch {
+      return message;
+    }
   }
 
   async function uploadItemAttachment(homeId, kind, file) {
@@ -1793,6 +1880,7 @@
 
   function applyAuthResponse(auth) {
     state.token = auth.token;
+    state.refreshToken = auth.refreshToken ?? auth.refresh_token ?? state.refreshToken;
     state.user = normalizeUser(auth.user);
     persistSession();
   }
@@ -2147,7 +2235,7 @@
 
   function openPendingItemLink() {
     const link = state.pendingItemLink;
-    if (!link || state.deepLinkHandled || !state.token || !state.homesLoaded) return;
+    if (!link || state.deepLinkHandled || !hasAuthSession() || !state.homesLoaded) return;
 
     const context = findItemContext(link.homeId, link.itemId);
     state.deepLinkHandled = true;
@@ -2342,7 +2430,7 @@
       state.sheet = { type: "account" };
       state.actionMenu = null;
       render();
-      if (!state.token && !state.authConfigLoaded) {
+      if (!hasAuthSession() && !state.authConfigLoaded) {
         void loadAuthConfig();
       }
       return;
@@ -2620,10 +2708,7 @@
       return;
     }
     if (action === "sign-out") {
-      state.token = "";
-      state.user = null;
-      clearCachedData();
-      persistSession();
+      clearSession();
       state.sheet = null;
       render();
       return;
@@ -2631,10 +2716,7 @@
     if (action === "logout-all") {
       await runMutation(async () => {
         await apiRequest("POST", "/auth/logout-all");
-        state.token = "";
-        state.user = null;
-        clearCachedData();
-        persistSession();
+        clearSession();
         state.sheet = null;
       }, "Signed out everywhere");
       return;
@@ -2818,11 +2900,11 @@
 
   render();
 
-  if (state.pendingItemLink && !state.token && !state.authConfigLoaded) {
+  if (state.pendingItemLink && !hasAuthSession() && !state.authConfigLoaded) {
     void loadAuthConfig();
   }
 
-  if (state.token) {
+  if (hasAuthSession()) {
     void runMutation(loadServerHomes);
   }
 })();
