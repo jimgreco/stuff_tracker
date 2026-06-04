@@ -343,14 +343,14 @@ struct ContentView: View {
                                 } placeholder: {
                                     Image(systemName: "person.circle.fill")
                                         .font(.title3)
-                                        .foregroundStyle(CubbyTheme.paper.opacity(0.82))
+                                        .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
                                 }
                             }
                         } else {
                             CubbyToolbarAvatarButtonLabel {
                                 Image(systemName: authStore.isAuthenticated ? "person.circle.fill" : "person.circle")
                                     .font(.title3)
-                                    .foregroundStyle(CubbyTheme.paper.opacity(0.82))
+                                    .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
                             }
                         }
                     }
@@ -785,20 +785,15 @@ private struct CubbyToolbarTextButtonLabel: View {
 
         Text(title)
             .font(.callout.weight(.medium))
-            .foregroundStyle(CubbyTheme.paper.opacity(0.76))
+            .foregroundStyle(CubbyTheme.warmInk.opacity(0.78))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 15)
             .frame(width: 78, height: 38)
             .background {
-                ZStack {
-                    shape.fill(CubbyTheme.navigationWoodGradient)
-                    WoodgrainOverlay(opacity: 0.08)
-                        .clipShape(shape)
-                    shape.fill(Color.white.opacity(0.03))
-                }
+                shape.fill(CubbyTheme.navigationWallGradient)
             }
-            .overlay(shape.stroke(CubbyTheme.paper.opacity(0.07), lineWidth: 0.75))
+            .overlay(shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.78), lineWidth: 1.25))
             .contentShape(shape)
     }
 }
@@ -818,14 +813,9 @@ private struct CubbyToolbarAvatarButtonLabel<Content: View>: View {
             .clipShape(shape)
             .frame(width: 38, height: 38)
             .background {
-                ZStack {
-                    shape.fill(CubbyTheme.navigationWoodGradient)
-                    WoodgrainOverlay(opacity: 0.08)
-                        .clipShape(shape)
-                    shape.fill(Color.white.opacity(0.03))
-                }
+                shape.fill(CubbyTheme.navigationWallGradient)
             }
-            .overlay(shape.stroke(CubbyTheme.paper.opacity(0.07), lineWidth: 0.75))
+            .overlay(shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.78), lineWidth: 1.25))
             .contentShape(shape)
     }
 }

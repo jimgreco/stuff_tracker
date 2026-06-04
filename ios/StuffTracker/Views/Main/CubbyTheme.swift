@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum CubbySurfaceKind {
     case home
@@ -29,6 +30,14 @@ enum CubbyTheme {
     static var navigationWoodGradient: LinearGradient {
         LinearGradient(
             colors: [darkWoodTop, darkWoodMiddle, darkWoodBottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    static var navigationWallGradient: LinearGradient {
+        LinearGradient(
+            colors: [wallTop, wallMiddle],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -224,7 +233,7 @@ struct CubbyNavigationBrandTitle: View {
 
             Text(title)
                 .font(.headline.weight(.semibold))
-                .foregroundStyle(CubbyTheme.paper)
+                .foregroundStyle(CubbyTheme.warmInk)
                 .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
@@ -317,13 +326,74 @@ private struct CubbyNavigationTitleModifier: ViewModifier {
     }
 }
 
+private struct CubbyNavigationBarSeparatorInstaller: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        uiViewController.installSeparator()
+    }
+
+    final class Controller: UIViewController {
+        private var didScheduleRetry = false
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            installSeparator()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            installSeparator()
+        }
+
+        func installSeparator() {
+            guard let navigationBar = navigationController?.navigationBar else {
+                guard !didScheduleRetry else { return }
+                didScheduleRetry = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.didScheduleRetry = false
+                    self?.installSeparator()
+                }
+                return
+            }
+
+            didScheduleRetry = false
+            let separator = UIColor(red: 0.24, green: 0.16, blue: 0.10, alpha: 0.30)
+            navigationBar.standardAppearance = navigationBar.standardAppearance.withCubbySeparator(separator)
+            navigationBar.scrollEdgeAppearance = (navigationBar.scrollEdgeAppearance ?? navigationBar.standardAppearance)
+                .withCubbySeparator(separator)
+            navigationBar.compactAppearance = (navigationBar.compactAppearance ?? navigationBar.standardAppearance)
+                .withCubbySeparator(separator)
+
+            if #available(iOS 15.0, *) {
+                navigationBar.compactScrollEdgeAppearance = (
+                    navigationBar.compactScrollEdgeAppearance ?? navigationBar.scrollEdgeAppearance ?? navigationBar.standardAppearance
+                )
+                .withCubbySeparator(separator)
+            }
+        }
+    }
+}
+
+private extension UINavigationBarAppearance {
+    func withCubbySeparator(_ color: UIColor) -> UINavigationBarAppearance {
+        let appearance = copy() as! UINavigationBarAppearance
+        appearance.shadowColor = color
+        appearance.shadowImage = nil
+        return appearance
+    }
+}
+
 extension View {
     func cubbyNavigationBarChrome() -> some View {
         self
-            .toolbarBackground(CubbyTheme.navigationWoodGradient, for: .navigationBar)
+            .toolbarBackground(CubbyTheme.navigationWallGradient, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .tint(CubbyTheme.paper)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .tint(CubbyTheme.warmInk)
+            .background(CubbyNavigationBarSeparatorInstaller())
     }
 
     func cubbyNavigationBarChrome(title: String) -> some View {
