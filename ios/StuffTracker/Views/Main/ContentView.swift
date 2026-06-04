@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Breadcrumb preference key
 
@@ -307,55 +308,26 @@ struct ContentView: View {
             .cubbyNavigationBarChrome()
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    CubbyNavigationBrandTitle(title: "CubbyLog")
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    if itemSelection.isSelecting {
-                        Button {
-                            itemSelection.clearSelection()
-                        } label: {
-                            CubbyToolbarTextButtonLabel(title: "Done")
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            dismissSearchInput()
-                            itemSelection.startSelecting()
-                        } label: {
-                            CubbyToolbarTextButtonLabel(title: "Select")
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        if isSearchInputPresented {
-                            dismissSearchInput()
-                        } else {
-                            showAccountSheet = true
-                        }
-                    } label: {
-                        if let avatarUrl = authStore.currentUser?.avatarUrl,
-                           let url = URL(string: avatarUrl) {
-                            CubbyToolbarAvatarButtonLabel {
-                                AsyncImage(url: url) { image in
-                                    image.resizable().scaledToFill()
-                                } placeholder: {
-                                    Image(systemName: "person.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
-                                }
+                    CubbyNavigationHeader(
+                        isSelecting: itemSelection.isSelecting,
+                        avatarUrl: authStore.currentUser?.avatarUrl,
+                        isAuthenticated: authStore.isAuthenticated,
+                        onToggleSelection: {
+                            if itemSelection.isSelecting {
+                                itemSelection.clearSelection()
+                            } else {
+                                dismissSearchInput()
+                                itemSelection.startSelecting()
                             }
-                        } else {
-                            CubbyToolbarAvatarButtonLabel {
-                                Image(systemName: authStore.isAuthenticated ? "person.circle.fill" : "person.circle")
-                                    .font(.title3)
-                                    .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
+                        },
+                        onAccount: {
+                            if isSearchInputPresented {
+                                dismissSearchInput()
+                            } else {
+                                showAccountSheet = true
                             }
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Account")
+                    )
                 }
             }
             .sheet(isPresented: $showAccountSheet) {
@@ -777,6 +749,89 @@ private struct SearchDismissTapShield: View {
     }
 }
 
+private struct CubbyNavigationHeader: View {
+    let isSelecting: Bool
+    let avatarUrl: String?
+    let isAuthenticated: Bool
+    let onToggleSelection: () -> Void
+    let onAccount: () -> Void
+
+    private var toolbarWidth: CGFloat {
+        min(max(UIScreen.main.bounds.width - 32, 0), 700)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            CubbyToolbarAction(
+                accessibilityLabel: isSelecting ? "Done" : "Select",
+                action: onToggleSelection
+            ) {
+                CubbyToolbarTextButtonLabel(title: isSelecting ? "Done" : "Select")
+            }
+
+            Spacer(minLength: 12)
+
+            CubbyNavigationBrandTitle(title: "CubbyLog")
+
+            Spacer(minLength: 12)
+
+            CubbyToolbarAction(accessibilityLabel: "Account", action: onAccount) {
+                accountLabel
+                    .frame(width: 78, alignment: .trailing)
+            }
+        }
+        .frame(width: toolbarWidth, height: 44)
+    }
+
+    @ViewBuilder
+    private var accountLabel: some View {
+        if let avatarUrl,
+           let url = URL(string: avatarUrl) {
+            CubbyToolbarAvatarButtonLabel {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Image(systemName: "person.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
+                }
+            }
+        } else {
+            CubbyToolbarAvatarButtonLabel {
+                Image(systemName: isAuthenticated ? "person.circle.fill" : "person.circle")
+                    .font(.title3)
+                    .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
+            }
+        }
+    }
+}
+
+private struct CubbyToolbarAction<Label: View>: View {
+    let accessibilityLabel: String
+    let action: () -> Void
+    private let label: Label
+
+    init(
+        accessibilityLabel: String,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.accessibilityLabel = accessibilityLabel
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        label
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: Text(accessibilityLabel), action)
+    }
+}
+
 private struct CubbyToolbarTextButtonLabel: View {
     let title: String
 
@@ -788,12 +843,10 @@ private struct CubbyToolbarTextButtonLabel: View {
             .foregroundStyle(CubbyTheme.warmInk.opacity(0.78))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 15)
             .frame(width: 78, height: 38)
-            .background {
-                shape.fill(CubbyTheme.navigationWallGradient)
+            .overlay {
+                shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.82), lineWidth: 1.25)
             }
-            .overlay(shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.78), lineWidth: 1.25))
             .contentShape(shape)
     }
 }
@@ -809,13 +862,12 @@ private struct CubbyToolbarAvatarButtonLabel<Content: View>: View {
         let shape = Circle()
 
         content
-            .frame(width: 28, height: 28)
+            .frame(width: 32, height: 32)
             .clipShape(shape)
-            .frame(width: 38, height: 38)
-            .background {
-                shape.fill(CubbyTheme.navigationWallGradient)
+            .frame(width: 44, height: 44)
+            .overlay {
+                shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.82), lineWidth: 1.25)
             }
-            .overlay(shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.78), lineWidth: 1.25))
             .contentShape(shape)
     }
 }
