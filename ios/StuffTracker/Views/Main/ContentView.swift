@@ -793,14 +793,14 @@ private struct CubbyNavigationHeader: View {
                 } placeholder: {
                     Image(systemName: "person.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
+                        .foregroundStyle(Color.white.opacity(0.90))
                 }
             }
         } else {
             CubbyToolbarAvatarButtonLabel {
                 Image(systemName: isAuthenticated ? "person.circle.fill" : "person.circle")
                     .font(.title3)
-                    .foregroundStyle(CubbyTheme.warmInk.opacity(0.74))
+                    .foregroundStyle(Color.white.opacity(0.90))
             }
         }
     }
@@ -840,12 +840,15 @@ private struct CubbyToolbarTextButtonLabel: View {
 
         Text(title)
             .font(.callout.weight(.medium))
-            .foregroundStyle(CubbyTheme.warmInk.opacity(0.78))
+            .foregroundStyle(Color.white)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .frame(width: 78, height: 38)
+            .background {
+                CubbyToolbarWoodButtonFill(shape: shape)
+            }
             .overlay {
-                shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.82), lineWidth: 1.25)
+                shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
             }
             .contentShape(shape)
     }
@@ -865,10 +868,35 @@ private struct CubbyToolbarAvatarButtonLabel<Content: View>: View {
             .frame(width: 32, height: 32)
             .clipShape(shape)
             .frame(width: 44, height: 44)
+            .background {
+                CubbyToolbarWoodButtonFill(shape: shape)
+            }
             .overlay {
-                shape.strokeBorder(CubbyTheme.shelfShadow.opacity(0.82), lineWidth: 1.25)
+                shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
             }
             .contentShape(shape)
+    }
+}
+
+private struct CubbyToolbarWoodButtonFill<Shape: InsettableShape>: View {
+    let shape: Shape
+
+    var body: some View {
+        ZStack {
+            shape.fill(CubbyTheme.navigationWoodGradient)
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.16),
+                        Color.white.opacity(0.04),
+                        CubbyTheme.shelfShadow.opacity(0.22),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        .clipShape(shape)
     }
 }
 
