@@ -1674,7 +1674,7 @@ private struct LocationTreeLevel: View {
 
     private var children: [Location] {
         guard let home else { return [] }
-        home.locations
+        return home.locations
             .filter { $0.parentId == parentId }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
