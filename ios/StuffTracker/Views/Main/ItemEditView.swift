@@ -277,13 +277,23 @@ struct ItemEditView: View {
                     CubbyNavigationBrandTitle(title: "Edit Item")
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Cancel")
+                    }
+                    .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     shareMenu
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button {
+                        save()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Save")
+                    }
+                    .buttonStyle(.plain)
                         .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
             }
@@ -1579,7 +1589,12 @@ private struct LocationTreeSheet: View {
                     CubbyNavigationBrandTitle(title: "Select Location")
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Cancel")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .navigationDestination(for: LocationTreeRoute.self) { route in

@@ -47,7 +47,7 @@ struct LoginView: View {
                 VStack(spacing: 12) {
                     Image(systemName: mode.icon)
                         .font(.system(size: 64))
-                        .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
 
                     Text(mode.title)
                         .font(.largeTitle.bold())
@@ -156,7 +156,7 @@ struct LocalDevSignInButton: View {
             }
             .authProviderButtonChrome(background: Color(.secondarySystemBackground))
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(.white)
         .disabled(authStore.isLoading)
         .buttonStyle(.plain)
     }
@@ -181,7 +181,7 @@ struct GoogleSignInButton: View {
             }
             .authProviderButtonChrome()
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(.white)
         .disabled(authStore.isLoading)
         .buttonStyle(.plain)
     }
@@ -234,8 +234,6 @@ private enum AuthProviderButtonMetrics {
 }
 
 private struct AuthProviderButtonChrome: ViewModifier {
-    let background: Color
-
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(
             cornerRadius: AuthProviderButtonMetrics.cornerRadius,
@@ -245,11 +243,14 @@ private struct AuthProviderButtonChrome: ViewModifier {
         content
             .frame(maxWidth: .infinity)
             .frame(height: AuthProviderButtonMetrics.height)
-            .background(background)
+            .foregroundStyle(.white)
+            .background {
+                CubbyWoodButtonFill(shape: shape)
+            }
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(Color(.separator), lineWidth: 1)
+                    .stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 1)
                     .allowsHitTesting(false)
             }
             .contentShape(shape)
@@ -258,6 +259,6 @@ private struct AuthProviderButtonChrome: ViewModifier {
 
 private extension View {
     func authProviderButtonChrome(background: Color = Color(.systemBackground)) -> some View {
-        modifier(AuthProviderButtonChrome(background: background))
+        modifier(AuthProviderButtonChrome())
     }
 }

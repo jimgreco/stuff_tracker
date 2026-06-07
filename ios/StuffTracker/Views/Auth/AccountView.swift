@@ -51,7 +51,12 @@ struct AccountView: View {
                     CubbyNavigationBrandTitle(title: "Account")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Done")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .overlay {
@@ -518,14 +523,9 @@ struct GoogleSignInButtonCompact: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(CubbyTheme.paper)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
-            )
-            .cornerRadius(10)
+            .cubbyWoodButtonSurface()
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(.white)
         .buttonStyle(.plain)
     }
 
@@ -621,10 +621,9 @@ struct MergeChoiceView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(CubbyTheme.green)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .cubbyWoodButtonSurface()
                     }
+                    .buttonStyle(.plain)
 
                     Button {
                         Task {
@@ -639,17 +638,13 @@ struct MergeChoiceView: View {
                                 .font(.headline)
                             Text("Upload device data, overwrite server")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white.opacity(0.82))
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(CubbyTheme.paper)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .cubbyWoodButtonSurface()
                     }
+                    .buttonStyle(.plain)
 
                     Button {
                         Task {
@@ -664,17 +659,13 @@ struct MergeChoiceView: View {
                                 .font(.headline)
                             Text("Replace device data with server data")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white.opacity(0.82))
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(CubbyTheme.paper)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(CubbyTheme.floorBorder.opacity(0.78), lineWidth: 1)
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .cubbyWoodButtonSurface()
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 24)
 
@@ -690,7 +681,12 @@ struct MergeChoiceView: View {
                     CubbyNavigationBrandTitle(title: "Sync Data")
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Cancel")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

@@ -198,6 +198,72 @@ struct CubbyShelfLip: View {
     }
 }
 
+struct CubbyWoodButtonFill<Shape: InsettableShape>: View {
+    let shape: Shape
+
+    var body: some View {
+        ZStack {
+            shape.fill(CubbyTheme.navigationWoodGradient)
+            shape.fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.16),
+                        Color.white.opacity(0.04),
+                        CubbyTheme.shelfShadow.opacity(0.22),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        .clipShape(shape)
+    }
+}
+
+struct CubbyWoodButtonSurfaceModifier: ViewModifier {
+    var isEnabled: Bool = true
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        content
+            .foregroundStyle(Color.white)
+            .background {
+                CubbyWoodButtonFill(shape: shape)
+            }
+            .overlay {
+                shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
+            }
+            .opacity(isEnabled ? 1 : 0.48)
+            .contentShape(shape)
+    }
+}
+
+struct CubbyWoodTextButtonLabel: View {
+    let title: String
+    var width: CGFloat? = nil
+
+    var body: some View {
+        let shape = Capsule(style: .continuous)
+
+        Text(title)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(width: width)
+            .frame(minHeight: 38)
+            .padding(.horizontal, width == nil ? 18 : 0)
+            .background {
+                CubbyWoodButtonFill(shape: shape)
+            }
+            .overlay {
+                shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
+            }
+            .contentShape(shape)
+    }
+}
+
 struct WoodgrainOverlay: View {
     let opacity: Double
 
@@ -387,6 +453,10 @@ private extension UINavigationBarAppearance {
 }
 
 extension View {
+    func cubbyWoodButtonSurface(isEnabled: Bool = true) -> some View {
+        modifier(CubbyWoodButtonSurfaceModifier(isEnabled: isEnabled))
+    }
+
     func cubbyNavigationBarChrome() -> some View {
         self
             .toolbarBackground(CubbyTheme.navigationWallGradient, for: .navigationBar)

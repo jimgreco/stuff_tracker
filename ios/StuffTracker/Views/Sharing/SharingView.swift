@@ -254,13 +254,21 @@ struct InviteSheet: View {
                     CubbyNavigationBrandTitle(title: "Invite Member")
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Cancel")
+                    }
+                    .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Invite") {
+                    Button {
                         onInvite()
                         dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Invite")
                     }
+                    .buttonStyle(.plain)
                     .disabled(!canInvite)
                 }
             }

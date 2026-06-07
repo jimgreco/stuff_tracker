@@ -264,7 +264,12 @@ struct IconPickerView: View {
                     CubbyNavigationBrandTitle(title: "Choose Icon")
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        CubbyWoodTextButtonLabel(title: "Cancel")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .presentationDetents([.medium, .large])
@@ -285,14 +290,9 @@ struct IconPickerView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
-            .background(
-                selectedIcon.isEmpty
-                    ? Color.accentColor.opacity(0.2)
-                    : Color(.tertiarySystemBackground)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .cubbyWoodButtonSurface()
         }
-        .tint(.primary)
+        .buttonStyle(.plain)
     }
 
     private func iconSection(_ section: IconSection) -> some View {
@@ -328,18 +328,13 @@ struct IconPickerView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 66)
             .padding(.horizontal, 4)
-            .background(
-                selectedIcon == option.name
-                    ? Color.accentColor.opacity(0.2)
-                    : Color(.tertiarySystemBackground)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .cubbyWoodButtonSurface()
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(selectedIcon == option.name ? Color.accentColor : .clear, lineWidth: 2)
+                    .stroke(selectedIcon == option.name ? Color.white.opacity(0.72) : .clear, lineWidth: 2)
             )
         }
-        .tint(.primary)
+        .buttonStyle(.plain)
         .accessibilityLabel(option.name)
     }
 }

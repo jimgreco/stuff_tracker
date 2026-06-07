@@ -23,16 +23,20 @@ struct InlineAddField: View {
 
             Button(action: onCommit) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(CubbyTheme.green)
                     .font(.title3)
+                    .frame(width: 34, height: 34)
+                    .cubbyWoodButtonSurface(isEnabled: !text.isEmpty)
             }
+            .buttonStyle(.plain)
             .disabled(text.isEmpty)
 
             Button(action: onCancel) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
                     .font(.title3)
+                    .frame(width: 34, height: 34)
+                    .cubbyWoodButtonSurface()
             }
+            .buttonStyle(.plain)
         }
         .onAppear { focused = true }
     }
@@ -45,7 +49,9 @@ struct AddButton: View {
         Button(action: action) {
             Image(systemName: "plus")
                 .font(.body.bold())
-                .foregroundStyle(CubbyTheme.green)
+                .frame(width: 34, height: 34)
+                .cubbyWoodButtonSurface()
         }
+        .buttonStyle(.plain)
     }
 }

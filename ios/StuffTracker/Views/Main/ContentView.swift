@@ -836,21 +836,7 @@ private struct CubbyToolbarTextButtonLabel: View {
     let title: String
 
     var body: some View {
-        let shape = Capsule(style: .continuous)
-
-        Text(title)
-            .font(.callout.weight(.medium))
-            .foregroundStyle(Color.white)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(width: 78, height: 38)
-            .background {
-                CubbyToolbarWoodButtonFill(shape: shape)
-            }
-            .overlay {
-                shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
-            }
-            .contentShape(shape)
+        CubbyWoodTextButtonLabel(title: title, width: 78)
     }
 }
 
@@ -869,34 +855,12 @@ private struct CubbyToolbarAvatarButtonLabel<Content: View>: View {
             .clipShape(shape)
             .frame(width: 44, height: 44)
             .background {
-                CubbyToolbarWoodButtonFill(shape: shape)
+                CubbyWoodButtonFill(shape: shape)
             }
             .overlay {
                 shape.strokeBorder(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75)
             }
             .contentShape(shape)
-    }
-}
-
-private struct CubbyToolbarWoodButtonFill<Shape: InsettableShape>: View {
-    let shape: Shape
-
-    var body: some View {
-        ZStack {
-            shape.fill(CubbyTheme.navigationWoodGradient)
-            shape.fill(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.16),
-                        Color.white.opacity(0.04),
-                        CubbyTheme.shelfShadow.opacity(0.22),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-        }
-        .clipShape(shape)
     }
 }
 
@@ -1018,16 +982,20 @@ private struct SelectionActionButtonSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .foregroundStyle(isEnabled ? tint : Color.secondary)
-                .background(isEnabled ? tint.opacity(0.12) : CubbyTheme.paper.opacity(0.18), in: shape)
+                .foregroundStyle(isEnabled ? Color.white : Color.secondary)
+                .background {
+                    CubbyWoodButtonFill(shape: shape)
+                }
                 .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.stroke(isEnabled ? tint.opacity(0.22) : Color.white.opacity(0.10), lineWidth: 0.75))
+                .overlay(shape.stroke(isEnabled ? CubbyTheme.darkWoodBottom.opacity(0.85) : Color.white.opacity(0.10), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         } else {
             content
-                .foregroundStyle(isEnabled ? tint : Color.secondary)
-                .background(isEnabled ? tint.opacity(0.12) : CubbyTheme.paper, in: shape)
-                .overlay(shape.stroke(isEnabled ? tint.opacity(0.28) : Color(.separator).opacity(0.14), lineWidth: 0.75))
+                .foregroundStyle(isEnabled ? Color.white : Color.secondary)
+                .background {
+                    CubbyWoodButtonFill(shape: shape)
+                }
+                .overlay(shape.stroke(isEnabled ? CubbyTheme.darkWoodBottom.opacity(0.85) : Color(.separator).opacity(0.14), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         }
     }
@@ -1130,9 +1098,12 @@ private struct DismissButton: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Button("Cancel") {
+        Button {
             dismiss()
+        } label: {
+            CubbyWoodTextButtonLabel(title: "Cancel")
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1165,18 +1136,18 @@ private struct AddComposerBar: View {
                 Image(systemName: "xmark")
                     .font(.body.weight(.bold))
                     .frame(width: 44, height: 44)
+                    .cubbyWoodButtonSurface()
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
             .accessibilityLabel("Cancel adding item")
 
             Button(action: onSubmit) {
                 Image(systemName: "checkmark")
                     .font(.body.weight(.bold))
                     .frame(width: 44, height: 44)
+                    .cubbyWoodButtonSurface(isEnabled: canSubmit)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(canSubmit ? CubbyTheme.green : .secondary)
             .disabled(!canSubmit)
             .accessibilityLabel(submitAccessibilityLabel)
         }
@@ -1199,11 +1170,9 @@ private struct HierarchyAddChip: View {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(CubbyTheme.green.opacity(0.78))
 
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -1223,12 +1192,14 @@ private struct HierarchyAddChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .background(CubbyTheme.green.opacity(0.075), in: shape)
-                .overlay(shape.stroke(CubbyTheme.green.opacity(0.18), lineWidth: 0.5))
+                .foregroundStyle(Color.white)
+                .background { CubbyWoodButtonFill(shape: shape) }
+                .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.5))
         } else {
             content
-                .background(CubbyTheme.green.opacity(0.08), in: shape)
-                .overlay(shape.stroke(CubbyTheme.green.opacity(0.20), lineWidth: 0.5))
+                .foregroundStyle(Color.white)
+                .background { CubbyWoodButtonFill(shape: shape) }
+                .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.5))
         }
     }
 }
@@ -1336,7 +1307,7 @@ private struct BottomFlagFilterButton: View {
                 .symbolRenderingMode(.monochrome)
                 .frame(width: 48, height: 48)
         }
-        .foregroundStyle(isOn ? CubbyTheme.amber : .secondary)
+        .foregroundStyle(.white)
         .bottomFlagFilterSurface(isOn: isOn)
         .accessibilityLabel(isOn ? "Showing flagged items" : "Show flagged items")
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -1413,21 +1384,21 @@ private struct BottomFlagFilterSurfaceModifier: ViewModifier {
         if #available(iOS 26.0, *) {
             if isOn {
                 content
-                    .background(CubbyTheme.amber.opacity(0.14), in: shape)
+                    .background { CubbyWoodButtonFill(shape: shape) }
                     .glassEffect(.regular.tint(CubbyTheme.amber).interactive(), in: shape)
-                    .overlay(shape.stroke(CubbyTheme.amber.opacity(0.28), lineWidth: 0.75))
+                    .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75))
                     .shadow(color: CubbyTheme.amber.opacity(0.18), radius: 12, y: 5)
             } else {
                 content
-                    .background(CubbyTheme.paper.opacity(0.22), in: shape)
+                    .background { CubbyWoodButtonFill(shape: shape) }
                     .glassEffect(.regular.interactive(), in: shape)
-                    .overlay(shape.stroke(Color.white.opacity(0.20), lineWidth: 0.75))
+                    .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75))
                     .shadow(color: CubbyTheme.shelfShadow.opacity(0.12), radius: 12, y: 5)
             }
         } else {
             content
-                .background(isOn ? CubbyTheme.amber.opacity(0.14) : CubbyTheme.paper, in: shape)
-                .overlay(shape.stroke(isOn ? CubbyTheme.amber.opacity(0.32) : CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75))
+                .background { CubbyWoodButtonFill(shape: shape) }
+                .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.75))
                 .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 10, y: 4)
         }
     }
@@ -1585,10 +1556,10 @@ struct EmptyHomePrompt: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
             
-            Button("Create Your First Home", action: onCreate)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .tint(CubbyTheme.green)
+            Button(action: onCreate) {
+                CubbyWoodTextButtonLabel(title: "Create Your First Home")
+            }
+            .buttonStyle(.plain)
             
             if !authStore.isAuthenticated {
                 VStack(spacing: 8) {
@@ -1916,8 +1887,11 @@ struct FirstRunTutorialOverlay: View {
                     moveBack()
                 } label: {
                     Label("Back", systemImage: "chevron.left")
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 38)
+                        .cubbyWoodButtonSurface()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
             }
 
             Spacer()
@@ -1927,8 +1901,11 @@ struct FirstRunTutorialOverlay: View {
             } label: {
                 Label(primaryButtonTitle, systemImage: step == .moving ? "checkmark" : "chevron.right")
                     .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 38)
+                    .cubbyWoodButtonSurface(isEnabled: canUsePrimaryButton)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.plain)
             .disabled(!canUsePrimaryButton)
         }
         .padding(.top, 2)

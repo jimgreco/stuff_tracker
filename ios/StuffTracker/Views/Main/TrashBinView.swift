@@ -34,8 +34,11 @@ struct TrashBinView: View {
                             } label: {
                                 Label("Restore", systemImage: "arrow.uturn.backward")
                                     .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .frame(minHeight: 30)
+                                    .cubbyWoodButtonSurface()
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
                             .controlSize(.small)
                         }
                         .padding(.horizontal, 12)
