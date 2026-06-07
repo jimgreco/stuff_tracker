@@ -51,12 +51,7 @@ struct AccountView: View {
                     CubbyNavigationBrandTitle(title: "Account")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        CubbyWoodTextButtonLabel(title: "Done")
-                    }
-                    .buttonStyle(.plain)
+                    Button("Done") { dismiss() }
                 }
             }
             .overlay {
@@ -680,13 +675,8 @@ struct MergeChoiceView: View {
                 ToolbarItem(placement: .principal) {
                     CubbyNavigationBrandTitle(title: "Sync Data")
                 }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        CubbyWoodTextButtonLabel(title: "Cancel")
-                    }
-                    .buttonStyle(.plain)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }

@@ -1021,7 +1021,7 @@ private struct BulkItemMoveSheet: View {
                     ToolbarItem(placement: .principal) {
                         CubbyNavigationBrandTitle(title: title)
                     }
-                    ToolbarItem(placement: .cancellationAction) {
+                    ToolbarItem(placement: .topBarLeading) {
                         DismissButton()
                     }
                 }
@@ -1098,12 +1098,9 @@ private struct DismissButton: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Button {
+        Button("Cancel") {
             dismiss()
-        } label: {
-            CubbyWoodTextButtonLabel(title: "Cancel")
         }
-        .buttonStyle(.plain)
     }
 }
 

@@ -263,13 +263,8 @@ struct IconPickerView: View {
                 ToolbarItem(placement: .principal) {
                     CubbyNavigationBrandTitle(title: "Choose Icon")
                 }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        CubbyWoodTextButtonLabel(title: "Cancel")
-                    }
-                    .buttonStyle(.plain)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
                 }
             }
             .presentationDetents([.medium, .large])

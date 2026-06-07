@@ -193,9 +193,11 @@ private struct AddItemChip: View {
             HStack(spacing: 5) {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
+                    .foregroundStyle(CubbyTheme.green.opacity(0.78))
 
                 Text("Add item")
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
@@ -215,14 +217,12 @@ private struct AddItemChipSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .foregroundStyle(Color.white)
-                .background { CubbyWoodButtonFill(shape: shape) }
-                .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.5))
+                .background(CubbyTheme.green.opacity(0.075), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.18), lineWidth: 0.5))
         } else {
             content
-                .foregroundStyle(Color.white)
-                .background { CubbyWoodButtonFill(shape: shape) }
-                .overlay(shape.stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 0.5))
+                .background(CubbyTheme.green.opacity(0.08), in: shape)
+                .overlay(shape.stroke(CubbyTheme.green.opacity(0.20), lineWidth: 0.5))
         }
     }
 }
