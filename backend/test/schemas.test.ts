@@ -75,14 +75,17 @@ test('member invite schemas accept supported roles and valid emails only', () =>
 
 test('location schema validates parent ids and sort order', () => {
   const id = '7c5b9f9b-44bd-4cea-8ef2-17490c9d42a6';
+  const homeId = '5c5b9f9b-44bd-4cea-8ef2-17490c9d42a6';
 
   const parsed = LocationSchema.parse({
+    home_id: homeId,
     name: 'Living Room',
     parent_id: id,
     type: 'room',
     sort_order: 2,
     icon: 'sofa.fill',
   });
+  assert.equal(parsed.home_id, homeId);
   assert.equal(parsed.parent_id, id);
   assert.equal(parsed.icon, 'sofa.fill');
 
@@ -97,7 +100,9 @@ test('location schema validates parent ids and sort order', () => {
 });
 
 test('item schema rejects invalid quantities and urls', () => {
+  const homeId = '5c5b9f9b-44bd-4cea-8ef2-17490c9d42a6';
   const parsed = ItemSchema.parse({
+    home_id: homeId,
     name: 'Keys',
     quantity: 1,
     icon: 'key.fill',
@@ -108,6 +113,7 @@ test('item schema rejects invalid quantities and urls', () => {
     estimated_value_cents: 12999,
     is_flagged: false,
   });
+  assert.equal(parsed.home_id, homeId);
   assert.equal(parsed.quantity, 1);
   assert.equal(parsed.icon, 'key.fill');
   assert.equal(parsed.serial_number, 'SN-123');

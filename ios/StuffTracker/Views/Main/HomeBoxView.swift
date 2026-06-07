@@ -484,9 +484,8 @@ struct HomeBoxView: View {
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 16, y: 6)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
             Task { @MainActor in
-                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: nil)
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: nil, fromHomeId: dragged.homeId)
                 itemSelection.clearSelection()
             }
             return true
@@ -672,9 +671,8 @@ struct FloorBoxView: View {
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.08), radius: 10, y: 3)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
             Task { @MainActor in
-                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: floor.id)
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: floor.id, fromHomeId: dragged.homeId)
                 itemSelection.clearSelection()
             }
             return true
@@ -849,9 +847,8 @@ struct RoomBoxView: View {
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.06), radius: 8, y: 2)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
             Task { @MainActor in
-                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: room.id)
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: room.id, fromHomeId: dragged.homeId)
                 itemSelection.clearSelection()
             }
             return true
@@ -1013,9 +1010,8 @@ struct ContainerBoxView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(isDropTargeted ? CubbyTheme.green : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
-            guard dragged.homeId == nil || dragged.homeId == home.id else { return false }
             Task { @MainActor in
-                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: container.id)
+                homeStore.moveItems(homeId: home.id, itemIds: dragged.itemIds, toLocation: container.id, fromHomeId: dragged.homeId)
                 itemSelection.clearSelection()
             }
             return true

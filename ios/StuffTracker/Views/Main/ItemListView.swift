@@ -155,18 +155,18 @@ struct ItemChipsView: View {
 
     private func dropItem(_ dragged: DraggedItem, at insertionIndex: Int) -> Bool {
         guard !homeId.isEmpty else { return false }
-        guard dragged.homeId == nil || dragged.homeId == homeId else { return false }
 
         let movingIds = dragged.itemIds
         let destination = adjustedDestination(for: movingIds, insertionIndex: insertionIndex)
 
         withAnimation(.easeInOut(duration: 0.18)) {
-            if movingIds.count == 1,
+            if dragged.homeId == nil || dragged.homeId == homeId,
+               movingIds.count == 1,
                let itemId = movingIds.first,
                items.contains(where: { $0.id == itemId }) {
                 homeStore.reorderItem(homeId: homeId, itemId: itemId, toIndex: destination)
             } else {
-                homeStore.moveItems(homeId: homeId, itemIds: movingIds, toLocation: locationId, atIndex: destination)
+                homeStore.moveItems(homeId: homeId, itemIds: movingIds, toLocation: locationId, atIndex: destination, fromHomeId: dragged.homeId)
             }
         }
         itemSelection.clearSelection()

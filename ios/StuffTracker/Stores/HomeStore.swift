@@ -254,26 +254,75 @@ final class HomeStore: ObservableObject {
     }
 
     func moveLocationAcrossHomes(fromHomeId: String, locationId: String, toHomeId: String, newParentId: String?, atIndex index: Int) {
-        // Get the source location info
+        if fromHomeId == toHomeId {
+            moveLocationToParent(homeId: fromHomeId, locationId: locationId, newParentId: newParentId, atIndex: index)
+            return
+        }
+
         guard let srcIdx = detailIndex(for: fromHomeId),
-              let loc = homeDetails[srcIdx].locations.first(where: { $0.id == locationId }) else { return }
+              let dstIdx = detailIndex(for: toHomeId),
+              homeDetails[srcIdx].locations.contains(where: { $0.id == locationId }) else { return }
 
-        // Delete from source home
-        deleteLocation(homeId: fromHomeId, locationId: locationId)
+        let movingLocationIds = descendantLocationIds(rootId: locationId, in: homeDetails[srcIdx])
+        guard !movingLocationIds.contains(newParentId ?? "") else { return }
 
-        // Create in destination home
-        if let localLoc = local.createLocation(homeId: toHomeId, name: loc.name, parentId: newParentId, type: loc.type.rawValue) {
-            localLoc.sortOrder = index
-            localLoc.icon = loc.icon
-            localLoc.isFlagged = loc.isFlagged
+        let movingSet = Set(movingLocationIds)
+        let movingLocations = homeDetails[srcIdx].locations
+            .filter { movingSet.contains($0.id) }
+            .map { location -> Location in
+                var moved = location
+                moved.homeId = toHomeId
+                if moved.id == locationId {
+                    moved.parentId = newParentId
+                    moved.sortOrder = index
+                }
+                return moved
+            }
+        let movingItems = homeDetails[srcIdx].items
+            .filter { item in item.locationId.map { movingSet.contains($0) } ?? false }
+            .map { item -> Item in
+                var moved = item
+                moved.homeId = toHomeId
+                return moved
+            }
+
+        homeDetails[srcIdx].locations.removeAll { movingSet.contains($0.id) }
+        homeDetails[srcIdx].items.removeAll { item in item.locationId.map { movingSet.contains($0) } ?? false }
+        homeDetails[dstIdx].locations.append(contentsOf: movingLocations)
+        homeDetails[dstIdx].items.append(contentsOf: movingItems)
+
+        let destinationHome = local.fetchHome(id: toHomeId)
+        for movedId in movingLocationIds {
+            guard let localLoc = local.fetchLocation(id: movedId) else { continue }
+            localLoc.homeId = toHomeId
+            localLoc.home = destinationHome
+            if movedId == locationId {
+                localLoc.parentId = newParentId
+                localLoc.sortOrder = index
+            }
             local.updateLocation(localLoc)
-            if let dstIdx = detailIndex(for: toHomeId) {
-                homeDetails[dstIdx].locations.append(localLoc.toLocation())
-                // Reorder to correct position
-                reorderLocation(homeId: toHomeId, locationId: localLoc.id, toIndex: index)
+        }
+        for movedId in movingLocationIds {
+            for localItem in local.fetchItems(locationId: movedId) {
+                localItem.homeId = toHomeId
+                localItem.home = destinationHome
+                local.updateItem(localItem)
             }
         }
+
+        reorderLocation(homeId: toHomeId, locationId: locationId, toIndex: index)
         enqueueSyncIfNeeded()
+    }
+
+    private func descendantLocationIds(rootId: String, in home: HomeDetail) -> [String] {
+        var ids: [String] = []
+        var queue = [rootId]
+        while !queue.isEmpty {
+            let parentId = queue.removeFirst()
+            ids.append(parentId)
+            queue.append(contentsOf: home.locations.filter { $0.parentId == parentId }.map(\.id))
+        }
+        return ids
     }
 
     func deleteLocation(homeId: String, locationId: String) {
@@ -334,8 +383,11 @@ final class HomeStore: ObservableObject {
     }
 
     func updateItem(homeId: String, itemId: String, body: APIClient.ItemBody) {
+        let targetHomeId = body.homeId ?? homeId
         // Update local
         if let localItem = local.fetchItem(id: itemId) {
+            localItem.homeId = targetHomeId
+            localItem.home = local.fetchHome(id: targetHomeId)
             localItem.name = body.name
             localItem.locationId = body.locationId
             localItem.icon = body.icon
@@ -354,9 +406,17 @@ final class HomeStore: ObservableObject {
             local.updateItem(localItem)
 
             // Update in-memory
-            if let hIdx = detailIndex(for: homeId),
-               let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == itemId }) {
-                homeDetails[hIdx].items[iIdx] = localItem.toItem()
+            let updated = localItem.toItem()
+            if homeId != targetHomeId {
+                if let srcIdx = detailIndex(for: homeId) {
+                    homeDetails[srcIdx].items.removeAll { $0.id == itemId }
+                }
+                if let dstIdx = detailIndex(for: targetHomeId) {
+                    homeDetails[dstIdx].items.append(updated)
+                }
+            } else if let hIdx = detailIndex(for: homeId),
+                      let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == itemId }) {
+                homeDetails[hIdx].items[iIdx] = updated
             }
         }
         enqueueSyncIfNeeded()
@@ -366,8 +426,10 @@ final class HomeStore: ObservableObject {
         moveItems(homeId: homeId, itemIds: [itemId], toLocation: locationId)
     }
 
-    func moveItems(homeId: String, itemIds: [String], toLocation locationId: String?, atIndex destination: Int? = nil) {
-        guard let hIdx = detailIndex(for: homeId) else { return }
+    func moveItems(homeId: String, itemIds: [String], toLocation locationId: String?, atIndex destination: Int? = nil, fromHomeId: String? = nil) {
+        let sourceHomeId = fromHomeId ?? homeId
+        guard let srcIdx = detailIndex(for: sourceHomeId),
+              let dstIdx = detailIndex(for: homeId) else { return }
 
         var seen = Set<String>()
         let uniqueIds = itemIds.filter { seen.insert($0).inserted }
@@ -375,23 +437,37 @@ final class HomeStore: ObservableObject {
 
         let movingSet = Set(uniqueIds)
         let movingItems = uniqueIds.compactMap { itemId in
-            homeDetails[hIdx].items.first(where: { $0.id == itemId })
+            homeDetails[srcIdx].items.first(where: { $0.id == itemId })
         }
         guard !movingItems.isEmpty else { return }
 
-        var siblings = homeDetails[hIdx].items
+        var siblings = homeDetails[dstIdx].items
             .filter { $0.locationId == locationId && !movingSet.contains($0.id) }
             .sorted { $0.sortOrder < $1.sortOrder }
 
         let insertionIndex = destination.map { min(max($0, 0), siblings.count) } ?? siblings.count
-        siblings.insert(contentsOf: movingItems, at: insertionIndex)
+        siblings.insert(contentsOf: movingItems.map { item -> Item in
+            var moved = item
+            moved.homeId = homeId
+            moved.locationId = locationId
+            return moved
+        }, at: insertionIndex)
+
+        if sourceHomeId != homeId {
+            homeDetails[srcIdx].items.removeAll { movingSet.contains($0.id) }
+            homeDetails[dstIdx].items.removeAll { movingSet.contains($0.id) }
+            homeDetails[dstIdx].items.append(contentsOf: siblings.filter { movingSet.contains($0.id) })
+        }
 
         for (sortOrder, item) in siblings.enumerated() {
-            if let iIdx = homeDetails[hIdx].items.firstIndex(where: { $0.id == item.id }) {
-                homeDetails[hIdx].items[iIdx].locationId = locationId
-                homeDetails[hIdx].items[iIdx].sortOrder = sortOrder
+            if let iIdx = homeDetails[dstIdx].items.firstIndex(where: { $0.id == item.id }) {
+                homeDetails[dstIdx].items[iIdx].homeId = homeId
+                homeDetails[dstIdx].items[iIdx].locationId = locationId
+                homeDetails[dstIdx].items[iIdx].sortOrder = sortOrder
             }
             if let localItem = local.fetchItem(id: item.id) {
+                localItem.homeId = homeId
+                localItem.home = local.fetchHome(id: homeId)
                 localItem.locationId = locationId
                 localItem.sortOrder = sortOrder
                 local.updateItem(localItem)

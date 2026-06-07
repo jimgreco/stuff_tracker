@@ -47,6 +47,7 @@ final class APIEncodingTests: XCTestCase {
     func testItemBodyEncodesNilLocationAsExplicitNull() throws {
         let body = APIClient.ItemBody(
             name: "Couch 5",
+            homeId: "home-1",
             locationId: nil,
             icon: "sofa.fill",
             notes: nil,
@@ -66,6 +67,7 @@ final class APIEncodingTests: XCTestCase {
         let json = try encodedJSON(body)
 
         XCTAssertEqual(json["name"] as? String, "Couch 5")
+        XCTAssertEqual(json["home_id"] as? String, "home-1")
         XCTAssertTrue(json.keys.contains("location_id"))
         XCTAssertTrue(json["location_id"] is NSNull)
         XCTAssertEqual(json["icon"] as? String, "sofa.fill")
@@ -84,6 +86,7 @@ final class APIEncodingTests: XCTestCase {
 
     func testUpdateLocationBodyEncodesNilParentAsExplicitNull() throws {
         let body = APIClient.UpdateLocationBody(
+            homeId: "home-2",
             name: "Top Floor",
             parentId: nil,
             sortOrder: 0,

@@ -193,6 +193,7 @@ struct ItemEditView: View {
     @State private var warrantyExpiresDate: Date?
     @State private var estimatedValue: String
     @State private var isFlagged: Bool
+    @State private var selectedHomeId: String
     @State private var selectedLocationId: String?
     @State private var isSaving = false
     @State private var selectedIcon: String
@@ -234,6 +235,7 @@ struct ItemEditView: View {
         _warrantyExpiresDate = State(initialValue: ItemDateCodec.parse(item.warrantyExpiresDate))
         _estimatedValue = State(initialValue: Self.formattedDollars(fromCents: item.estimatedValueCents))
         _isFlagged = State(initialValue: item.isFlagged)
+        _selectedHomeId = State(initialValue: item.homeId.isEmpty ? homeId : item.homeId)
         _selectedLocationId = State(initialValue: item.locationId)
         _selectedIcon = State(initialValue: item.icon ?? "")
         _properties = State(initialValue: item.properties)
@@ -243,6 +245,10 @@ struct ItemEditView: View {
 
     private var home: HomeDetail? {
         homeStore.homeDetails.first(where: { $0.id == homeId })
+    }
+
+    private var selectedHome: HomeDetail? {
+        homeStore.homeDetails.first(where: { $0.id == selectedHomeId })
     }
 
     var body: some View {
@@ -338,7 +344,7 @@ struct ItemEditView: View {
     }
 
     private func shareText(_ scope: ItemShareScope) -> String {
-        ItemShareFormatter.text(for: itemForSharing, home: home, scope: scope)
+        ItemShareFormatter.text(for: itemForSharing, home: selectedHome, scope: scope)
     }
 
     private var deepLinkForSharing: ItemDeepLink? {
@@ -357,7 +363,7 @@ struct ItemEditView: View {
 
         return Item(
             id: item.id,
-            homeId: item.homeId,
+            homeId: selectedHomeId,
             locationId: selectedLocationId,
             name: normalizedText(name) ?? item.name,
             icon: normalizedText(selectedIcon),
@@ -433,8 +439,9 @@ struct ItemEditView: View {
     private var locationSection: some View {
         Section("Location") {
             LocationTreePicker(
+                selectedHomeId: $selectedHomeId,
                 selectedId: $selectedLocationId,
-                home: home
+                homes: homeStore.homeDetails
             )
         }
     }
@@ -974,7 +981,7 @@ struct ItemEditView: View {
                     } else if let photo = attachment.pendingPhoto {
                         guard canUploadAttachments else { throw ItemEditError.signInRequired }
                         let upload = try await APIClient.shared.uploadItemAttachment(
-                            homeId: homeId,
+                            homeId: selectedHomeId,
                             kind: .photo,
                             fileName: photo.fileName,
                             contentType: photo.contentType,
@@ -994,7 +1001,7 @@ struct ItemEditView: View {
                     } else if let document = attachment.pendingDocument {
                         guard canUploadAttachments else { throw ItemEditError.signInRequired }
                         let upload = try await APIClient.shared.uploadItemAttachment(
-                            homeId: homeId,
+                            homeId: selectedHomeId,
                             kind: .document,
                             fileName: document.name,
                             contentType: document.contentType,
@@ -1013,6 +1020,7 @@ struct ItemEditView: View {
 
                 let body = APIClient.ItemBody(
                     name: name,
+                    homeId: selectedHomeId,
                     locationId: selectedLocationId,
                     icon: selectedIcon.isEmpty ? nil : selectedIcon,
                     notes: notes.isEmpty ? nil : notes,
@@ -1501,12 +1509,19 @@ enum LocationTreePresentation {
 }
 
 struct LocationTreePicker: View {
+    @Binding var selectedHomeId: String
     @Binding var selectedId: String?
-    let home: HomeDetail?
+    let homes: [HomeDetail]
     @State private var showPicker = false
 
+    private var selectedHome: HomeDetail? {
+        homes.first(where: { $0.id == selectedHomeId })
+    }
+
     private var selectedLabel: String {
-        LocationTreePresentation.selectedLabel(home: home, selectedId: selectedId)
+        guard let selectedHome else { return "None" }
+        let label = LocationTreePresentation.selectedLabel(home: selectedHome, selectedId: selectedId)
+        return homes.count > 1 && selectedId != nil ? "\(selectedHome.name) › \(label)" : label
     }
 
     var body: some View {
@@ -1523,28 +1538,37 @@ struct LocationTreePicker: View {
             }
         }
         .sheet(isPresented: $showPicker) {
-            if let home {
-                LocationTreeSheet(
-                    home: home,
-                    selectedId: $selectedId,
-                    dismiss: { showPicker = false }
-                )
-            }
+            LocationTreeSheet(
+                homes: homes,
+                selectedHomeId: $selectedHomeId,
+                selectedId: $selectedId,
+                dismiss: { showPicker = false }
+            )
         }
     }
 }
 
+private enum LocationTreeRoute: Hashable {
+    case home(String)
+    case location(homeId: String, locationId: String)
+}
+
 private struct LocationTreeSheet: View {
-    let home: HomeDetail
+    let homes: [HomeDetail]
+    @Binding var selectedHomeId: String
     @Binding var selectedId: String?
     let dismiss: () -> Void
-    @State private var path: [String] = []
+    @State private var path: [LocationTreeRoute] = []
+
+    private var selectedHome: HomeDetail? {
+        homes.first(where: { $0.id == selectedHomeId }) ?? homes.first
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
-            LocationTreeLevel(
-                home: home,
-                parentId: nil,
+            LocationHomeLevel(
+                homes: homes,
+                selectedHomeId: $selectedHomeId,
                 selectedId: $selectedId,
                 dismiss: dismiss
             )
@@ -1558,39 +1582,90 @@ private struct LocationTreeSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .navigationDestination(for: String.self) { locId in
-                let loc = home.locations.first(where: { $0.id == locId })
-                LocationTreeLevel(
-                    home: home,
-                    parentId: locId,
-                    selectedId: $selectedId,
-                    dismiss: dismiss
-                )
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .cubbyNavigationTitle(loc?.name ?? "")
+            .navigationDestination(for: LocationTreeRoute.self) { route in
+                switch route {
+                case .home(let homeId):
+                    let home = homes.first(where: { $0.id == homeId })
+                    LocationTreeLevel(
+                        home: home,
+                        selectedHomeId: $selectedHomeId,
+                        parentId: nil,
+                        selectedId: $selectedId,
+                        dismiss: dismiss
+                    )
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .cubbyNavigationTitle(home?.name ?? "")
+                case .location(let homeId, let locId):
+                    let home = homes.first(where: { $0.id == homeId })
+                    let loc = home?.locations.first(where: { $0.id == locId })
+                    LocationTreeLevel(
+                        home: home,
+                        selectedHomeId: $selectedHomeId,
+                        parentId: locId,
+                        selectedId: $selectedId,
+                        dismiss: dismiss
+                    )
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .cubbyNavigationTitle(loc?.name ?? "")
+                }
             }
         }
         .cubbyNavigationBarChrome()
         .onAppear {
-            path = LocationTreePresentation.initialNavigationPath(home: home, selectedId: selectedId)
+            guard let home = selectedHome else { return }
+            path = [.home(home.id)] + LocationTreePresentation
+                .initialNavigationPath(home: home, selectedId: selectedId)
+                .map { .location(homeId: home.id, locationId: $0) }
         }
     }
 }
 
+private struct LocationHomeLevel: View {
+    let homes: [HomeDetail]
+    @Binding var selectedHomeId: String
+    @Binding var selectedId: String?
+    let dismiss: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(homes, id: \.id) { home in
+                    NavigationLink(value: LocationTreeRoute.home(home.id)) {
+                        HStack {
+                            Label(home.name, systemImage: home.icon ?? "house.fill")
+                            Spacer()
+                            if selectedHomeId == home.id && selectedId == nil {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(CubbyTheme.green)
+                            }
+                        }
+                    }
+                }
+            }
+            .cubbySheetRows()
+        }
+        .cubbySheetChrome()
+    }
+}
+
 private struct LocationTreeLevel: View {
-    let home: HomeDetail
+    let home: HomeDetail?
+    @Binding var selectedHomeId: String
     let parentId: String?
     @Binding var selectedId: String?
     let dismiss: () -> Void
 
     private var children: [Location] {
+        guard let home else { return [] }
         home.locations
             .filter { $0.parentId == parentId }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     private var currentName: String {
+        guard let home else { return "" }
         if let parentId, let loc = home.locations.first(where: { $0.id == parentId }) {
             return loc.name
         }
@@ -1601,16 +1676,18 @@ private struct LocationTreeLevel: View {
         List {
             // Option to select current level
             Button {
+                guard let home else { return }
+                selectedHomeId = home.id
                 selectedId = parentId
                 dismiss()
             } label: {
                 HStack {
                     Label(
-                        parentId == nil ? "\(home.name) (top level)" : "Place here",
-                        systemImage: parentId == nil ? (home.icon ?? "house.fill") : "checkmark.circle"
+                        parentId == nil ? "\(currentName) (top level)" : "Place here",
+                        systemImage: parentId == nil ? (home?.icon ?? "house.fill") : "checkmark.circle"
                     )
                     Spacer()
-                    if selectedId == parentId {
+                    if selectedHomeId == home?.id && selectedId == parentId {
                         Image(systemName: "checkmark")
                             .foregroundStyle(CubbyTheme.green)
                     }
@@ -1622,17 +1699,20 @@ private struct LocationTreeLevel: View {
             if !children.isEmpty {
                 Section {
                     ForEach(children) { loc in
-                        let locChildren = home.locations.filter { $0.parentId == loc.id }
+                        let locChildren = home?.locations.filter { $0.parentId == loc.id } ?? []
                         if locChildren.isEmpty {
                             // Leaf node - just select
                             Button {
+                                if let home {
+                                    selectedHomeId = home.id
+                                }
                                 selectedId = loc.id
                                 dismiss()
                             } label: {
                                 HStack {
                                     Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
                                     Spacer()
-                                    if selectedId == loc.id {
+                                    if selectedHomeId == home?.id && selectedId == loc.id {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(CubbyTheme.green)
                                     }
@@ -1641,11 +1721,11 @@ private struct LocationTreeLevel: View {
                             .foregroundStyle(.primary)
                         } else {
                             // Has children - navigate deeper
-                            NavigationLink(value: loc.id) {
+                            NavigationLink(value: LocationTreeRoute.location(homeId: home?.id ?? "", locationId: loc.id)) {
                                 HStack {
                                     Label(loc.name, systemImage: LocationTreePresentation.icon(for: loc))
                                     Spacer()
-                                    if selectedId == loc.id {
+                                    if selectedHomeId == home?.id && selectedId == loc.id {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(CubbyTheme.green)
                                     }

@@ -318,6 +318,7 @@ final class SyncManager: ObservableObject {
             let updated = try await api.updateLocation(
                 homeId: loc.homeId,
                 locationId: loc.id,
+                newHomeId: loc.homeId,
                 name: loc.name,
                 parentId: loc.parentId,
                 sortOrder: loc.sortOrder,
@@ -459,6 +460,7 @@ final class SyncManager: ObservableObject {
     private func itemBody(_ item: LocalItem) -> APIClient.ItemBody {
         APIClient.ItemBody(
             name: item.name,
+            homeId: item.homeId,
             locationId: item.locationId,
             icon: item.icon,
             notes: item.notes,

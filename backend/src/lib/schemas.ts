@@ -6,6 +6,7 @@ const DateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().opti
 const OptionalTrimmedTextSchema = (max: number) => z.string().trim().max(max).nullable().optional();
 
 export const LocationSchema = z.object({
+  home_id: z.string().uuid().optional(),
   name: z.string().min(1).max(200),
   parent_id: z.string().uuid().nullable().optional(),
   type: LocationTypeSchema,
@@ -28,6 +29,7 @@ export const ItemPropertySchema = z.object({
 });
 
 export const ItemSchema = z.object({
+  home_id: z.string().uuid().optional(),
   name: z.string().min(1).max(200),
   location_id: z.string().uuid().nullable().optional(),
   icon: IconSchema,

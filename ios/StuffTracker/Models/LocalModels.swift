@@ -133,6 +133,7 @@ final class LocalLocation {
     }
 
     func update(from location: Location) {
+        self.homeId = location.homeId
         self.parentId = location.parentId
         self.name = location.name
         self.type = location.type.rawValue
@@ -240,6 +241,7 @@ final class LocalItem {
     }
 
     func update(from item: Item) {
+        self.homeId = item.homeId
         self.locationId = item.locationId
         self.name = item.name
         self.icon = item.icon

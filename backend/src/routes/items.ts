@@ -136,14 +136,30 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // ── Update item ────────────────────────────────────────────────────────────────
 router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   const { homeId, itemId } = req.params;
-  const role = await getHomeRole(homeId, req.user!.userId);
-  if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
-
   const updates = ItemSchema.partial().parse(req.body);
+  const existingItem = await pool.query(
+    'SELECT home_id, photo_urls, documents FROM items WHERE id = $1',
+    [itemId]
+  );
+  if (!existingItem.rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }
+
+  const currentHomeId = existingItem.rows[0].home_id as string;
+  if (currentHomeId !== homeId && updates.home_id !== homeId) {
+    res.status(404).json({ error: 'Item not found' });
+    return;
+  }
+
+  const targetHomeId = updates.home_id ?? currentHomeId;
+  const currentRole = await getHomeRole(currentHomeId, req.user!.userId);
+  const targetRole = targetHomeId === currentHomeId
+    ? currentRole
+    : await getHomeRole(targetHomeId, req.user!.userId);
+  if (!canEdit(currentRole) || !canEdit(targetRole)) { res.status(403).json({ error: 'Edit access required' }); return; }
+
   if (updates.location_id) {
     const location = await pool.query(
       'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
-      [updates.location_id, homeId]
+      [updates.location_id, targetHomeId]
     );
     if (!location.rows[0]) {
       res.status(400).json({ error: 'Location not found' });
@@ -171,6 +187,7 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     'estimated_value_cents',
     'is_flagged',
     'sort_order',
+    'home_id',
   ] as const;
   for (const key of allowed) {
     if (key in updates) {
@@ -180,13 +197,8 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
     }
   }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
-  const existingItem = await pool.query(
-    'SELECT photo_urls, documents FROM items WHERE id = $1 AND home_id = $2',
-    [itemId, homeId]
-  );
-  if (!existingItem.rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }
   const quota = await canUpdateItemAttachments(
-    homeId,
+    targetHomeId,
     attachmentCount(existingItem.rows[0].photo_urls),
     updates.photo_urls?.length,
     attachmentCount(existingItem.rows[0].documents),
@@ -201,11 +213,11 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   }
 
   fields.push(`updated_at = NOW()`);
-  values.push(itemId, homeId);
+  values.push(itemId);
 
   const { rows } = await pool.query(
     `UPDATE items SET ${fields.join(', ')}
-     WHERE id = $${i++} AND home_id = $${i} RETURNING *`,
+     WHERE id = $${i++} RETURNING *`,
     values
   );
   if (!rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }

@@ -86,7 +86,7 @@ struct Home: Codable, Identifiable {
 
 struct Location: Codable, Identifiable, Hashable {
     let id: String
-    let homeId: String
+    var homeId: String
     var parentId: String?
     var name: String
     var type: LocationType
@@ -158,7 +158,7 @@ struct ItemProperty: Codable, Identifiable, Hashable {
 
 struct Item: Codable, Identifiable {
     let id: String
-    let homeId: String
+    var homeId: String
     var locationId: String?
     var name: String
     var icon: String?
