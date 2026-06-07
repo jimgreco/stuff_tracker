@@ -491,7 +491,6 @@
         </header>
         <div id="breadcrumb" class="breadcrumb is-hidden" aria-hidden="true"></div>
         <main class="content">
-          ${renderStatus()}
           ${
             state.isLoading
               ? renderLoading()
@@ -748,15 +747,6 @@
             ${svgIcon("trash")}<span>Delete</span>
           </button>
         </div>
-      </div>
-    `;
-  }
-
-  function renderStatus() {
-    return `
-      <div class="status-strip">
-        <span class="status-dot connected"></span>
-        <span>Connected to backend sync</span>
       </div>
     `;
   }
