@@ -15,7 +15,7 @@ jobs:
       run_build: ${{ steps.changes.outputs.run_build }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -127,7 +127,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # build phase uses `git rev-list HEAD --count` for build number
 
