@@ -19,6 +19,13 @@ test('TestFlight workflow keeps legacy OpenSSL P12 verification fallback', () =>
   assert.match(workflow, /openssl pkcs12 verification: OK \(legacy provider\)/);
 });
 
+test('TestFlight workflow installs the iOS platform before archiving when needed', () => {
+  const workflow = readRepoFile('.github/workflows/testflight.yml');
+
+  assert.match(workflow, /xcodebuild -showsdks \| grep -q -- '-sdk iphoneos'/);
+  assert.match(workflow, /xcodebuild -downloadPlatform iOS/);
+});
+
 test('App Store screenshots workflow uses Ruby compatible with locked fastlane gems', () => {
   const workflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
 

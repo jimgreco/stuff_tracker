@@ -220,6 +220,17 @@ jobs:
           IOS_PROFILE_NAME: Stuff Tacker App Store
         run: ruby scripts/refresh_app_store_profile.rb
 
+      - name: Ensure iOS platform is installed
+        run: |
+          set -euo pipefail
+          if xcodebuild -showsdks | grep -q -- '-sdk iphoneos'; then
+            echo "iPhoneOS SDK is already installed."
+          else
+            echo "iPhoneOS SDK is missing; downloading iOS platform for archive."
+            sudo xcodebuild -downloadPlatform iOS
+          fi
+          xcodebuild -showsdks
+
       - name: Archive
         working-directory: ios
         env:
