@@ -237,6 +237,31 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertTrue(reloaded.isCollapsed(.location("container-1")))
     }
 
+    func testHierarchyCollapseStoreCanPreserveKeysDuringInitialEmptyTree() {
+        let suiteName = "HierarchyCollapseStoreTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Expected isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let key = "collapsed-nodes"
+        let store = HierarchyCollapseStore(defaults: defaults, key: key)
+        store.setCollapsed(true, for: .home("home-1"))
+        store.setCollapsed(true, for: .location("room-1"))
+
+        store.prune(validNodes: [], preserveIfEmpty: true)
+
+        XCTAssertTrue(store.isCollapsed(.home("home-1")))
+        XCTAssertTrue(store.isCollapsed(.location("room-1")))
+
+        store.prune(validNodes: [])
+
+        XCTAssertFalse(store.isCollapsed(.home("home-1")))
+        XCTAssertFalse(store.isCollapsed(.location("room-1")))
+    }
+
     func testHierarchyCollapseStoreMigratesLegacyContainerIds() {
         let suiteName = "HierarchyCollapseStoreTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

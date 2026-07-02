@@ -172,6 +172,7 @@ struct ContentView: View {
     @State private var deepLinkedItem: Item?
     @State private var deepLinkScrollTargetID: String?
     @State private var breadcrumbPath: [String] = []
+    @State private var hasCompletedInitialHomeLoad = false
     @FocusState private var isSearchFocused: Bool
     @State private var isSearchInputPresented = false
 
@@ -378,6 +379,8 @@ struct ContentView: View {
             }
             .task {
                 await homeStore.loadHomes()
+                hasCompletedInitialHomeLoad = true
+                collapseStore.prune(validNodes: validCollapsibleNodes(in: homeStore.homeDetails))
                 openPendingDeepLinkIfPossible(reportMissing: true)
                 tutorialController.presentAfterInitialLoad(hasExistingHomes: !homeStore.homeDetails.isEmpty)
             }
@@ -385,7 +388,10 @@ struct ContentView: View {
                 openPendingDeepLinkIfPossible()
             }
             .onReceive(homeStore.$homeDetails) { homes in
-                collapseStore.prune(validNodes: validCollapsibleNodes(in: homes))
+                collapseStore.prune(
+                    validNodes: validCollapsibleNodes(in: homes),
+                    preserveIfEmpty: !hasCompletedInitialHomeLoad
+                )
                 itemSelection.prune(validItemIds: Set(homes.flatMap(\.items).map(\.id)))
                 openPendingDeepLinkIfPossible()
             }

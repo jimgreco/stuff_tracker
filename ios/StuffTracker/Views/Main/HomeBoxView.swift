@@ -100,7 +100,9 @@ final class HierarchyCollapseStore: ObservableObject {
         }
     }
 
-    func prune(validNodes: Set<CollapsibleTreeNode>) {
+    func prune(validNodes: Set<CollapsibleTreeNode>, preserveIfEmpty: Bool = false) {
+        if preserveIfEmpty && validNodes.isEmpty { return }
+
         let validKeys = Set(validNodes.map(\.storageKey))
         let pruned = collapsedNodeKeys.intersection(validKeys)
         guard pruned != collapsedNodeKeys else { return }
