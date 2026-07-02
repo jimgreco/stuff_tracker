@@ -35,13 +35,23 @@ jobs:
         run: |
           set -euo pipefail
           ls /Applications | grep -i '^Xcode' || true
-          for p in /Applications/Xcode_26.app /Applications/Xcode_26.0.app /Applications/Xcode_26.1.app /Applications/Xcode_26.2.app /Applications/Xcode-26.app /Applications/Xcode.app; do
-            if [ -d "$p" ]; then
-              sudo xcode-select -s "$p/Contents/Developer"
-              echo "Selected: $p"
-              break
-            fi
-          done
+          selected_xcode=$(ruby <<'RUBY'
+            candidates = Dir.glob('/Applications/Xcode*.app').select do |path|
+              File.basename(path).match?(/\AXcode(?:[_-])?26(?:[._-]\d+)*\.app\z/)
+            end
+            candidates = Dir.glob('/Applications/Xcode*.app') if candidates.empty?
+
+            def version_key(path)
+              File.basename(path).scan(/\d+/).map(&:to_i)
+            end
+
+            selected = candidates.max_by { |path| version_key(path) }
+            abort('No Xcode installation found') unless selected
+            puts selected
+          RUBY
+          )
+          sudo xcode-select -s "$selected_xcode/Contents/Developer"
+          echo "Selected: $selected_xcode"
           xcodebuild -version
 
       - uses: ruby/setup-ruby@v1

@@ -56,14 +56,25 @@ jobs:
       - name: Select Xcode 26
         if: steps.changes.outputs.run_tests == 'true'
         run: |
+          set -euo pipefail
           ls /Applications | grep -i '^Xcode' || true
-          for p in /Applications/Xcode_26.app /Applications/Xcode_26.0.app /Applications/Xcode_26.1.app /Applications/Xcode_26.2.app /Applications/Xcode-26.app /Applications/Xcode.app; do
-            if [ -d "$p" ]; then
-              sudo xcode-select -s "$p/Contents/Developer"
-              echo "Selected: $p"
-              break
-            fi
-          done
+          selected_xcode=$(ruby <<'RUBY'
+            candidates = Dir.glob('/Applications/Xcode*.app').select do |path|
+              File.basename(path).match?(/\AXcode(?:[_-])?26(?:[._-]\d+)*\.app\z/)
+            end
+            candidates = Dir.glob('/Applications/Xcode*.app') if candidates.empty?
+
+            def version_key(path)
+              File.basename(path).scan(/\d+/).map(&:to_i)
+            end
+
+            selected = candidates.max_by { |path| version_key(path) }
+            abort('No Xcode installation found') unless selected
+            puts selected
+          RUBY
+          )
+          sudo xcode-select -s "$selected_xcode/Contents/Developer"
+          echo "Selected: $selected_xcode"
           xcodebuild -version
 
       - name: Prepare iOS simulator
@@ -143,15 +154,25 @@ jobs:
 
       - name: Select Xcode 26
         run: |
+          set -euo pipefail
           ls /Applications | grep -i '^Xcode' || true
-          # Try common paths for Xcode 26
-          for p in /Applications/Xcode_26.app /Applications/Xcode_26.0.app /Applications/Xcode_26.1.app /Applications/Xcode_26.2.app /Applications/Xcode-26.app /Applications/Xcode.app; do
-            if [ -d "$p" ]; then
-              sudo xcode-select -s "$p/Contents/Developer"
-              echo "Selected: $p"
-              break
-            fi
-          done
+          selected_xcode=$(ruby <<'RUBY'
+            candidates = Dir.glob('/Applications/Xcode*.app').select do |path|
+              File.basename(path).match?(/\AXcode(?:[_-])?26(?:[._-]\d+)*\.app\z/)
+            end
+            candidates = Dir.glob('/Applications/Xcode*.app') if candidates.empty?
+
+            def version_key(path)
+              File.basename(path).scan(/\d+/).map(&:to_i)
+            end
+
+            selected = candidates.max_by { |path| version_key(path) }
+            abort('No Xcode installation found') unless selected
+            puts selected
+          RUBY
+          )
+          sudo xcode-select -s "$selected_xcode/Contents/Developer"
+          echo "Selected: $selected_xcode"
           xcodebuild -version
 
       - name: Import signing certificate
@@ -233,12 +254,7 @@ jobs:
       - name: Ensure iOS platform is installed
         run: |
           set -euo pipefail
-          if xcodebuild -showsdks | grep -q -- '-sdk iphoneos'; then
-            echo "iPhoneOS SDK is already installed."
-          else
-            echo "iPhoneOS SDK is missing; downloading iOS platform for archive."
-            sudo xcodebuild -downloadPlatform iOS
-          fi
+          sudo xcodebuild -downloadPlatform iOS
           xcodebuild -showsdks
 
       - name: Archive

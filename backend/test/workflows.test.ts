@@ -22,8 +22,18 @@ test('TestFlight workflow keeps legacy OpenSSL P12 verification fallback', () =>
 test('TestFlight workflow installs the iOS platform before archiving when needed', () => {
   const workflow = readRepoFile('.github/workflows/testflight.yml');
 
-  assert.match(workflow, /xcodebuild -showsdks \| grep -q -- '-sdk iphoneos'/);
   assert.match(workflow, /xcodebuild -downloadPlatform iOS/);
+});
+
+test('iOS workflows select the newest available Xcode 26 installation', () => {
+  const testFlightWorkflow = readRepoFile('.github/workflows/testflight.yml');
+  const screenshotsWorkflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
+
+  for (const workflow of [testFlightWorkflow, screenshotsWorkflow]) {
+    assert.match(workflow, /Dir\.glob\('\/Applications\/Xcode\*\.app'\)/);
+    assert.match(workflow, /version_key\(path\)/);
+    assert.doesNotMatch(workflow, /\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.1\.app/);
+  }
 });
 
 test('TestFlight workflow uses a simulator runtime matching the selected Xcode SDK', () => {
