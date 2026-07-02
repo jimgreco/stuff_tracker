@@ -172,8 +172,10 @@ jobs:
           # Verify the .p12 with openssl using the same password (same check that passes locally)
           if openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -noout -passin pass:"$CERT_PWD"; then
             echo "openssl pkcs12 verification: OK"
+          elif openssl pkcs12 -legacy -in "$RUNNER_TEMP/cert.p12" -noout -passin pass:"$CERT_PWD"; then
+            echo "openssl pkcs12 verification: OK (legacy provider)"
           else
-            echo "openssl pkcs12 verification: FAILED — secret password/file mismatch"
+            echo "openssl pkcs12 verification: FAILED"
             exit 1
           fi
 
