@@ -26,6 +26,14 @@ test('TestFlight workflow installs the iOS platform before archiving when needed
   assert.match(workflow, /xcodebuild -downloadPlatform iOS/);
 });
 
+test('TestFlight workflow uses a simulator runtime matching the selected Xcode SDK', () => {
+  const workflow = readRepoFile('.github/workflows/testflight.yml');
+
+  assert.match(workflow, /xcrun --sdk iphonesimulator --show-sdk-version/);
+  assert.match(workflow, /SIMULATOR_SDK_VERSION/);
+  assert.match(workflow, /matching = runtimes\.select/);
+});
+
 test('App Store screenshots workflow uses Ruby compatible with locked fastlane gems', () => {
   const workflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
 

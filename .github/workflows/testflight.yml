@@ -72,6 +72,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          simulator_sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "iPhoneSimulator SDK version: $simulator_sdk_version"
+          if ! xcrun simctl list runtimes | grep -q "iOS $simulator_sdk_version"; then
+            echo "Matching iOS simulator runtime is missing; downloading iOS platform."
+            sudo xcodebuild -downloadPlatform iOS
+          fi
+          export SIMULATOR_SDK_VERSION="$simulator_sdk_version"
+
           runtime=$(xcrun simctl list runtimes --json | ruby -rjson -e '
             def version_key(value)
               value.to_s.scan(/\d+/).map(&:to_i)
@@ -80,7 +88,9 @@ jobs:
             runtimes = JSON.parse(STDIN.read).fetch("runtimes").select do |runtime|
               runtime["isAvailable"] && runtime["platform"] == "iOS"
             end
-            selected = runtimes.max_by { |runtime| version_key(runtime["version"]) }
+            matching = runtimes.select { |runtime| runtime["version"].to_s == ENV.fetch("SIMULATOR_SDK_VERSION") }
+            selected = matching.max_by { |runtime| version_key(runtime["version"]) }
+            selected ||= runtimes.max_by { |runtime| version_key(runtime["version"]) }
             abort("No available iOS simulator runtime found") unless selected
             puts selected.fetch("identifier")
           ')
