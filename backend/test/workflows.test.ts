@@ -49,3 +49,25 @@ test('App Store screenshots workflow uses Ruby compatible with locked fastlane g
 
   assert.match(workflow, /ruby-version: "3\.1"/);
 });
+
+test('App Store screenshots workflow uploads to App Store Connect by default', () => {
+  const workflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
+
+  assert.match(workflow, /upload_to_app_store:[\s\S]*default: "true"/);
+  assert.match(workflow, /bundle exec fastlane ios upload_screenshots/);
+  assert.match(workflow, /APP_STORE_CONNECT_KEY_ID/);
+  assert.match(workflow, /APP_STORE_CONNECT_ISSUER_ID/);
+  assert.match(workflow, /APP_STORE_CONNECT_API_KEY/);
+});
+
+test('Fastlane frames App Store screenshots with marketing copy after capture', () => {
+  const fastfile = readRepoFile('fastlane/Fastfile');
+  const frameScript = readRepoFile('fastlane/scripts/frame_screenshots.swift');
+
+  assert.match(fastfile, /SCREENSHOT_FRAME_SCRIPT/);
+  assert.match(fastfile, /sh\("xcrun", "swift", SCREENSHOT_FRAME_SCRIPT, SCREENSHOT_OUTPUT_PATH\)/);
+  assert.match(frameScript, /A map for\\nyour stuff/);
+  assert.match(frameScript, /Keep essentials\\nclose/);
+  assert.match(frameScript, /Search your\\nwhole home/);
+  assert.match(frameScript, /Save the details\\nthat matter/);
+});
