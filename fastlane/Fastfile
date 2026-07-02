@@ -6,6 +6,7 @@ opt_out_usage
 APP_IDENTIFIER = "com.jimgreco.stufftracker"
 APP_TARGET = "StuffTracker"
 PROJECT_PATH = "ios/StuffTracker.xcodeproj"
+APP_VERSION_CONFIGURATION = "Release"
 SCREENSHOT_SCHEME = "StuffTrackerScreenshots"
 SCREENSHOT_OUTPUT = "fastlane/screenshots"
 SCREENSHOT_FRAME_SCRIPT = File.expand_path("scripts/frame_screenshots.swift", __dir__)
@@ -63,7 +64,8 @@ platform :ios do
     if version_override.empty?
       get_version_number(
         xcodeproj: PROJECT_PATH,
-        target: APP_TARGET
+        target: APP_TARGET,
+        configuration: APP_VERSION_CONFIGURATION
       )
     else
       version_override
