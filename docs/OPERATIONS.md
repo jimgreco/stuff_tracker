@@ -71,7 +71,7 @@ The smoke test creates a short-lived user and a temporary home/item, then delete
 
 ## Subscription Operations
 
-The backend is the source of truth for account plans. Free owned homes are limited to 100 total containers plus items, 5 images, and 5 documents. Active App Store, manual, promo, or admin entitlements remove those limits. Sharing a home requires the home owner to have an active paid entitlement; invited free users can use that paid owner's home with the paid feature set while the owner remains paid.
+The backend is the source of truth for account plans. Free accounts can create homes, locations, and items without a subscription. Free accounts are limited by stored attachment quotas: 5 images and 5 documents. Sharing a home and collaborator access require the home owner to have an active paid entitlement. Active App Store, manual, promo, or admin entitlements remove attachment storage limits and enable sharing.
 
 Configure App Store Connect with these auto-renewable subscription product IDs unless `APP_STORE_SUBSCRIPTION_PRODUCT_IDS` is changed:
 

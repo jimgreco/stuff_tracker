@@ -919,7 +919,6 @@
     const highlighted = state.highlightedItemId === item.id;
     const selected = isItemSelected(home.id, item.id);
     const locked = state.selectionMode && state.selectedHomeId && state.selectedHomeId !== home.id;
-    const photoUrl = firstPhotoUrl(item);
     const chipClasses = [
       "item-chip",
       highlighted ? "is-deep-linked" : "",
@@ -932,7 +931,6 @@
     const selectionLabel = selected ? "Deselect" : "Select";
     return `
       <span class="${chipClasses}" draggable="${draggable ? "true" : "false"}" data-draggable-item data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" data-item-index="${escapeAttr(index)}">
-        ${photoUrl ? renderPhotoThumbnailButton(photoUrl, `${item.name} photo`, "item-chip-photo") : ""}
         <button type="button" class="item-chip-main" data-action="${action}" data-home-id="${escapeAttr(home.id)}" data-location-id="${escapeAttr(item.locationId || "")}" data-item-id="${escapeAttr(item.id)}" ${state.selectionMode ? `aria-pressed="${selected ? "true" : "false"}"` : ""} aria-label="${state.selectionMode ? `${selectionLabel} ${escapeAttr(item.name)}` : `${escapeAttr(item.name)}. Drag to move.`}">
           ${state.selectionMode ? `<span class="selection-check" aria-hidden="true">${selected ? svgIcon("check") : ""}</span>` : ""}
           ${svgIcon(item.icon || "circle.fill")}
@@ -942,10 +940,6 @@
         </button>
       </span>
     `;
-  }
-
-  function firstPhotoUrl(item) {
-    return Array.isArray(item.photoUrls) && item.photoUrls.length ? item.photoUrls[0] : "";
   }
 
   function renderPhotoThumbnailButton(url, title, className = "") {
@@ -1120,8 +1114,8 @@
         <div class="form-list">
           <div class="form-row"><span>Plan</span><strong>${paid ? "Paid" : "Free"}</strong></div>
           ${paid && source ? `<div class="form-row"><span>Source</span><strong>${escapeHtml(titleCase(source))}</strong></div>` : ""}
-          ${!paid ? renderQuotaRow("Containers + Items", plan.usage.totalContainersAndItems, plan.limits.totalContainersAndItems) : ""}
-          ${!paid ? renderQuotaRow("Images", plan.usage.images, plan.limits.images) : ""}
+          ${!paid ? `<div class="full-row"><p class="footnote">Subscribe to Pro in the iOS app to store more photos and documents and share homes with collaborators.</p></div>` : ""}
+          ${!paid ? renderQuotaRow("Photos", plan.usage.images, plan.limits.images) : ""}
           ${!paid ? renderQuotaRow("Documents", plan.usage.documents, plan.limits.documents) : ""}
         </div>
       </section>

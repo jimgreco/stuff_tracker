@@ -1302,13 +1302,6 @@ button:disabled {
   display: block;
 }
 
-.item-chip-photo {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  border-radius: 7px;
-}
-
 .add-chip {
   border-color: rgba(47, 85, 74, 0.20);
   background: rgba(255, 250, 242, 0.62);

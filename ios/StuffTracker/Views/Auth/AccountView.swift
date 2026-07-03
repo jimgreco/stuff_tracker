@@ -286,12 +286,11 @@ struct AccountView: View {
                 }
 
                 if !plan.isPaid {
-                    quotaRow(
-                        title: "Containers + Items",
-                        used: plan.usage.totalContainersAndItems,
-                        limit: plan.limits.totalContainersAndItems
-                    )
-                    quotaRow(title: "Images", used: plan.usage.images, limit: plan.limits.images)
+                    Text("Subscribe to Pro to store more photos and documents and share homes with collaborators.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    quotaRow(title: "Photos", used: plan.usage.images, limit: plan.limits.images)
                     quotaRow(title: "Documents", used: plan.usage.documents, limit: plan.limits.documents)
 
                     if subscriptionStore.products.isEmpty {

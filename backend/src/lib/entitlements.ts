@@ -80,7 +80,7 @@ export async function accountPlan(userId: string): Promise<AccountPlan> {
     limits: FREE_LIMITS,
     usage,
     remaining: {
-      totalContainersAndItems: isPaid ? null : Math.max(0, FREE_LIMITS.totalContainersAndItems - usage.totalContainersAndItems),
+      totalContainersAndItems: null,
       images: isPaid ? null : Math.max(0, FREE_LIMITS.images - usage.images),
       documents: isPaid ? null : Math.max(0, FREE_LIMITS.documents - usage.documents),
     },
@@ -163,24 +163,6 @@ export async function homeOwnerId(homeId: string): Promise<string | null> {
   return rows[0]?.owner_id ?? null;
 }
 
-export async function canCreateContainer(homeId: string): Promise<QuotaDecision | null> {
-  const ownerId = await homeOwnerId(homeId);
-  if (!ownerId) {
-    return null;
-  }
-
-  const plan = await accountPlan(ownerId);
-  if (plan.isPaid || plan.usage.totalContainersAndItems < FREE_LIMITS.totalContainersAndItems) {
-    return null;
-  }
-
-  return quotaBlocked(
-    plan,
-    'free_container_item_limit',
-    `Free accounts can store up to ${FREE_LIMITS.totalContainersAndItems} containers and items. Upgrade to add more.`
-  );
-}
-
 export async function canCreateItem(
   homeId: string,
   photoCount: number,
@@ -196,19 +178,11 @@ export async function canCreateItem(
     return null;
   }
 
-  if (plan.usage.totalContainersAndItems >= FREE_LIMITS.totalContainersAndItems) {
-    return quotaBlocked(
-      plan,
-      'free_container_item_limit',
-      `Free accounts can store up to ${FREE_LIMITS.totalContainersAndItems} containers and items. Upgrade to add more.`
-    );
-  }
-
   if (plan.usage.images + photoCount > FREE_LIMITS.images) {
     return quotaBlocked(
       plan,
       'free_image_limit',
-      `Free accounts can store up to ${FREE_LIMITS.images} images. Upgrade to add more.`
+      imageLimitMessage()
     );
   }
 
@@ -216,7 +190,7 @@ export async function canCreateItem(
     return quotaBlocked(
       plan,
       'free_document_limit',
-      `Free accounts can store up to ${FREE_LIMITS.documents} documents. Upgrade to add more.`
+      documentLimitMessage()
     );
   }
 
@@ -238,7 +212,7 @@ export async function canUploadAttachment(homeId: string, kind: AttachmentKind):
     return quotaBlocked(
       plan,
       'free_image_limit',
-      `Free accounts can store up to ${FREE_LIMITS.images} images. Upgrade to add more.`
+      imageLimitMessage()
     );
   }
 
@@ -246,7 +220,7 @@ export async function canUploadAttachment(homeId: string, kind: AttachmentKind):
     return quotaBlocked(
       plan,
       'free_document_limit',
-      `Free accounts can store up to ${FREE_LIMITS.documents} documents. Upgrade to add more.`
+      documentLimitMessage()
     );
   }
 
@@ -276,7 +250,7 @@ export async function canUpdateItemAttachments(
       return quotaBlocked(
         plan,
         'free_image_limit',
-        `Free accounts can store up to ${FREE_LIMITS.images} images. Upgrade to add more.`
+        imageLimitMessage()
       );
     }
   }
@@ -287,7 +261,7 @@ export async function canUpdateItemAttachments(
       return quotaBlocked(
         plan,
         'free_document_limit',
-        `Free accounts can store up to ${FREE_LIMITS.documents} documents. Upgrade to add more.`
+        documentLimitMessage()
       );
     }
   }
@@ -309,7 +283,7 @@ export async function canShareHome(homeId: string): Promise<QuotaDecision | null
   return quotaBlocked(
     plan,
     'paid_required_for_sharing',
-    'Sharing requires a paid account for the home owner.'
+    'Sharing requires Pro for the home owner. Subscribe to Pro to share homes with collaborators and store more photos and documents.'
   );
 }
 
@@ -321,6 +295,14 @@ function quotaBlocked(plan: AccountPlan, code: string, error: string): QuotaDeci
     code,
     plan,
   };
+}
+
+function imageLimitMessage(): string {
+  return `Free accounts can store up to ${FREE_LIMITS.images} photos. Subscribe to Pro for more photo and document storage plus shared homes.`;
+}
+
+function documentLimitMessage(): string {
+  return `Free accounts can store up to ${FREE_LIMITS.documents} documents. Subscribe to Pro for more photo and document storage plus shared homes.`;
 }
 
 function countValue(value: string | number | null | undefined): number {

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { pool } from '../src/db/pool';
 import {
   accountPlan,
-  canCreateContainer,
   canCreateItem,
   canShareHome,
   canUpdateItemAttachments,
@@ -28,7 +27,7 @@ test('free account plan reports owned-home usage and remaining quota', async () 
   assert.equal(plan.tier, 'free');
   assert.equal(plan.isPaid, false);
   assert.equal(plan.usage.totalContainersAndItems, 75);
-  assert.equal(plan.remaining.totalContainersAndItems, 25);
+  assert.equal(plan.remaining.totalContainersAndItems, null);
   assert.equal(plan.remaining.images, 3);
   assert.equal(plan.remaining.documents, 4);
 });
@@ -52,7 +51,7 @@ test('active manual entitlement makes account paid regardless of usage', async (
   assert.equal(plan.remaining.totalContainersAndItems, null);
 });
 
-test('free home owner is blocked at container, item, attachment, and sharing limits', async () => {
+test('free home owner is blocked only at attachment storage limits', async () => {
   mockEntitlementQueries({
     ownerId: 'owner-1',
     entitlementRows: [],
@@ -64,14 +63,13 @@ test('free home owner is blocked at container, item, attachment, and sharing lim
     },
   });
 
-  assert.equal((await canCreateContainer('home-1'))?.code, 'free_container_item_limit');
-  assert.equal((await canCreateItem('home-1', 0, 0))?.code, 'free_container_item_limit');
+  assert.equal(await canCreateItem('home-1', 0, 0), null);
   assert.equal((await canUploadAttachment('home-1', 'photo'))?.code, 'free_image_limit');
   assert.equal((await canUploadAttachment('home-1', 'document'))?.code, 'free_document_limit');
   assert.equal((await canShareHome('home-1'))?.code, 'paid_required_for_sharing');
 });
 
-test('paid home owner can share and collaborators can add beyond free limits', async () => {
+test('paid home owner can share and store attachments beyond free limits', async () => {
   mockEntitlementQueries({
     ownerId: 'owner-1',
     entitlementRows: [{
@@ -83,7 +81,6 @@ test('paid home owner can share and collaborators can add beyond free limits', a
     usage: { containers: 200, items: 200, images: 200, documents: 200 },
   });
 
-  assert.equal(await canCreateContainer('home-1'), null);
   assert.equal(await canCreateItem('home-1', 10, 10), null);
   assert.equal(await canUploadAttachment('home-1', 'photo'), null);
   assert.equal(await canShareHome('home-1'), null);
