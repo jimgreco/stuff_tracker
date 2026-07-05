@@ -12,7 +12,7 @@
   };
 
   const DEFAULT_API_BASE_URL = defaultApiBaseUrl();
-  const APP_ICON_URL = "/assets/app-icon.png?v=20260531-ios-cubby";
+  const APP_ICON_URL = "/assets/app-icon.png?v=20260705-layered-icon";
   const STORED_TOKEN = localStorage.getItem(STORAGE.token) || "";
   const STORED_REFRESH_TOKEN = localStorage.getItem(STORAGE.refreshToken) || "";
   const HAS_STORED_SESSION = Boolean(STORED_TOKEN || STORED_REFRESH_TOKEN);
