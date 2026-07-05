@@ -62,13 +62,13 @@ export function createApp() {
 
   app.use('/auth', authRateLimit, authRouter);
   app.use('/account', accountRouter);
-  app.use('/admin', adminRouter);
   app.use('/app-store', appStoreRouter);
   app.use('/homes', homesRouter);
   app.use('/homes/:homeId/locations', locationsRouter);
   app.use('/homes/:homeId/items', itemsRouter);
 
   configureStaticWeb(app);
+  app.use('/admin', adminRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
@@ -115,7 +115,7 @@ function configureStaticWeb(app: ReturnType<typeof express>): void {
   app.use(express.static(webRoot, { index: false }));
   app.use('/web', express.static(webRoot, { index: false }));
   app.get(['/items/:homeId/:itemId', '/web/items/:homeId/:itemId'], sendSharedItemIndex);
-  app.get(['/', '/web', '/web/'], sendIndex);
+  app.get(['/', '/web', '/web/', '/admin', '/admin/'], sendIndex);
 }
 
 type SharedItemMetadata = {

@@ -17,6 +17,7 @@
   const STORED_REFRESH_TOKEN = localStorage.getItem(STORAGE.refreshToken) || "";
   const HAS_STORED_SESSION = Boolean(STORED_TOKEN || STORED_REFRESH_TOKEN);
   const INITIAL_ITEM_LINK = parseItemDeepLink(window.location);
+  const IS_ADMIN_ROUTE = isAdminRoute(window.location);
   const app = document.getElementById("app");
 
   const state = {
@@ -33,7 +34,7 @@
     isLoading: false,
     toast: "",
     toastTimer: null,
-    sheet: null,
+    sheet: IS_ADMIN_ROUTE ? { type: "account" } : null,
     photoPreview: null,
     isUploadingAttachment: false,
     actionMenu: null,
@@ -173,6 +174,10 @@
       homeId,
       itemId,
     };
+  }
+
+  function isAdminRoute(location) {
+    return location.pathname === "/admin" || location.pathname === "/admin/";
   }
 
   function decodePathPart(value) {
@@ -3277,6 +3282,10 @@
   render();
 
   if (state.pendingItemLink && !hasAuthSession() && !state.authConfigLoaded) {
+    void loadAuthConfig();
+  }
+
+  if (IS_ADMIN_ROUTE && !hasAuthSession() && !state.authConfigLoaded) {
     void loadAuthConfig();
   }
 
