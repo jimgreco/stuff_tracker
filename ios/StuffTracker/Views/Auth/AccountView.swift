@@ -290,6 +290,7 @@ struct AccountView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                    quotaRow(title: "Homes", used: plan.usage.homes, limit: plan.limits.homes)
                     quotaRow(title: "Photos", used: plan.usage.images, limit: plan.limits.images)
                     quotaRow(title: "Documents", used: plan.usage.documents, limit: plan.limits.documents)
 
@@ -299,27 +300,7 @@ struct AccountView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(subscriptionStore.products, id: \.id) { product in
-                            Button {
-                                guard let userId = authStore.currentUser?.id else { return }
-                                Task { await subscriptionStore.purchase(product, userId: userId) }
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(product.displayName)
-                                            .foregroundStyle(.primary)
-                                        if !product.description.isEmpty {
-                                            Text(product.description)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(2)
-                                        }
-                                    }
-                                    Spacer()
-                                    Text(product.displayPrice)
-                                        .font(.body.weight(.semibold))
-                                }
-                            }
-                            .disabled(subscriptionStore.isLoading)
+                            subscriptionProductButton(product)
                         }
                     }
                 } else if let entitlement = plan.entitlement {
@@ -360,6 +341,34 @@ struct AccountView: View {
             }
         }
         .cubbySheetRows()
+    }
+
+    private func subscriptionProductButton(_ product: Product) -> some View {
+        Button {
+            guard let userId = authStore.currentUser?.id else { return }
+            Task { await subscriptionStore.purchase(product, userId: userId) }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Subscribe \(product.displayName)")
+                        .font(.body.weight(.semibold))
+                    if !product.description.isEmpty {
+                        Text(product.description)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 12)
+                Text(product.displayPrice)
+                    .font(.body.weight(.bold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(CubbyTheme.green)
+        .disabled(subscriptionStore.isLoading)
     }
 
     private func quotaRow(title: String, used: Int, limit: Int) -> some View {

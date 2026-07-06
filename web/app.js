@@ -1119,7 +1119,8 @@
         <div class="form-list">
           <div class="form-row"><span>Plan</span><strong>${paid ? "Paid" : "Free"}</strong></div>
           ${paid && source ? `<div class="form-row"><span>Source</span><strong>${escapeHtml(titleCase(source))}</strong></div>` : ""}
-          ${!paid ? `<div class="full-row"><p class="footnote">Subscribe to Pro in the iOS app to store more photos and documents and share homes with collaborators.</p></div>` : ""}
+          ${!paid ? `<div class="full-row"><p class="footnote">Subscribe to Pro in the iOS app to add more homes, photos, documents, and collaborators.</p></div>` : ""}
+          ${!paid ? renderQuotaRow("Homes", plan.usage.homes, plan.limits.homes) : ""}
           ${!paid ? renderQuotaRow("Photos", plan.usage.images, plan.limits.images) : ""}
           ${!paid ? renderQuotaRow("Documents", plan.usage.documents, plan.limits.documents) : ""}
         </div>

@@ -157,6 +157,7 @@ private extension Location.LocationType {
 
 struct ContentView: View {
     @EnvironmentObject var authStore: AuthStore
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @EnvironmentObject private var deepLinkStore: DeepLinkStore
     @EnvironmentObject private var tutorialController: FirstRunTutorialController
     @StateObject private var homeStore = HomeStore()
@@ -340,6 +341,7 @@ struct ContentView: View {
                 }
                     .environmentObject(authStore)
                     .environmentObject(SyncManager.shared)
+                    .environmentObject(subscriptionStore)
             }
             .sheet(isPresented: $showBulkMoveSheet) {
                 if let home = selectedHomeForActions {
@@ -436,6 +438,11 @@ struct ContentView: View {
     }
 
     private func presentHomeComposer() {
+        if shouldGateAdditionalHome {
+            presentSubscriptionSheet()
+            return
+        }
+
         dismissSearchInput()
         itemComposer.dismiss()
         hierarchyComposer.presentHome()
@@ -448,10 +455,33 @@ struct ContentView: View {
 
         switch target {
         case .home:
+            if shouldGateAdditionalHome {
+                presentSubscriptionSheet()
+                return
+            }
             homeStore.createHome(name: name)
         case .location(let homeId, let parentId, let type):
             homeStore.createLocation(homeId: homeId, name: name, parentId: parentId, type: type.rawValue)
         }
+    }
+
+    private var shouldGateAdditionalHome: Bool {
+        guard authStore.isAuthenticated, subscriptionStore.plan?.isPaid != true else {
+            return false
+        }
+        return ownedHomeCount >= (subscriptionStore.plan?.limits.homes ?? 1)
+    }
+
+    private var ownedHomeCount: Int {
+        return homeStore.homeDetails.filter { $0.role == "owner" }.count
+    }
+
+    private func presentSubscriptionSheet() {
+        dismissSearchInput()
+        itemComposer.dismiss()
+        hierarchyComposer.dismiss()
+        showAccountSheet = true
+        Task { await subscriptionStore.refresh() }
     }
 
     private var selectedHomeForActions: HomeDetail? {

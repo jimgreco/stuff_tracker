@@ -29,12 +29,14 @@ struct AccountEntitlement: Codable {
 }
 
 struct AccountQuotaLimits: Codable {
+    let homes: Int
     let totalContainersAndItems: Int
     let images: Int
     let documents: Int
 }
 
 struct AccountQuotaUsage: Codable {
+    let homes: Int
     let containers: Int
     let items: Int
     let totalContainersAndItems: Int
@@ -43,6 +45,7 @@ struct AccountQuotaUsage: Codable {
 }
 
 struct AccountQuotaRemaining: Codable {
+    let homes: Int?
     let totalContainersAndItems: Int?
     let images: Int?
     let documents: Int?

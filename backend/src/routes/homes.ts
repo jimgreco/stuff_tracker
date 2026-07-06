@@ -4,7 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canAdmin } from '../lib/access';
 import { HomeSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
 import { signItemsAttachmentUrls } from '../lib/attachmentResponses';
-import { canShareHome, type QuotaDecision } from '../lib/entitlements';
+import { canCreateHome, canShareHome, type QuotaDecision } from '../lib/entitlements';
 
 const router = Router();
 router.use(requireAuth);
@@ -38,6 +38,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 // ── Create home ────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
   const { name, icon, is_flagged } = HomeSchema.parse(req.body);
+  const quota = await canCreateHome(req.user!.userId);
+  if (quota) { sendQuota(res, quota); return; }
+
   const { rows } = await pool.query(
     `INSERT INTO homes (name, icon, is_flagged, owner_id) VALUES ($1, $2, $3, $4)
      RETURNING id, name, icon, is_flagged, owner_id, created_at`,

@@ -1,6 +1,7 @@
 import { pool } from '../db/pool';
 
 export const FREE_LIMITS = {
+  homes: 1,
   totalContainersAndItems: 100,
   images: 5,
   documents: 5,
@@ -27,6 +28,7 @@ export type ActiveEntitlement = {
 };
 
 export type QuotaUsage = {
+  homes: number;
   containers: number;
   items: number;
   totalContainersAndItems: number;
@@ -35,6 +37,7 @@ export type QuotaUsage = {
 };
 
 export type QuotaRemaining = {
+  homes: number | null;
   totalContainersAndItems: number | null;
   images: number | null;
   documents: number | null;
@@ -60,6 +63,7 @@ type EntitlementRow = {
 };
 
 type UsageRow = {
+  homes: string | number | null;
   containers: string | number | null;
   items: string | number | null;
   images: string | number | null;
@@ -80,6 +84,7 @@ export async function accountPlan(userId: string): Promise<AccountPlan> {
     limits: FREE_LIMITS,
     usage,
     remaining: {
+      homes: isPaid ? null : Math.max(0, FREE_LIMITS.homes - usage.homes),
       totalContainersAndItems: null,
       images: isPaid ? null : Math.max(0, FREE_LIMITS.images - usage.images),
       documents: isPaid ? null : Math.max(0, FREE_LIMITS.documents - usage.documents),
@@ -121,6 +126,11 @@ export async function quotaUsage(userId: string): Promise<QuotaUsage> {
     `SELECT
        COALESCE((
          SELECT COUNT(*)
+         FROM homes h
+         WHERE h.owner_id = $1
+       ), 0) AS homes,
+       COALESCE((
+         SELECT COUNT(*)
          FROM locations l
          JOIN homes h ON h.id = l.home_id
          WHERE h.owner_id = $1 AND l.type = 'container'
@@ -146,10 +156,11 @@ export async function quotaUsage(userId: string): Promise<QuotaUsage> {
     [userId]
   );
 
-  const row = rows[0] ?? { containers: 0, items: 0, images: 0, documents: 0 };
+  const row = rows[0] ?? { homes: 0, containers: 0, items: 0, images: 0, documents: 0 };
   const containers = countValue(row.containers);
   const items = countValue(row.items);
   return {
+    homes: countValue(row.homes),
     containers,
     items,
     totalContainersAndItems: containers + items,
@@ -161,6 +172,23 @@ export async function quotaUsage(userId: string): Promise<QuotaUsage> {
 export async function homeOwnerId(homeId: string): Promise<string | null> {
   const { rows } = await pool.query<OwnerRow>('SELECT owner_id FROM homes WHERE id = $1', [homeId]);
   return rows[0]?.owner_id ?? null;
+}
+
+export async function canCreateHome(userId: string): Promise<QuotaDecision | null> {
+  const plan = await accountPlan(userId);
+  if (plan.isPaid) {
+    return null;
+  }
+
+  if (plan.usage.homes >= FREE_LIMITS.homes) {
+    return quotaBlocked(
+      plan,
+      'free_home_limit',
+      homeLimitMessage()
+    );
+  }
+
+  return null;
 }
 
 export async function canCreateItem(
@@ -178,19 +206,19 @@ export async function canCreateItem(
     return null;
   }
 
-  if (plan.usage.images + photoCount > FREE_LIMITS.images) {
+  if (photoCount > 0) {
     return quotaBlocked(
       plan,
-      'free_image_limit',
-      imageLimitMessage()
+      'paid_required_for_photos',
+      photoRequiredMessage()
     );
   }
 
-  if (plan.usage.documents + documentCount > FREE_LIMITS.documents) {
+  if (documentCount > 0) {
     return quotaBlocked(
       plan,
-      'free_document_limit',
-      documentLimitMessage()
+      'paid_required_for_documents',
+      documentRequiredMessage()
     );
   }
 
@@ -208,19 +236,19 @@ export async function canUploadAttachment(homeId: string, kind: AttachmentKind):
     return null;
   }
 
-  if (kind === 'photo' && plan.usage.images >= FREE_LIMITS.images) {
+  if (kind === 'photo') {
     return quotaBlocked(
       plan,
-      'free_image_limit',
-      imageLimitMessage()
+      'paid_required_for_photos',
+      photoRequiredMessage()
     );
   }
 
-  if (kind === 'document' && plan.usage.documents >= FREE_LIMITS.documents) {
+  if (kind === 'document') {
     return quotaBlocked(
       plan,
-      'free_document_limit',
-      documentLimitMessage()
+      'paid_required_for_documents',
+      documentRequiredMessage()
     );
   }
 
@@ -245,23 +273,21 @@ export async function canUpdateItemAttachments(
   }
 
   if (nextPhotoCount !== undefined) {
-    const projectedImages = plan.usage.images - currentPhotoCount + nextPhotoCount;
-    if (projectedImages > FREE_LIMITS.images) {
+    if (nextPhotoCount > currentPhotoCount) {
       return quotaBlocked(
         plan,
-        'free_image_limit',
-        imageLimitMessage()
+        'paid_required_for_photos',
+        photoRequiredMessage()
       );
     }
   }
 
   if (nextDocumentCount !== undefined) {
-    const projectedDocuments = plan.usage.documents - currentDocumentCount + nextDocumentCount;
-    if (projectedDocuments > FREE_LIMITS.documents) {
+    if (nextDocumentCount > currentDocumentCount) {
       return quotaBlocked(
         plan,
-        'free_document_limit',
-        documentLimitMessage()
+        'paid_required_for_documents',
+        documentRequiredMessage()
       );
     }
   }
@@ -297,12 +323,16 @@ function quotaBlocked(plan: AccountPlan, code: string, error: string): QuotaDeci
   };
 }
 
-function imageLimitMessage(): string {
-  return `Free accounts can store up to ${FREE_LIMITS.images} photos. Subscribe to Pro for more photo and document storage plus shared homes.`;
+function homeLimitMessage(): string {
+  return `Free accounts can create one home. Subscribe to Pro to add more homes, photos, documents, and collaborators.`;
 }
 
-function documentLimitMessage(): string {
-  return `Free accounts can store up to ${FREE_LIMITS.documents} documents. Subscribe to Pro for more photo and document storage plus shared homes.`;
+function photoRequiredMessage(): string {
+  return 'Adding photos requires Pro. Subscribe to Pro to store photos and documents and share homes with collaborators.';
+}
+
+function documentRequiredMessage(): string {
+  return 'Adding documents requires Pro. Subscribe to Pro to store photos and documents and share homes with collaborators.';
 }
 
 function countValue(value: string | number | null | undefined): number {

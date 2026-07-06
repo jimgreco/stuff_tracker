@@ -182,6 +182,9 @@ struct ItemEditView: View {
     let item: Item
     @ObservedObject var homeStore: HomeStore
     let homeId: String
+    @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var syncManager: SyncManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
@@ -217,6 +220,7 @@ struct ItemEditView: View {
     @State private var documentDropPlacement: ReorderDropPlacement?
     @State private var documentFrames: [String: CGRect] = [:]
     @State private var showDocumentImporter = false
+    @State private var showSubscriptionSheet = false
     @State private var attachmentError: String?
 
     private let editorListInsets = EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20)
@@ -292,6 +296,12 @@ struct ItemEditView: View {
             .sheet(isPresented: $showIconPicker) {
                 IconPickerView(selectedIcon: $selectedIcon)
             }
+            .sheet(isPresented: $showSubscriptionSheet) {
+                AccountView(homeStore: homeStore)
+                    .environmentObject(authStore)
+                    .environmentObject(subscriptionStore)
+                    .environmentObject(syncManager)
+            }
             .fullScreenCover(item: $viewedPhotoAttachment) { attachment in
                 PhotoAttachmentViewer(attachment: attachment)
             }
@@ -304,6 +314,11 @@ struct ItemEditView: View {
                 handleDocumentImport(result)
             }
             .onChange(of: selectedPhotoItems) { _, newItems in
+                if shouldGateHostedAttachmentAdds {
+                    selectedPhotoItems = []
+                    presentSubscriptionGate()
+                    return
+                }
                 Task { await loadPhotos(newItems) }
             }
             .alert("Attachment Error", isPresented: Binding(
@@ -508,13 +523,24 @@ struct ItemEditView: View {
                 }
             }
 
-            PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
-                Label("Choose Photos", systemImage: "photo.on.rectangle")
+            if shouldGateHostedAttachmentAdds {
+                Button {
+                    presentSubscriptionGate()
+                } label: {
+                    Label("Choose Photos", systemImage: "photo.on.rectangle")
+                }
+                .listRowInsets(editorActionInsets)
+            } else {
+                PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 20, matching: .images) {
+                    Label("Choose Photos", systemImage: "photo.on.rectangle")
+                }
+                .listRowInsets(editorActionInsets)
             }
-            .listRowInsets(editorActionInsets)
 
             Button {
-                if CameraCaptureView.isAvailable {
+                if shouldGateHostedAttachmentAdds {
+                    presentSubscriptionGate()
+                } else if CameraCaptureView.isAvailable {
                     showCamera = true
                 } else {
                     attachmentError = ItemEditError.cameraUnavailable.localizedDescription
@@ -522,7 +548,7 @@ struct ItemEditView: View {
             } label: {
                 Label("Take Photo", systemImage: "camera.fill")
             }
-            .disabled(!CameraCaptureView.isAvailable)
+            .disabled(!shouldGateHostedAttachmentAdds && !CameraCaptureView.isAvailable)
             .listRowInsets(editorActionInsets)
         }
     }
@@ -572,7 +598,11 @@ struct ItemEditView: View {
             }
 
             Button {
-                showDocumentImporter = true
+                if shouldGateHostedAttachmentAdds {
+                    presentSubscriptionGate()
+                } else {
+                    showDocumentImporter = true
+                }
             } label: {
                 Label("Add Documents", systemImage: "doc.badge.plus")
             }
@@ -878,6 +908,12 @@ struct ItemEditView: View {
     @MainActor
     private func loadPhotos(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
+        guard !shouldGateHostedAttachmentAdds else {
+            selectedPhotoItems = []
+            presentSubscriptionGate()
+            return
+        }
+
         for item in items {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
@@ -902,6 +938,11 @@ struct ItemEditView: View {
     }
 
     private func handleDocumentImport(_ result: Result<[URL], Error>) {
+        guard !shouldGateHostedAttachmentAdds else {
+            presentSubscriptionGate()
+            return
+        }
+
         do {
             for url in try result.get() {
                 let didAccess = url.startAccessingSecurityScopedResource()
@@ -930,6 +971,11 @@ struct ItemEditView: View {
 
     @MainActor
     private func handleCameraCapture(_ result: Result<UIImage, Error>) {
+        guard !shouldGateHostedAttachmentAdds else {
+            presentSubscriptionGate()
+            return
+        }
+
         do {
             let image = try result.get()
             let data = try sanitizedJPEGData(from: image, failure: .cameraCaptureFailed)
@@ -1042,10 +1088,33 @@ struct ItemEditView: View {
                 homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)
                 dismiss()
             } catch {
-                attachmentError = error.localizedDescription
+                if isSubscriptionRequired(error) {
+                    presentSubscriptionGate()
+                } else {
+                    attachmentError = error.localizedDescription
+                }
                 isSaving = false
             }
         }
+    }
+
+    private var shouldGateHostedAttachmentAdds: Bool {
+        homeStore.isAuthenticated && subscriptionStore.plan?.isPaid != true
+    }
+
+    private func presentSubscriptionGate() {
+        attachmentError = nil
+        showCamera = false
+        showDocumentImporter = false
+        showSubscriptionSheet = true
+        Task { await subscriptionStore.refresh() }
+    }
+
+    private func isSubscriptionRequired(_ error: Error) -> Bool {
+        if case APIError.httpError(let status, _) = error {
+            return status == 402
+        }
+        return false
     }
 }
 
