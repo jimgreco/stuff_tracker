@@ -167,16 +167,16 @@ func drawBackground(size: NSSize, design: ScreenshotDesign) {
     lowerBand.fill()
 }
 
-func drawCopy(size: NSSize, design: ScreenshotDesign, frame: DeviceFrame) {
+func drawCopy(size: NSSize, design: ScreenshotDesign, frame _: DeviceFrame) {
     let textColor = NSColor(hex: "#15191C")
-    let headlineFontSize = min(frame == .phone ? 88 : 124, size.width * (frame == .phone ? 0.067 : 0.056))
-    let subcopyFontSize = min(frame == .phone ? 34 : 46, size.width * (frame == .phone ? 0.026 : 0.022))
+    let headlineFontSize = min(106, size.width * 0.082)
+    let subcopyFontSize = min(43, size.width * 0.033)
     let headlineFont = NSFont.systemFont(ofSize: headlineFontSize, weight: .heavy)
     let subcopyFont = NSFont.systemFont(ofSize: subcopyFontSize, weight: .medium)
     let paragraph = NSMutableParagraphStyle()
     paragraph.alignment = .center
     paragraph.lineBreakMode = .byWordWrapping
-    paragraph.lineSpacing = frame == .phone ? 2 : 4
+    paragraph.lineSpacing = 2
 
     let headlineAttributes: [NSAttributedString.Key: Any] = [
         .font: headlineFont,
@@ -190,17 +190,17 @@ func drawCopy(size: NSSize, design: ScreenshotDesign, frame: DeviceFrame) {
     ]
 
     let headlineRect = rectFromTop(
-        x: size.width * 0.08,
-        y: size.height * 0.055,
-        width: size.width * 0.84,
-        height: size.height * 0.145,
+        x: size.width * 0.09,
+        y: size.height * 0.045,
+        width: size.width * 0.82,
+        height: size.height * 0.120,
         canvasHeight: size.height
     )
     let subcopyRect = rectFromTop(
-        x: size.width * (frame == .phone ? 0.13 : 0.17),
-        y: size.height * 0.213,
-        width: size.width * (frame == .phone ? 0.74 : 0.66),
-        height: size.height * 0.078,
+        x: size.width * 0.13,
+        y: size.height * 0.155,
+        width: size.width * 0.74,
+        height: size.height * 0.055,
         canvasHeight: size.height
     )
 
@@ -216,10 +216,10 @@ func drawCopy(size: NSSize, design: ScreenshotDesign, frame: DeviceFrame) {
 
 func drawDevice(sourceImage: NSImage, canvasSize: NSSize, frame: DeviceFrame) {
     let aspect = sourceImage.size.height / sourceImage.size.width
-    let frameInset = max(frame == .phone ? 28 : 24, canvasSize.width * (frame == .phone ? 0.026 : 0.018))
-    let deviceTop = canvasSize.height * (frame == .phone ? 0.292 : 0.315)
+    let frameInset = frame == .tablet ? max(26, canvasSize.width * 0.018) : max(28, canvasSize.width * 0.026)
+    let deviceTop = canvasSize.height * 0.205
     let bottomMargin = canvasSize.height * 0.035
-    let maxOuterWidth = canvasSize.width * (frame == .phone ? 0.77 : 0.86)
+    let maxOuterWidth = canvasSize.width * (frame == .tablet ? 0.88 : 0.78)
     let maxOuterHeight = canvasSize.height - deviceTop - bottomMargin
     let screenWidth = min(maxOuterWidth - frameInset * 2, (maxOuterHeight - frameInset * 2) / aspect)
     let screenHeight = screenWidth * aspect
