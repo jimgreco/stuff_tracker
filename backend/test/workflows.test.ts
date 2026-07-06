@@ -55,6 +55,7 @@ test('App Store screenshots workflow uploads to App Store Connect by default', (
   const workflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
 
   assert.match(workflow, /upload_to_app_store:[\s\S]*default: "true"/);
+  assert.match(workflow, /default: "iPhone 17 Pro Max,iPad Pro 13-inch \(M5\)"/);
   assert.match(workflow, /bundle exec fastlane ios upload_screenshots/);
   assert.match(workflow, /APP_STORE_CONNECT_KEY_ID/);
   assert.match(workflow, /APP_STORE_CONNECT_ISSUER_ID/);
@@ -71,4 +72,16 @@ test('Fastlane frames App Store screenshots with marketing copy after capture', 
   assert.match(frameScript, /Keep essentials\\nclose/);
   assert.match(frameScript, /Search your\\nwhole home/);
   assert.match(frameScript, /Save the details\\nthat matter/);
+});
+
+test('Fastlane validates four framed screenshots for each generated device before upload', () => {
+  const fastfile = readRepoFile('fastlane/Fastfile');
+  const snapfile = readRepoFile('fastlane/Snapfile');
+
+  assert.match(fastfile, /EXPECTED_SCREENSHOT_IDS = \[/);
+  assert.match(fastfile, /validate_screenshot_upload_set/);
+  assert.match(fastfile, /screenshots_by_device/);
+  assert.match(fastfile, /screenshot_ids\.sort == EXPECTED_SCREENSHOT_IDS/);
+  assert.match(fastfile, /iPad Pro 13-inch \(M5\)/);
+  assert.match(snapfile, /iPhone 17 Pro Max,iPad Pro 13-inch \(M5\)/);
 });

@@ -9,7 +9,7 @@ bundle install
 bundle exec fastlane ios screenshots
 ```
 
-Screenshots are written to `fastlane/screenshots/` as framed JPGs. To override the default devices:
+Screenshots are written to `fastlane/screenshots/` as four framed JPGs per device. To override the default devices:
 
 ```sh
 SCREENSHOT_DEVICES="iPhone 17 Pro Max,iPad Pro 13-inch (M5)" bundle exec fastlane ios screenshots
@@ -39,7 +39,7 @@ bundle exec fastlane ios screenshots_and_upload
 
 Run **App Store Screenshots** from the Actions tab.
 
-- Leave `upload_to_app_store` as `true` to generate the review artifact and replace screenshots in App Store Connect.
+- Leave `upload_to_app_store` as `true` to generate the review artifact and replace screenshots in App Store Connect. The upload lane expects exactly four framed screenshots for each generated device.
 - Set `upload_to_app_store` to `false` only when you want a review artifact without changing App Store Connect.
 - Use `app_store_version` only when App Store Connect needs a version different from the checked-in Xcode `MARKETING_VERSION`.
 - The workflow uses the same `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY` secrets as the TestFlight workflow.

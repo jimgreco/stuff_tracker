@@ -11,10 +11,20 @@ SCREENSHOT_SCHEME = "StuffTrackerScreenshots"
 SCREENSHOT_OUTPUT = "fastlane/screenshots"
 SCREENSHOT_FRAME_SCRIPT = File.expand_path("scripts/frame_screenshots.swift", __dir__)
 SCREENSHOT_OUTPUT_PATH = File.expand_path("../#{SCREENSHOT_OUTPUT}", __dir__)
+EXPECTED_SCREENSHOT_IDS = [
+  "01-Home-Hierarchy",
+  "02-Flagged-Items",
+  "03-Search",
+  "04-Item-Details"
+].freeze
 
 def screenshot_devices
   raw_devices = ENV["SCREENSHOT_DEVICES"] || "iPhone 17 Pro Max,iPad Pro 13-inch (M5)"
   raw_devices.split(",").map(&:strip).reject(&:empty?)
+end
+
+def relative_screenshot_paths(paths)
+  paths.map { |path| path.sub(%r{\A#{Regexp.escape(SCREENSHOT_OUTPUT)}/?}, '') }.sort
 end
 
 platform :ios do
@@ -39,6 +49,7 @@ platform :ios do
 
   desc "Upload generated screenshots to the current Xcode marketing version in App Store Connect"
   lane :upload_screenshots do
+    validate_screenshot_upload_set
     upload_to_app_store(
       api_key: app_store_api_key,
       app_identifier: APP_IDENTIFIER,
@@ -70,6 +81,34 @@ platform :ios do
     else
       version_override
     end
+  end
+
+  private_lane :validate_screenshot_upload_set do
+    uploadable_screenshots = Dir.glob(File.join(SCREENSHOT_OUTPUT, "**", "*.{jpg,jpeg,png}"))
+    screenshots_by_device = Hash.new { |screenshots, device| screenshots[device] = [] }
+    unexpected_screenshots = []
+
+    uploadable_screenshots.each do |path|
+      basename = File.basename(path, File.extname(path))
+      match = basename.match(/\A(.+?)-(\d{2}-.+)\z/)
+      if match
+        screenshots_by_device[match[1]] << match[2]
+      else
+        unexpected_screenshots << path
+      end
+    end
+
+    errors = []
+    errors << "unexpected files: #{relative_screenshot_paths(unexpected_screenshots).join(', ')}" if unexpected_screenshots.any?
+    errors << "no framed screenshots found" if screenshots_by_device.empty?
+
+    screenshots_by_device.each do |device, screenshot_ids|
+      next if screenshot_ids.sort == EXPECTED_SCREENSHOT_IDS
+
+      errors << "#{device} has #{screenshot_ids.length} screenshots: #{screenshot_ids.sort.join(', ')}"
+    end
+
+    UI.user_error!("Invalid screenshot upload set: #{errors.join('; ')}") if errors.any?
   end
 
   private_lane :app_store_api_key do
