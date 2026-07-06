@@ -54,7 +54,7 @@ platform :ios do
       api_key: app_store_api_key,
       app_identifier: APP_IDENTIFIER,
       app_version: app_store_version,
-      screenshots_path: SCREENSHOT_OUTPUT,
+      screenshots_path: SCREENSHOT_OUTPUT_PATH,
       skip_binary_upload: true,
       skip_metadata: true,
       overwrite_screenshots: true,
@@ -84,7 +84,7 @@ platform :ios do
   end
 
   private_lane :validate_screenshot_upload_set do
-    uploadable_screenshots = Dir.glob(File.join(SCREENSHOT_OUTPUT, "**", "*.{jpg,jpeg,png}"))
+    uploadable_screenshots = Dir.glob(File.join(SCREENSHOT_OUTPUT_PATH, "**", "*.{jpg,jpeg,png}"))
     screenshots_by_device = Hash.new { |screenshots, device| screenshots[device] = [] }
     unexpected_screenshots = []
 

@@ -80,6 +80,8 @@ test('Fastlane validates four framed screenshots for each generated device befor
 
   assert.match(fastfile, /EXPECTED_SCREENSHOT_IDS = \[/);
   assert.match(fastfile, /validate_screenshot_upload_set/);
+  assert.match(fastfile, /screenshots_path: SCREENSHOT_OUTPUT_PATH/);
+  assert.match(fastfile, /File\.join\(SCREENSHOT_OUTPUT_PATH, "\*\*", "\*.\{jpg,jpeg,png\}"\)/);
   assert.match(fastfile, /screenshots_by_device/);
   assert.match(fastfile, /screenshot_ids\.sort == EXPECTED_SCREENSHOT_IDS/);
   assert.match(fastfile, /iPad Pro 13-inch \(M5\)/);
