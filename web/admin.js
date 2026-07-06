@@ -15,6 +15,7 @@
     authConfig: null,
     overview: null,
     loading: false,
+    updatingUserId: "",
     status: "",
     error: "",
   };
@@ -169,6 +170,39 @@
     }
   }
 
+  async function updateManualEntitlement(userId, makePaid) {
+    const user = findOverviewUser(userId);
+    const email = user?.email || "this user";
+    if (!makePaid && !window.confirm(`Set ${email} back to the free plan?`)) {
+      return;
+    }
+
+    state.loading = true;
+    state.updatingUserId = userId;
+    state.error = "";
+    render();
+    try {
+      const result = await apiRequest(`/admin/users/${encodeURIComponent(userId)}/manual-entitlement`, {
+        method: makePaid ? "POST" : "DELETE",
+      });
+      await loadOverview();
+      if (makePaid) {
+        state.status = `${email} is manually paid`;
+      } else if (result.plan?.isPaid) {
+        const source = titleCase(result.plan.entitlement?.source || "paid");
+        state.status = `Manual access removed for ${email}; account is still paid via ${source}`;
+      } else {
+        state.status = `${email} is back on the free plan`;
+      }
+    } catch (error) {
+      state.error = error.message || String(error);
+    } finally {
+      state.loading = false;
+      state.updatingUserId = "";
+      render();
+    }
+  }
+
   function render() {
     app.innerHTML = state.token ? renderDashboard() : renderGate();
     requestAnimationFrame(renderGoogleButton);
@@ -256,7 +290,7 @@
                 <th>Homes</th>
                 <th>Shared</th>
                 <th>Items</th>
-                <th>Entitlement</th>
+                <th>Plan</th>
                 <th>Sessions</th>
                 <th>Last Seen</th>
                 <th>Joined</th>
@@ -285,7 +319,7 @@
         <td>${number(user.home_count)}</td>
         <td>${number(user.shared_home_count)}</td>
         <td>${number(user.item_count)}</td>
-        <td>${renderEntitlement(user)}</td>
+        <td>${renderPlanControl(user)}</td>
         <td>${number(user.active_session_count)}</td>
         <td class="date-cell">${formatDateTime(user.last_seen_at)}</td>
         <td class="date-cell">${formatDateTime(user.created_at)}</td>
@@ -293,10 +327,53 @@
     `;
   }
 
+  function renderPlanControl(user) {
+    const source = user.active_entitlement_source || "";
+    const manualSource = source === "manual" || source === "promo" || source === "admin";
+    const busy = state.updatingUserId === user.id;
+    const controls = [];
+    if (!source) {
+      controls.push(`
+        <button
+          type="button"
+          class="admin-button compact primary"
+          data-action="make-paid"
+          data-user-id="${escapeAttr(user.id)}"
+          ${state.loading ? "disabled" : ""}
+        >Make Paid</button>
+      `);
+    } else if (manualSource) {
+      controls.push(`
+        <button
+          type="button"
+          class="admin-button compact danger"
+          data-action="make-free"
+          data-user-id="${escapeAttr(user.id)}"
+          ${state.loading ? "disabled" : ""}
+        >Make Free</button>
+      `);
+    } else {
+      controls.push(`<span class="plan-note">Managed by App Store</span>`);
+    }
+
+    return `
+      <div class="plan-cell">
+        ${renderEntitlement(user)}
+        <div class="plan-controls">
+          ${busy ? `<span class="plan-note">Updating</span>` : controls.join("")}
+        </div>
+      </div>
+    `;
+  }
+
   function renderEntitlement(user) {
     if (!user.active_entitlement_source) return `<span class="pill empty">Free</span>`;
     const suffix = user.active_entitlement_expires_at ? ` until ${formatDate(user.active_entitlement_expires_at)}` : "";
     return `<span class="pill">${escapeHtml(titleCase(user.active_entitlement_source))}${escapeHtml(suffix)}</span>`;
+  }
+
+  function findOverviewUser(userId) {
+    return state.overview?.users?.find((user) => user.id === userId) || null;
   }
 
   function renderGoogleButton() {
@@ -363,7 +440,8 @@
   }
 
   document.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-action]")?.dataset.action;
+    const target = event.target.closest("[data-action]");
+    const action = target?.dataset.action;
     if (!action) return;
     event.preventDefault();
     if (action === "refresh") {
@@ -376,6 +454,14 @@
     }
     if (action === "apple-sign-in") {
       void signInWithApple();
+    }
+    if (action === "make-paid") {
+      const userId = target.dataset.userId;
+      if (userId) void updateManualEntitlement(userId, true);
+    }
+    if (action === "make-free") {
+      const userId = target.dataset.userId;
+      if (userId) void updateManualEntitlement(userId, false);
     }
   });
 

@@ -99,6 +99,96 @@ test('admin overview returns account metrics for signed-in admins', async (t) =>
   assert.equal(body.users[0].active_entitlement_source, 'admin');
 });
 
+test('signed-in admins can set users manually paid and back to free', async (t) => {
+  process.env.STUFF_ADMIN_EMAILS = 'admin@example.com';
+  process.env.SKIP_TOKEN_REVOCATION_CHECKS = 'true';
+
+  const targetUserId = userId(2);
+  const planEntitlements = [
+    [{ source: 'manual', product_id: null, expires_at: null, app_store_environment: null }],
+    [],
+  ];
+  let revokeCount = 0;
+  const originalQuery = pool.query.bind(pool);
+  pool.query = (async (query: unknown) => {
+    const sql = String(query);
+    if (sql.includes('SELECT id, email, name FROM users WHERE id = $1')) {
+      return {
+        rows: [{
+          id: targetUserId,
+          email: 'person@example.com',
+          name: 'Person',
+        }],
+      };
+    }
+    if (sql.includes('UPDATE user_entitlements')) {
+      revokeCount += 1;
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('INSERT INTO user_entitlements')) {
+      return {
+        rows: [{
+          id: userId(3),
+          user_id: targetUserId,
+          source: 'manual',
+          status: 'active',
+          expires_at: null,
+        }],
+      };
+    }
+    if (sql.includes('SELECT source, product_id, expires_at, app_store_environment')) {
+      return { rows: planEntitlements.shift() ?? [] };
+    }
+    if (sql.includes('FROM locations l') && sql.includes('FROM items i')) {
+      return {
+        rows: [{
+          containers: '0',
+          items: '0',
+          images: '0',
+          documents: '0',
+        }],
+      };
+    }
+    return originalQuery(query as never);
+  }) as typeof pool.query;
+
+  const server = await listen();
+  t.after(() => {
+    pool.query = originalQuery;
+    return close(server);
+  });
+
+  const headers = { Authorization: `Bearer ${signToken({ userId: userId(1), email: 'admin@example.com' })}` };
+  const paidResponse = await fetch(`${serverBaseUrl(server)}/admin/users/${targetUserId}/manual-entitlement`, {
+    method: 'POST',
+    headers,
+  });
+  const paidBody = await paidResponse.json() as {
+    entitlement: { source: string };
+    plan: { tier: string; entitlement: { source: string } | null };
+  };
+
+  assert.equal(paidResponse.status, 201);
+  assert.equal(paidBody.entitlement.source, 'manual');
+  assert.equal(paidBody.plan.tier, 'paid');
+  assert.equal(paidBody.plan.entitlement?.source, 'manual');
+
+  const freeResponse = await fetch(`${serverBaseUrl(server)}/admin/users/${targetUserId}/manual-entitlement`, {
+    method: 'DELETE',
+    headers,
+  });
+  const freeBody = await freeResponse.json() as {
+    revoked_count: number;
+    plan: { tier: string; entitlement: unknown };
+  };
+
+  assert.equal(freeResponse.status, 200);
+  assert.equal(freeBody.revoked_count, 1);
+  assert.equal(freeBody.plan.tier, 'free');
+  assert.equal(freeBody.plan.entitlement, null);
+  assert.equal(revokeCount, 2);
+});
+
 async function listen(): Promise<http.Server> {
   const app = createApp();
   const server = app.listen(0, '127.0.0.1');

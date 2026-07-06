@@ -8,6 +8,21 @@ import { requireAuth, AuthRequest } from '../middleware/auth';
 import { isAdminEmail } from '../lib/adminUsers';
 
 const router = Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type AdminTargetUser = {
+  id: string;
+  email: string;
+  name: string | null;
+};
+
+type AdminEntitlementRow = {
+  id: string;
+  user_id: string;
+  source: string;
+  status: string;
+  expires_at: Date | null;
+};
 
 router.get('/overview', requireAuth, requireSignedInAdmin, async (req: AuthRequest, res: Response) => {
   const [totalsResult, usersResult] = await Promise.all([
@@ -87,6 +102,48 @@ router.get('/overview', requireAuth, requireSignedInAdmin, async (req: AuthReque
   });
 });
 
+router.post('/users/:userId/manual-entitlement', requireAuth, requireSignedInAdmin, async (req: AuthRequest, res: Response) => {
+  const user = await findAdminTargetUser(req.params.userId, res);
+  if (!user) {
+    return;
+  }
+
+  await revokeManualEntitlements(user.id, req.user!, 'replaced_by_manual_paid');
+  const { rows } = await pool.query<AdminEntitlementRow>(
+    `INSERT INTO user_entitlements (user_id, source, status, expires_at, metadata)
+     VALUES (
+       $1,
+       'manual',
+       'active',
+       NULL,
+       jsonb_build_object('grantedBy', 'admin_page', 'adminUserId', $2::text, 'adminEmail', $3::text)
+     )
+     RETURNING id, user_id, source, status, expires_at`,
+    [user.id, req.user!.userId, req.user!.email]
+  );
+
+  res.status(201).json({
+    entitlement: rows[0],
+    user,
+    plan: await accountPlan(user.id),
+  });
+});
+
+router.delete('/users/:userId/manual-entitlement', requireAuth, requireSignedInAdmin, async (req: AuthRequest, res: Response) => {
+  const user = await findAdminTargetUser(req.params.userId, res);
+  if (!user) {
+    return;
+  }
+
+  const revokedCount = await revokeManualEntitlements(user.id, req.user!, 'set_back_to_free');
+
+  res.json({
+    revoked_count: revokedCount,
+    user,
+    plan: await accountPlan(user.id),
+  });
+});
+
 router.use((req: Request, res: Response, next: NextFunction) => {
   const expected = process.env.ADMIN_API_TOKEN?.trim();
   if (!expected) {
@@ -140,6 +197,52 @@ function requireSignedInAdmin(req: AuthRequest, res: Response, next: NextFunctio
 function numeric(value: unknown): number {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+async function findAdminTargetUser(userId: string, res: Response): Promise<AdminTargetUser | undefined> {
+  if (!UUID_PATTERN.test(userId)) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return undefined;
+  }
+
+  const { rows } = await pool.query<AdminTargetUser>(
+    'SELECT id, email, name FROM users WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+  const user = rows[0];
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return undefined;
+  }
+
+  return user;
+}
+
+async function revokeManualEntitlements(
+  userId: string,
+  adminUser: NonNullable<AuthRequest['user']>,
+  reason: string
+): Promise<number> {
+  const result = await pool.query(
+    `UPDATE user_entitlements
+     SET status = 'revoked',
+         revoked_at = COALESCE(revoked_at, NOW()),
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'revokedBy', 'admin_page',
+           'revokedByUserId', $2::text,
+           'revokedByEmail', $3::text,
+           'revokedReason', $4::text
+         )
+     WHERE user_id = $1
+       AND source IN ('manual', 'promo', 'admin')
+       AND status = 'active'
+       AND revoked_at IS NULL
+       AND (expires_at IS NULL OR expires_at > NOW())`,
+    [userId, adminUser.userId, adminUser.email, reason]
+  );
+
+  return result.rowCount ?? 0;
 }
 
 function readAdminToken(req: Request): string | undefined {
