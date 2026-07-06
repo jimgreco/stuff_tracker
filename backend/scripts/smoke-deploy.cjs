@@ -49,7 +49,7 @@ async function main() {
       throw new Error('created smoke item was not returned from home detail');
     }
 
-    const upload = await requestJson(`/homes/${homeId}/items/uploads`, {
+    const uploadGate = await requestJson(`/homes/${homeId}/items/uploads`, {
       method: 'POST',
       token,
       body: {
@@ -58,13 +58,10 @@ async function main() {
         content_type: 'image/jpeg',
         size_bytes: 4,
       },
-      expectedStatus: 201,
+      expectedStatus: 402,
     });
-    assertString(upload.uploadUrl, 'upload URL');
-    assertString(upload.fileUrl, 'file URL');
-    assertString(upload.key, 'upload key');
-    if (upload.headers?.['Content-Type'] !== 'image/jpeg') {
-      throw new Error('upload signing did not return the expected Content-Type header');
+    if (uploadGate.code !== 'paid_required_for_photos') {
+      throw new Error(`free photo upload returned unexpected quota code: ${JSON.stringify(uploadGate)}`);
     }
 
     await requestNoBody(`/homes/${homeId}/items/${itemId}`, { method: 'DELETE', token, expectedStatus: 204 });
