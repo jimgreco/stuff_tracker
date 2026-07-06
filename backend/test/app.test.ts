@@ -44,17 +44,31 @@ test('app allows OAuth popups to return credentials to the web shell', async (t)
   assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
 });
 
-test('app serves the mobile web shell at root, /web, /admin, and item links', async (t) => {
+test('app serves the mobile web shell at root, /web, and item links', async (t) => {
   const server = await listen();
   t.after(() => close(server));
 
-  for (const path of ['/', '/web/', '/admin', '/admin/', '/items/home-1/item-1']) {
+  for (const path of ['/', '/web/', '/items/home-1/item-1']) {
     const response = await fetch(`${serverBaseUrl(server)}${path}`);
     const body = await response.text();
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') ?? '', /text\/html/);
     assert.match(body, /<title>CubbyLog \| Friendly Home Inventory<\/title>/);
+  }
+});
+
+test('app serves the admin web surface at /admin', async (t) => {
+  const server = await listen();
+  t.after(() => close(server));
+
+  for (const path of ['/admin', '/admin/']) {
+    const response = await fetch(`${serverBaseUrl(server)}${path}`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(body, /<title>CubbyLog Admin<\/title>/);
   }
 });
 

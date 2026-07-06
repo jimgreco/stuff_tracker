@@ -22,6 +22,7 @@ test('TestFlight workflow keeps legacy OpenSSL P12 verification fallback', () =>
 test('TestFlight workflow installs the iOS platform before archiving when needed', () => {
   const workflow = readRepoFile('.github/workflows/testflight.yml');
 
+  assert.match(workflow, /xcodebuild -showsdks \| grep -q -- '-sdk iphoneos'/);
   assert.match(workflow, /xcodebuild -downloadPlatform iOS/);
 });
 

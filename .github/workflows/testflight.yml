@@ -254,7 +254,9 @@ jobs:
       - name: Ensure iOS platform is installed
         run: |
           set -euo pipefail
-          sudo xcodebuild -downloadPlatform iOS
+          if ! xcodebuild -showsdks | grep -q -- '-sdk iphoneos'; then
+            sudo xcodebuild -downloadPlatform iOS
+          fi
           xcodebuild -showsdks
 
       - name: Archive

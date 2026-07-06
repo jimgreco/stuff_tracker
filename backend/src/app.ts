@@ -94,8 +94,12 @@ function configureStaticWeb(app: ReturnType<typeof express>): void {
   }
 
   const indexPath = path.join(webRoot, 'index.html');
+  const adminPath = path.join(webRoot, 'admin.html');
   const sendIndex = (_req: Request, res: Response) => {
     res.sendFile(indexPath);
+  };
+  const sendAdmin = (_req: Request, res: Response) => {
+    res.sendFile(adminPath);
   };
   const sendSharedItemIndex = async (req: Request, res: Response) => {
     const metadata = await sharedItemMetadata(req.params.homeId, req.params.itemId);
@@ -115,7 +119,8 @@ function configureStaticWeb(app: ReturnType<typeof express>): void {
   app.use(express.static(webRoot, { index: false }));
   app.use('/web', express.static(webRoot, { index: false }));
   app.get(['/items/:homeId/:itemId', '/web/items/:homeId/:itemId'], sendSharedItemIndex);
-  app.get(['/', '/web', '/web/', '/admin', '/admin/'], sendIndex);
+  app.get(['/', '/web', '/web/'], sendIndex);
+  app.get(['/admin', '/admin/'], fs.existsSync(adminPath) ? sendAdmin : sendIndex);
 }
 
 type SharedItemMetadata = {
