@@ -24,7 +24,7 @@ APP_STORE_CONNECT_API_KEY="$(cat AuthKey_XXXXXX.p8)" \
 bundle exec fastlane ios upload_screenshots
 ```
 
-The upload lane targets the checked-in Xcode `MARKETING_VERSION` for `StuffTracker` unless `APP_STORE_VERSION` is set. It uploads screenshots only: metadata and binary upload are skipped, precheck is skipped, and existing screenshots for that editable version are replaced.
+The upload lane targets the checked-in Xcode `MARKETING_VERSION` for `StuffTracker` unless `APP_STORE_VERSION` is set. It validates exactly four framed screenshots for each generated device, replaces the matching iPhone and iPad screenshot sets on the editable version, uploads each screenshot once, and waits for processing before continuing.
 
 To capture and upload in one command:
 

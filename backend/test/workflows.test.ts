@@ -80,10 +80,20 @@ test('Fastlane validates four framed screenshots for each generated device befor
 
   assert.match(fastfile, /EXPECTED_SCREENSHOT_IDS = \[/);
   assert.match(fastfile, /validate_screenshot_upload_set/);
-  assert.match(fastfile, /screenshots_path: SCREENSHOT_OUTPUT_PATH/);
   assert.match(fastfile, /File\.join\(SCREENSHOT_OUTPUT_PATH, "\*\*", "\*.\{jpg,jpeg,png\}"\)/);
   assert.match(fastfile, /screenshots_by_device/);
+  assert.match(fastfile, /TARGET_SCREENSHOT_DISPLAY_TYPES/);
   assert.match(fastfile, /screenshot_ids\.sort == EXPECTED_SCREENSHOT_IDS/);
   assert.match(fastfile, /iPad Pro 13-inch \(M5\)/);
   assert.match(snapfile, /iPhone 17 Pro Max,iPad Pro 13-inch \(M5\)/);
+});
+
+test('Fastlane uploads App Store screenshots once per target display type', () => {
+  const fastfile = readRepoFile('fastlane/Fastfile');
+
+  assert.doesNotMatch(fastfile, /upload_to_app_store\(/);
+  assert.match(fastfile, /replace_app_store_screenshot_set/);
+  assert.match(fastfile, /set\.delete!/);
+  assert.match(fastfile, /upload_screenshot\([\s\S]*wait_for_processing: true/);
+  assert.match(fastfile, /reorder_screenshots\(app_screenshot_ids: uploaded_ids\)/);
 });
