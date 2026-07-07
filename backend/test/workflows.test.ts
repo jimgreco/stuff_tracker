@@ -73,6 +73,7 @@ test('App Store metadata workflow uploads editable metadata through fastlane', (
   assert.match(fastfile, /lane :upload_metadata/);
   assert.match(fastfile, /metadata_path: METADATA_PATH/);
   assert.match(fastfile, /app_rating_config_path: APP_RATING_CONFIG_PATH/);
+  assert.match(fastfile, /module ::Deliver/);
   assert.match(fastfile, /cubbylog_original_review_attachment_file/);
   assert.match(fastfile, /return unless options\[:app_review_attachment_file\]/);
   assert.match(fastfile, /skip_binary_upload: true/);

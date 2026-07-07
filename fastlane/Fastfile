@@ -4,7 +4,7 @@ require "deliver/app_screenshot"
 require "deliver/upload_metadata"
 require "spaceship"
 
-module Deliver
+module ::Deliver
   class UploadMetadata
     unless private_method_defined?(:cubbylog_original_review_attachment_file)
       alias_method :cubbylog_original_review_attachment_file, :review_attachment_file
