@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "bigdecimal"
+require "base64"
 require "cgi"
 require "json"
 require "net/http"
@@ -134,7 +135,14 @@ def subscription_price_points(subscription_id, territory)
 end
 
 def territory_for_price_point(price_point)
-  price_point.dig("relationships", "territory", "data", "id")
+  related_territory = price_point.dig("relationships", "territory", "data", "id")
+  return related_territory if related_territory
+
+  encoded_id = price_point["id"].to_s
+  decoded = Base64.urlsafe_decode64(encoded_id + ("=" * ((4 - encoded_id.length % 4) % 4)))
+  JSON.parse(decoded)["t"]
+rescue ArgumentError, JSON::ParserError
+  nil
 end
 
 def equalized_price_points(price_point_id)

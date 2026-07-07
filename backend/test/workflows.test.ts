@@ -94,6 +94,7 @@ test('App Store subscription price workflow updates the yearly Pro product', () 
   assert.match(workflow, /APP_STORE_CONNECT_API_KEY/);
   assert.match(priceScript, /SUBSCRIPTION_PRODUCT_ID/);
   assert.match(priceScript, /TARGET_CUSTOMER_PRICE/);
+  assert.match(priceScript, /Base64\.urlsafe_decode64/);
   assert.match(priceScript, /\/v1\/subscriptions\/#\{subscription_id\}\/pricePoints/);
   assert.match(priceScript, /\/v1\/subscriptionPrices/);
   assert.match(appStore, /com\.jimgreco\.stufftracker\.pro\.monthly/);
