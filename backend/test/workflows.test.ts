@@ -86,6 +86,8 @@ test('App Store metadata copy stays within key App Store limits', () => {
   const keywords = readRepoFile('fastlane/metadata/en-US/keywords.txt').trim();
   const supportUrl = readRepoFile('fastlane/metadata/en-US/support_url.txt').trim();
   const privacyUrl = readRepoFile('fastlane/metadata/en-US/privacy_url.txt').trim();
+  const primaryCategory = readRepoFile('fastlane/metadata/primary_category.txt').trim();
+  const secondaryCategory = readRepoFile('fastlane/metadata/secondary_category.txt').trim();
 
   assert.equal(readRepoFile('fastlane/metadata/en-US/name.txt').trim(), 'CubbyLog');
   assert.ok(subtitle.length <= 30);
@@ -93,6 +95,8 @@ test('App Store metadata copy stays within key App Store limits', () => {
   assert.ok(keywords.length <= 100);
   assert.equal(supportUrl, 'https://cubbylog.com/support.html');
   assert.equal(privacyUrl, 'https://cubbylog.com/privacy.html');
+  assert.equal(primaryCategory, 'PRODUCTIVITY');
+  assert.equal(secondaryCategory, 'UTILITIES');
   assert.doesNotThrow(() => JSON.parse(readRepoFile('fastlane/metadata/app_rating_config.json')));
 });
 
