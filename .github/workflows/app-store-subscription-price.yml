@@ -1,0 +1,51 @@
+name: App Store Subscription Price
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_id:
+        description: Subscription product ID to update
+        required: true
+        default: com.jimgreco.stufftracker.plus.yearly
+        type: string
+      customer_price:
+        description: Base territory customer price
+        required: true
+        default: "10.00"
+        type: string
+      base_territory:
+        description: Base App Store territory
+        required: true
+        default: USA
+        type: string
+      dry_run:
+        description: Resolve and report the update without applying it
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  subscription-price:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+          bundler-cache: true
+
+      - name: Update subscription price
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          SUBSCRIPTION_PRODUCT_ID: ${{ inputs.product_id }}
+          TARGET_CUSTOMER_PRICE: ${{ inputs.customer_price }}
+          BASE_TERRITORY: ${{ inputs.base_territory }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: bundle exec ruby fastlane/scripts/update_subscription_price.rb

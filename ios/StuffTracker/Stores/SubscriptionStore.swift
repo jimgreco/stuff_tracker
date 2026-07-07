@@ -12,8 +12,8 @@ final class SubscriptionStore: ObservableObject {
 
     private let api = APIClient.shared
     private let fallbackProductIds = [
-        "com.jimgreco.stufftracker.pro.monthly",
-        "com.jimgreco.stufftracker.pro.yearly"
+        "com.jimgreco.stufftracker.plus.monthly",
+        "com.jimgreco.stufftracker.plus.yearly"
     ]
     private var transactionUpdatesTask: Task<Void, Never>?
 

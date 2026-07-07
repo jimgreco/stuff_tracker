@@ -109,7 +109,7 @@ test('paid home owner can share and store attachments beyond free limits', async
     ownerId: 'owner-1',
     entitlementRows: [{
       source: 'app_store',
-      product_id: 'com.jimgreco.stufftracker.pro.monthly',
+      product_id: 'com.jimgreco.stufftracker.plus.monthly',
       expires_at: new Date(Date.now() + 86_400_000),
       app_store_environment: 'Sandbox',
     }],

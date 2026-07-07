@@ -76,8 +76,8 @@ The backend is the source of truth for account plans. Free accounts can create h
 Configure App Store Connect with these auto-renewable subscription product IDs unless `APP_STORE_SUBSCRIPTION_PRODUCT_IDS` is changed:
 
 ```sh
-com.jimgreco.stufftracker.pro.monthly
-com.jimgreco.stufftracker.pro.yearly
+com.jimgreco.stufftracker.plus.monthly
+com.jimgreco.stufftracker.plus.yearly
 ```
 
 Point App Store Server Notifications V2 at the production backend:
