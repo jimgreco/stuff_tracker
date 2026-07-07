@@ -80,14 +80,14 @@ test('App Store metadata workflow uploads editable metadata through fastlane', (
   assert.match(fastfile, /skip_screenshots: true/);
 });
 
-test('App Store subscription price workflow updates the yearly Plus product', () => {
+test('App Store subscription price workflow updates the yearly Pro product', () => {
   const workflow = readRepoFile('.github/workflows/app-store-subscription-price.yml');
   const priceScript = readRepoFile('fastlane/scripts/update_subscription_price.rb');
   const appStore = readRepoFile('backend/src/lib/appStore.ts');
   const subscriptionStore = readRepoFile('ios/StuffTracker/Stores/SubscriptionStore.swift');
 
-  assert.match(workflow, /default: com\.jimgreco\.stufftracker\.plus\.yearly/);
-  assert.match(workflow, /default: "10\.00"/);
+  assert.match(workflow, /default: com\.jimgreco\.stufftracker\.pro\.yearly/);
+  assert.match(workflow, /default: "9\.99"/);
   assert.match(workflow, /bundle exec ruby fastlane\/scripts\/update_subscription_price\.rb/);
   assert.match(workflow, /APP_STORE_CONNECT_KEY_ID/);
   assert.match(workflow, /APP_STORE_CONNECT_ISSUER_ID/);
@@ -96,10 +96,10 @@ test('App Store subscription price workflow updates the yearly Plus product', ()
   assert.match(priceScript, /TARGET_CUSTOMER_PRICE/);
   assert.match(priceScript, /\/v1\/subscriptions\/#\{subscription_id\}\/pricePoints/);
   assert.match(priceScript, /\/v1\/subscriptionPrices/);
-  assert.match(appStore, /com\.jimgreco\.stufftracker\.plus\.monthly/);
-  assert.match(appStore, /com\.jimgreco\.stufftracker\.plus\.yearly/);
-  assert.match(subscriptionStore, /com\.jimgreco\.stufftracker\.plus\.monthly/);
-  assert.match(subscriptionStore, /com\.jimgreco\.stufftracker\.plus\.yearly/);
+  assert.match(appStore, /com\.jimgreco\.stufftracker\.pro\.monthly/);
+  assert.match(appStore, /com\.jimgreco\.stufftracker\.pro\.yearly/);
+  assert.match(subscriptionStore, /com\.jimgreco\.stufftracker\.pro\.monthly/);
+  assert.match(subscriptionStore, /com\.jimgreco\.stufftracker\.pro\.yearly/);
 });
 
 test('App Store metadata copy stays within key App Store limits', () => {

@@ -204,9 +204,9 @@ def create_subscription_price(subscription_id, price_point_id, preserve_current_
 end
 
 bundle_id = ENV.fetch("APP_IDENTIFIER", "com.jimgreco.stufftracker")
-product_id = ENV.fetch("SUBSCRIPTION_PRODUCT_ID", "com.jimgreco.stufftracker.plus.yearly")
+product_id = ENV.fetch("SUBSCRIPTION_PRODUCT_ID", "com.jimgreco.stufftracker.pro.yearly")
 base_territory = ENV.fetch("BASE_TERRITORY", "USA")
-target_price = ENV.fetch("TARGET_CUSTOMER_PRICE", "10.00")
+target_price = ENV.fetch("TARGET_CUSTOMER_PRICE", "9.99")
 preserve_current_price = bool_env("PRESERVE_CURRENT_PRICE", default: false)
 dry_run = bool_env("DRY_RUN", default: false)
 
@@ -231,7 +231,10 @@ unless target_price_point
   raise "Could not find #{base_territory} subscription price point #{target_price}. Nearby price points: #{nearby.join(", ")}"
 end
 
-target_price_points = ([target_price_point] + equalized_price_points(target_price_point["id"]))
+equalizations = equalized_price_points(target_price_point["id"])
+puts "No equalized price points returned; updating #{base_territory} only" if equalizations.empty?
+
+target_price_points = ([target_price_point] + equalizations)
   .each_with_object({}) do |price_point, by_territory|
     territory = territory_for_price_point(price_point)
     by_territory[territory] = price_point if territory

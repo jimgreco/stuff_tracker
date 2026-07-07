@@ -12,8 +12,8 @@ import { pool } from '../db/pool';
 import { getCsvEnv, getOptionalIntegerEnv, getOptionalStringEnv, isProduction } from './env';
 
 const DEFAULT_PRODUCT_IDS = [
-  'com.jimgreco.stufftracker.plus.monthly',
-  'com.jimgreco.stufftracker.plus.yearly',
+  'com.jimgreco.stufftracker.pro.monthly',
+  'com.jimgreco.stufftracker.pro.yearly',
 ];
 const DEFAULT_BUNDLE_ID = 'com.jimgreco.stufftracker';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

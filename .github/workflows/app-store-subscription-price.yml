@@ -6,12 +6,12 @@ on:
       product_id:
         description: Subscription product ID to update
         required: true
-        default: com.jimgreco.stufftracker.plus.yearly
+        default: com.jimgreco.stufftracker.pro.yearly
         type: string
       customer_price:
         description: Base territory customer price
         required: true
-        default: "10.00"
+        default: "9.99"
         type: string
       base_territory:
         description: Base App Store territory
