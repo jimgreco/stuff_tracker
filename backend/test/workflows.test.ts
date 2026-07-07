@@ -62,6 +62,37 @@ test('App Store screenshots workflow uploads to App Store Connect by default', (
   assert.match(workflow, /APP_STORE_CONNECT_API_KEY/);
 });
 
+test('App Store metadata workflow uploads editable metadata through fastlane', () => {
+  const workflow = readRepoFile('.github/workflows/app-store-metadata.yml');
+  const fastfile = readRepoFile('fastlane/Fastfile');
+
+  assert.match(workflow, /bundle exec fastlane ios upload_metadata/);
+  assert.match(workflow, /APP_STORE_CONNECT_KEY_ID/);
+  assert.match(workflow, /APP_STORE_CONNECT_ISSUER_ID/);
+  assert.match(workflow, /APP_STORE_CONNECT_API_KEY/);
+  assert.match(fastfile, /lane :upload_metadata/);
+  assert.match(fastfile, /metadata_path: METADATA_PATH/);
+  assert.match(fastfile, /app_rating_config_path: APP_RATING_CONFIG_PATH/);
+  assert.match(fastfile, /skip_binary_upload: true/);
+  assert.match(fastfile, /skip_screenshots: true/);
+});
+
+test('App Store metadata copy stays within key App Store limits', () => {
+  const subtitle = readRepoFile('fastlane/metadata/en-US/subtitle.txt').trim();
+  const promotionalText = readRepoFile('fastlane/metadata/en-US/promotional_text.txt').trim();
+  const keywords = readRepoFile('fastlane/metadata/en-US/keywords.txt').trim();
+  const supportUrl = readRepoFile('fastlane/metadata/en-US/support_url.txt').trim();
+  const privacyUrl = readRepoFile('fastlane/metadata/en-US/privacy_url.txt').trim();
+
+  assert.equal(readRepoFile('fastlane/metadata/en-US/name.txt').trim(), 'CubbyLog');
+  assert.ok(subtitle.length <= 30);
+  assert.ok(promotionalText.length <= 170);
+  assert.ok(keywords.length <= 100);
+  assert.equal(supportUrl, 'https://cubbylog.com/support.html');
+  assert.equal(privacyUrl, 'https://cubbylog.com/privacy.html');
+  assert.doesNotThrow(() => JSON.parse(readRepoFile('fastlane/metadata/app_rating_config.json')));
+});
+
 test('Fastlane frames App Store screenshots with marketing copy after capture', () => {
   const fastfile = readRepoFile('fastlane/Fastfile');
   const frameScript = readRepoFile('fastlane/scripts/frame_screenshots.swift');
@@ -90,8 +121,9 @@ test('Fastlane validates four framed screenshots for each generated device befor
 
 test('Fastlane uploads App Store screenshots once per target display type', () => {
   const fastfile = readRepoFile('fastlane/Fastfile');
+  const uploadScreenshotsLane = fastfile.match(/lane :upload_screenshots do[\s\S]*?\n  end/)?.[0] ?? '';
 
-  assert.doesNotMatch(fastfile, /upload_to_app_store\(/);
+  assert.doesNotMatch(uploadScreenshotsLane, /upload_to_app_store\(/);
   assert.match(fastfile, /replace_app_store_screenshot_set/);
   assert.match(fastfile, /set\.delete!/);
   assert.match(fastfile, /upload_screenshot\([\s\S]*wait_for_processing: true/);

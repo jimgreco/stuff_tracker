@@ -1,0 +1,15 @@
+CubbyLog is a home inventory app for people who want to know where the useful, expensive, and easy-to-misplace things live.
+
+Build a friendly map of your home with homes, floors, rooms, and containers. Add the items that matter, attach photos or documents, and save details like quantity, serial numbers, model numbers, purchase dates, warranty dates, estimated value, and notes.
+
+Use CubbyLog to:
+
+- Find where you put passports, tools, camera gear, documents, spare parts, and everyday supplies
+- Keep receipts, warranty info, and item photos with the item they belong to
+- Search across your whole home instead of opening every drawer
+- Flag essentials you want to check quickly
+- Share a home inventory with collaborators when you need everyone looking at the same list
+
+CubbyLog works locally first, so you can start organizing without setup. Sign in when you want cloud sync, shared homes, and hosted attachments.
+
+Whether you are moving, preparing for insurance, organizing a garage, or just tired of asking "where did we put that?", CubbyLog gives your stuff a map.

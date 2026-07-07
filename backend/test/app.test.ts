@@ -72,6 +72,25 @@ test('app serves the admin web surface at /admin', async (t) => {
   }
 });
 
+test('app serves public support and privacy pages for App Store metadata URLs', async (t) => {
+  const server = await listen();
+  t.after(() => close(server));
+
+  const pages = [
+    { path: '/support.html', title: 'CubbyLog Support' },
+    { path: '/privacy.html', title: 'CubbyLog Privacy Policy' },
+  ];
+
+  for (const page of pages) {
+    const response = await fetch(`${serverBaseUrl(server)}${page.path}`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
+    assert.match(body, new RegExp(`<title>${escapeRegExp(page.title)}</title>`));
+  }
+});
+
 test('app renders shared item page metadata with item name and location', async (t) => {
   const homeId = '11111111-1111-4111-8111-111111111111';
   const itemId = '22222222-2222-4222-8222-222222222222';

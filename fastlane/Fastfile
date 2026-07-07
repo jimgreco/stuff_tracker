@@ -14,6 +14,8 @@ SCREENSHOT_SCHEME = "StuffTrackerScreenshots"
 SCREENSHOT_OUTPUT = "fastlane/screenshots"
 SCREENSHOT_FRAME_SCRIPT = File.expand_path("scripts/frame_screenshots.swift", __dir__)
 SCREENSHOT_OUTPUT_PATH = File.expand_path("../#{SCREENSHOT_OUTPUT}", __dir__)
+METADATA_PATH = File.expand_path("metadata", __dir__)
+APP_RATING_CONFIG_PATH = File.expand_path("metadata/app_rating_config.json", __dir__)
 EXPECTED_SCREENSHOT_IDS = [
   "01-Home-Hierarchy",
   "02-Flagged-Items",
@@ -129,6 +131,22 @@ platform :ios do
       replace_app_store_screenshot_set(localization, display_type, screenshots)
     end
     UI.success("Successfully uploaded screenshots to App Store Connect")
+  end
+
+  desc "Upload App Store metadata to the current Xcode marketing version in App Store Connect"
+  lane :upload_metadata do
+    upload_to_app_store(
+      api_key: app_store_api_key,
+      app_identifier: APP_IDENTIFIER,
+      app_version: app_store_version,
+      metadata_path: METADATA_PATH,
+      app_rating_config_path: APP_RATING_CONFIG_PATH,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false
+    )
   end
 
   desc "Capture screenshots, then upload them to App Store Connect"

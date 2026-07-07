@@ -1,0 +1,3 @@
+CubbyLog can be reviewed without signing in. The app stores inventory data locally first, so reviewers can create a home, add rooms, add containers, and add items immediately.
+
+Sign in with Apple or Google is available for cloud sync, shared homes, hosted photos, and hosted documents. A demo account is not required for the core review flow.
