@@ -1,7 +1,24 @@
 ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
 
 require "deliver/app_screenshot"
+require "deliver/upload_metadata"
 require "spaceship"
+
+module Deliver
+  class UploadMetadata
+    unless private_method_defined?(:cubbylog_original_review_attachment_file)
+      alias_method :cubbylog_original_review_attachment_file, :review_attachment_file
+    end
+
+    def review_attachment_file(version)
+      return unless options[:app_review_attachment_file]
+
+      cubbylog_original_review_attachment_file(version)
+    end
+
+    private :review_attachment_file
+  end
+end
 
 default_platform(:ios)
 opt_out_usage
