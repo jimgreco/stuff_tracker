@@ -158,6 +158,122 @@ test('provider upsert preserves an existing Apple email when later tokens omit i
   assert.equal(second.email, 'real-private-relay@privaterelay.appleid.com');
 });
 
+test('shared-home activity is transactional, scoped, stable, idempotent, and redacted', { skip: !runDatabaseIntegrationTests }, async (t) => {
+  await resetDatabase();
+  const server = await listen();
+  t.after(() => close(server));
+  const baseUrl = serverBaseUrl(server);
+
+  const ownerAuth = await postJson(`${baseUrl}/auth/dev`, { email: 'activity-owner@example.com', name: 'Activity Owner' });
+  const owner = await ownerAuth.json() as { token: string; user: { id: string } };
+  const memberAuth = await postJson(`${baseUrl}/auth/dev`, { email: 'activity-member@example.com', name: 'Activity Member' });
+  const member = await memberAuth.json() as { token: string; user: { id: string } };
+  await pool.query(
+    `INSERT INTO user_entitlements (user_id, source, status) VALUES ($1, 'manual', 'active')`,
+    [owner.user.id]
+  );
+
+  const createdHome = await fetch(`${baseUrl}/homes`, {
+    method: 'POST',
+    headers: activityHeaders(owner.token, 'create-home', '2026-01-01T00:00:00.000Z'),
+    body: JSON.stringify({ name: 'Audit Home', icon: 'house.fill' }),
+  });
+  assert.equal(createdHome.status, 201);
+  const home = await createdHome.json() as { id: string };
+
+  const addedMember = await fetch(`${baseUrl}/homes/${home.id}/members`, {
+    method: 'POST',
+    headers: activityHeaders(owner.token, 'add-member'),
+    body: JSON.stringify({ email: 'activity-member@example.com', role: 'editor' }),
+  });
+  assert.equal(addedMember.status, 201);
+
+  const createdLocation = await fetch(`${baseUrl}/homes/${home.id}/locations`, {
+    method: 'POST', headers: activityHeaders(owner.token, 'create-location'),
+    body: JSON.stringify({ name: 'Office', type: 'room', sort_order: 0 }),
+  });
+  assert.equal(createdLocation.status, 201);
+  const location = await createdLocation.json() as { id: string };
+
+  const createdItem = await fetch(`${baseUrl}/homes/${home.id}/items`, {
+    method: 'POST', headers: activityHeaders(owner.token, 'create-item'),
+    body: JSON.stringify({ name: 'Router', location_id: location.id, quantity: 1 }),
+  });
+  assert.equal(createdItem.status, 201);
+  const item = await createdItem.json() as { id: string };
+
+  const secret = 'do-not-store-this-private-note';
+  for (const quantity of [2, 2]) {
+    const updated = await fetch(`${baseUrl}/homes/${home.id}/items/${item.id}`, {
+      method: 'PATCH', headers: activityHeaders(owner.token, 'retry-safe-update'),
+      body: JSON.stringify({ quantity, notes: secret, serial_number: 'SECRET-SERIAL' }),
+    });
+    assert.equal(updated.status, 200);
+  }
+  const duplicateEvents = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM home_activity_events WHERE mutation_id = 'retry-safe-update'`
+  );
+  assert.equal(duplicateEvents.rows[0].count, 1);
+
+  const beforeFailure = await pool.query('SELECT COUNT(*)::int AS count FROM home_activity_events');
+  const failed = await fetch(`${baseUrl}/homes/${home.id}/items/${item.id}`, {
+    method: 'PATCH', headers: activityHeaders(owner.token, 'failed-update'),
+    body: JSON.stringify({ quantity: 0 }),
+  });
+  assert.equal(failed.status, 400);
+  const afterFailure = await pool.query('SELECT COUNT(*)::int AS count FROM home_activity_events');
+  assert.equal(afterFailure.rows[0].count, beforeFailure.rows[0].count);
+
+  const firstPage = await fetch(`${baseUrl}/homes/${home.id}/activity?limit=1`, {
+    headers: { Authorization: `Bearer ${member.token}` },
+  });
+  assert.equal(firstPage.status, 200);
+  const first = await firstPage.json() as { events: Array<Record<string, unknown>>; next_cursor: string };
+  assert.equal(first.events.length, 1);
+  assert.ok(first.next_cursor);
+  const secondPage = await fetch(`${baseUrl}/homes/${home.id}/activity?limit=1&cursor=${encodeURIComponent(first.next_cursor)}`, {
+    headers: { Authorization: `Bearer ${member.token}` },
+  });
+  const second = await secondPage.json() as { events: Array<Record<string, unknown>> };
+  assert.equal(second.events.length, 1);
+  assert.notEqual(second.events[0].id, first.events[0].id);
+
+  const itemHistory = await fetch(`${baseUrl}/homes/${home.id}/activity?entity_id=${item.id}`, {
+    headers: { Authorization: `Bearer ${owner.token}` },
+  });
+  const itemPage = await itemHistory.json() as { events: Array<{ entity_name: string; is_offline_change: boolean; changes: unknown }> };
+  assert.ok(itemPage.events.length >= 2);
+  assert.ok(itemPage.events.every((event) => event.entity_name === 'Router'));
+  const serialized = JSON.stringify(itemPage);
+  assert.doesNotMatch(serialized, new RegExp(secret));
+  assert.doesNotMatch(serialized, /SECRET-SERIAL/);
+
+  const allActivity = await fetch(`${baseUrl}/homes/${home.id}/activity`, {
+    headers: { Authorization: `Bearer ${owner.token}` },
+  });
+  const allPage = await allActivity.json() as { events: Array<{ action: string; is_offline_change: boolean }> };
+  assert.ok(allPage.events.some((event) => event.action === 'member_added'));
+  assert.ok(allPage.events.some((event) => event.is_offline_change));
+
+  const removed = await fetch(`${baseUrl}/homes/${home.id}/members/${member.user.id}`, {
+    method: 'DELETE', headers: activityHeaders(owner.token, 'remove-member'),
+  });
+  assert.equal(removed.status, 204);
+  const revokedFeed = await fetch(`${baseUrl}/homes/${home.id}/activity`, {
+    headers: { Authorization: `Bearer ${member.token}` },
+  });
+  assert.equal(revokedFeed.status, 403);
+
+  const deleted = await fetch(`${baseUrl}/homes/${home.id}/items/${item.id}`, {
+    method: 'DELETE', headers: activityHeaders(owner.token, 'delete-item'),
+  });
+  assert.equal(deleted.status, 204);
+  const deletion = await pool.query(
+    `SELECT entity_name, summary FROM home_activity_events WHERE mutation_id = 'delete-item'`
+  );
+  assert.deepEqual(deletion.rows[0], { entity_name: 'Router', summary: 'Deleted Router' });
+});
+
 async function resetDatabase() {
   await pool.query('DROP SCHEMA public CASCADE');
   await pool.query('CREATE SCHEMA public');
@@ -195,4 +311,13 @@ function postJson(url: string, body: unknown, token?: string): Promise<Response>
     },
     body: JSON.stringify(body),
   });
+}
+
+function activityHeaders(token: string, mutationId: string, occurredAt = new Date().toISOString()): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'X-CubbyLog-Mutation-ID': mutationId,
+    'X-CubbyLog-Occurred-At': occurredAt,
+  };
 }

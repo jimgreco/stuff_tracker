@@ -175,4 +175,5 @@ test('fresh database schema allows floor locations', () => {
   assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS user_entitlements/);
   assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS app_store_transactions/);
   assert.match(schemaSql, /idx_user_entitlements_app_store_original_transaction/);
+  assert.match(fs.readFileSync(path.join(backendRoot, 'src/db/migrations/011_home_activity.sql'), 'utf8'), /CREATE TABLE IF NOT EXISTS home_activity_events/);
 });

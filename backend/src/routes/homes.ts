@@ -5,6 +5,7 @@ import { getHomeRole, canAdmin } from '../lib/access';
 import { HomeSchema, InviteSchema, UpdateMemberRoleSchema } from '../lib/schemas';
 import { signItemsAttachmentUrls } from '../lib/attachmentResponses';
 import { canCreateHome, canShareHome, type QuotaDecision } from '../lib/entitlements';
+import { withActivityTransaction } from '../lib/activity';
 
 const router = Router();
 router.use(requireAuth);
@@ -41,12 +42,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const quota = await canCreateHome(req.user!.userId);
   if (quota) { sendQuota(res, quota); return; }
 
-  const { rows } = await pool.query(
-    `INSERT INTO homes (name, icon, is_flagged, owner_id) VALUES ($1, $2, $3, $4)
-     RETURNING id, name, icon, is_flagged, owner_id, created_at`,
-    [name, icon ?? null, is_flagged ?? false, req.user!.userId]
-  );
-  res.status(201).json({ ...rows[0], role: 'owner' });
+  const home = await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO homes (name, icon, is_flagged, owner_id) VALUES ($1, $2, $3, $4)
+       RETURNING id, name, icon, is_flagged, owner_id, created_at`,
+      [name, icon ?? null, is_flagged ?? false, req.user!.userId]
+    );
+    return rows[0];
+  });
+  res.status(201).json({ ...home, role: 'owner' });
 });
 
 // ── Get single home (with full tree: rooms → containers → items) ───────────────
@@ -87,14 +91,17 @@ router.patch('/:homeId', async (req: AuthRequest, res: Response) => {
   if (!canAdmin(role)) { res.status(403).json({ error: 'Admin access required' }); return; }
 
   const { name, icon, is_flagged } = HomeSchema.parse(req.body);
-  const { rows } = await pool.query(
-    `UPDATE homes
-     SET name = $1, icon = $2, is_flagged = COALESCE($3, is_flagged), updated_at = NOW()
-     WHERE id = $4
-     RETURNING id, name, icon, is_flagged, owner_id`,
-    [name, icon ?? null, is_flagged ?? null, homeId]
-  );
-  res.json({ ...rows[0], role });
+  const home = await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query(
+      `UPDATE homes
+       SET name = $1, icon = $2, is_flagged = COALESCE($3, is_flagged), updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, name, icon, is_flagged, owner_id`,
+      [name, icon ?? null, is_flagged ?? null, homeId]
+    );
+    return rows[0];
+  });
+  res.json({ ...home, role });
 });
 
 // ── Delete home ────────────────────────────────────────────────────────────────
@@ -104,7 +111,7 @@ router.delete('/:homeId', async (req: AuthRequest, res: Response) => {
   if (!rows[0] || rows[0].owner_id !== req.user!.userId) {
     res.status(403).json({ error: 'Only the owner can delete a home' }); return;
   }
-  await pool.query('DELETE FROM homes WHERE id = $1', [homeId]);
+  await withActivityTransaction(req, (client) => client.query('DELETE FROM homes WHERE id = $1', [homeId]));
   res.status(204).send();
 });
 
@@ -131,27 +138,28 @@ router.post('/:homeId/members', async (req: AuthRequest, res: Response) => {
   if (quota) { sendQuota(res, quota); return; }
 
   const { email, role: newRole } = InviteSchema.parse(req.body);
-  const userRes = await pool.query(
-    `WITH invitee AS (
-       INSERT INTO users (email, name)
-       VALUES ($1, $1)
-       ON CONFLICT (email) DO NOTHING
-       RETURNING id
-     )
-     SELECT id FROM invitee
-     UNION ALL
-     SELECT id FROM users WHERE email = $1
-     LIMIT 1`,
-    [email]
-  );
-
-  const inviteeId = userRes.rows[0].id;
-  await pool.query(
-    `INSERT INTO home_members (home_id, user_id, role, invited_by)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (home_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
-    [homeId, inviteeId, newRole, req.user!.userId]
-  );
+  await withActivityTransaction(req, async (client) => {
+    const userRes = await client.query(
+      `WITH invitee AS (
+         INSERT INTO users (email, name)
+         VALUES ($1, $1)
+         ON CONFLICT (email) DO NOTHING
+         RETURNING id
+       )
+       SELECT id FROM invitee
+       UNION ALL
+       SELECT id FROM users WHERE email = $1
+       LIMIT 1`,
+      [email]
+    );
+    const inviteeId = userRes.rows[0].id;
+    await client.query(
+      `INSERT INTO home_members (home_id, user_id, role, invited_by)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (home_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+      [homeId, inviteeId, newRole, req.user!.userId]
+    );
+  });
   res.status(201).json({ message: 'Member added', role: newRole });
 });
 
@@ -163,10 +171,10 @@ router.patch('/:homeId/members/:userId', async (req: AuthRequest, res: Response)
   if (quota) { sendQuota(res, quota); return; }
 
   const { role: newRole } = UpdateMemberRoleSchema.parse(req.body);
-  await pool.query(
+  await withActivityTransaction(req, (client) => client.query(
     'UPDATE home_members SET role = $1 WHERE home_id = $2 AND user_id = $3',
     [newRole, homeId, userId]
-  );
+  ));
   res.json({ role: newRole });
 });
 
@@ -177,10 +185,10 @@ router.delete('/:homeId/members/:userId', async (req: AuthRequest, res: Response
   if (!canAdmin(role) && userId !== req.user!.userId) {
     res.status(403).json({ error: 'Admin access required' }); return;
   }
-  await pool.query(
+  await withActivityTransaction(req, (client) => client.query(
     'DELETE FROM home_members WHERE home_id = $1 AND user_id = $2',
     [homeId, userId]
-  );
+  ));
   res.status(204).send();
 });
 

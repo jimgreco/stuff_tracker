@@ -983,6 +983,7 @@
     if (state.sheet.type === "itemEditor") return renderItemEditorSheet();
     if (state.sheet.type === "locationPicker") return renderLocationPickerSheet();
     if (state.sheet.type === "selectionMove") return renderSelectionMoveSheet();
+    if (state.sheet.type === "activity") return renderActivitySheet();
     return "";
   }
 
@@ -1149,6 +1150,7 @@
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Floor", { ...base, addKind: "location", locationType: "floor" }, false, className));
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { ...base, addKind: "location", locationType: "room" }, false, className));
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
+      rows.push(actionButton("open-activity", "refresh", "Activity", { homeId: actionTarget.homeId }, false, className));
     } else if (target.location?.type === "floor") {
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Room", { ...base, addKind: "location", locationType: "room" }, false, className));
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
@@ -1412,6 +1414,13 @@
         ${renderDocumentSection(draft.documents)}
         <section class="form-section">
           <div class="form-list">
+            <button type="button" class="row-button" data-action="open-activity" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+              ${svgIcon("refresh")} View Item History
+            </button>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-list">
             <button type="button" class="row-button danger" data-action="open-delete" data-kind="item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
               ${svgIcon("trash")} Delete Item
             </button>
@@ -1420,6 +1429,127 @@
       </form>
     `;
     return sheetChrome("Edit Item", body, { closeLabel: "Cancel", saveFormId: "item-editor-form" });
+  }
+
+  function renderActivitySheet() {
+    const sheet = state.sheet;
+    const events = Array.isArray(sheet.events) ? sheet.events : [];
+    const people = Array.isArray(sheet.people) ? sheet.people : [];
+    const filters = sheet.filters || {};
+    const body = `
+      ${sheet.itemId ? "" : `
+        <form class="activity-filters" data-form="activity-filters">
+          <select name="actorId" aria-label="Filter by person">
+            <option value="">Everyone</option>
+            ${people.map((person) => `<option value="${escapeAttr(person.id)}" ${filters.actorId === person.id ? "selected" : ""}>${escapeHtml(person.name)}</option>`).join("")}
+          </select>
+          <select name="action" aria-label="Filter by action">
+            ${activityOptions([["", "All actions"], ["created", "Created"], ["updated", "Updated"], ["moved", "Moved"], ["reordered", "Reordered"], ["flagged", "Flagged"], ["unflagged", "Unflagged"], ["deleted", "Deleted"], ["member_added", "Member added"], ["member_role_changed", "Role changed"], ["member_removed", "Member removed"]], filters.action)}
+          </select>
+          <select name="entityType" aria-label="Filter by type">
+            ${activityOptions([["", "All types"], ["home", "Homes"], ["location", "Locations"], ["item", "Items"], ["member", "Members"]], filters.entityType)}
+          </select>
+          <input type="date" name="from" value="${escapeAttr(filters.from || "")}" aria-label="Changes since date">
+          <button type="submit">Apply</button>
+        </form>`}
+      <div class="activity-feed" aria-live="polite">
+        ${sheet.loading && !events.length ? `<div class="activity-empty"><span class="spinner"></span><p>Loading activity…</p></div>` : ""}
+        ${!sheet.loading && !events.length ? `<div class="activity-empty"><p>${escapeHtml(sheet.error || "No activity yet.")}</p></div>` : ""}
+        ${events.map(renderActivityEvent).join("")}
+        ${sheet.nextCursor ? `<button type="button" class="activity-more" data-action="load-more-activity" ${sheet.loading ? "disabled" : ""}>${sheet.loading ? "Loading…" : "Load More"}</button>` : ""}
+      </div>
+      <p class="footnote">Activity is retained for 365 days. Server time determines the order.</p>
+    `;
+    return sheetChrome(sheet.itemId ? "Item History" : "Home Activity", body, {
+      closeLabel: sheet.returnSheet ? "Back" : "Done",
+      closeAction: sheet.returnSheet ? "close-activity" : "close-sheet",
+      sheetClass: "sheet-activity",
+    });
+  }
+
+  function activityOptions(options, selected) {
+    return options.map(([value, label]) => `<option value="${escapeAttr(value)}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+
+  function renderActivityEvent(event) {
+    const actor = event.actorName || event.actor_name || event.actorEmail || event.actor_email || "System";
+    const path = event.locationPath || event.location_path || "";
+    const createdAt = event.createdAt || event.created_at;
+    const offline = event.isOfflineChange ?? event.is_offline_change;
+    return `
+      <article class="activity-event">
+        <span class="activity-icon">${svgIcon(activityIcon(event.entityType || event.entity_type))}</span>
+        <div>
+          <strong>${escapeHtml(event.summary)}</strong>
+          ${path ? `<div class="activity-path">${escapeHtml(path)}</div>` : ""}
+          <div class="activity-meta">${escapeHtml(actor)} · ${escapeHtml(relativeTime(createdAt))}${offline ? ` <span class="activity-offline">Synced later</span>` : ""}</div>
+        </div>
+      </article>`;
+  }
+
+  function activityIcon(type) {
+    if (type === "home") return "house";
+    if (type === "location") return "box";
+    if (type === "member") return "person";
+    return "tag";
+  }
+
+  function relativeTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value || "");
+    const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+    const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+    if (Math.abs(seconds) < 60) return formatter.format(seconds, "second");
+    const minutes = Math.round(seconds / 60);
+    if (Math.abs(minutes) < 60) return formatter.format(minutes, "minute");
+    const hours = Math.round(minutes / 60);
+    if (Math.abs(hours) < 24) return formatter.format(hours, "hour");
+    return formatter.format(Math.round(hours / 24), "day");
+  }
+
+  async function openActivity(homeId, itemId, returnSheet) {
+    state.sheet = {
+      type: "activity", homeId, itemId: itemId || null, returnSheet: returnSheet || null,
+      events: [], people: [], nextCursor: null, filters: {}, loading: true, error: "",
+    };
+    state.actionMenu = null;
+    render();
+    await loadActivity(true);
+  }
+
+  async function loadActivity(reset) {
+    if (state.sheet?.type !== "activity" || state.sheet.loading && !reset) return;
+    const sheet = state.sheet;
+    sheet.loading = true;
+    sheet.error = "";
+    render();
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (sheet.itemId) params.set("entity_id", sheet.itemId);
+      if (!reset && sheet.nextCursor) params.set("cursor", sheet.nextCursor);
+      Object.entries(sheet.filters || {}).forEach(([key, value]) => {
+        if (value) params.set(key === "actorId" ? "actor_id" : key === "entityType" ? "entity_type" : key, value);
+      });
+      const page = await apiRequest("GET", `/homes/${sheet.homeId}/activity?${params}`);
+      const incoming = page.events || [];
+      sheet.events = reset ? incoming : [...sheet.events, ...incoming];
+      sheet.nextCursor = page.nextCursor ?? page.next_cursor ?? null;
+      const people = new Map(sheet.people.map((person) => [person.id, person]));
+      (page.actors || []).forEach((person) => people.set(person.id, person));
+      incoming.forEach((event) => {
+        const id = event.actorId || event.actor_id;
+        if (id) people.set(id, { id, name: event.actorName || event.actor_name || event.actorEmail || event.actor_email || "Unknown person" });
+      });
+      sheet.people = [...people.values()];
+    } catch (error) {
+      if (reset) sheet.events = [];
+      sheet.error = error.message || String(error);
+    } finally {
+      if (state.sheet === sheet) {
+        sheet.loading = false;
+        render();
+      }
+    }
   }
 
   function renderLocationPickerSheet() {
@@ -1795,11 +1925,12 @@
   }
 
   async function apiRequest(method, path, body) {
-    let response = await sendApiRequest(method, path, body);
+    const mutation = method === "GET" ? null : { id: id(), occurredAt: new Date().toISOString() };
+    let response = await sendApiRequest(method, path, body, mutation);
 
     if (response.status === 401 && isRefreshableRequest(path)) {
       if (state.refreshToken && await refreshAccessToken()) {
-        response = await sendApiRequest(method, path, body);
+        response = await sendApiRequest(method, path, body, mutation);
       } else {
         clearSession();
         throw new Error("Session expired. Please sign in again.");
@@ -1809,10 +1940,11 @@
     return parseApiResponse(response);
   }
 
-  function sendApiRequest(method, path, body) {
+  function sendApiRequest(method, path, body, mutation) {
     const headers = {
       "Content-Type": "application/json",
       ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+      ...(mutation ? { "X-CubbyLog-Mutation-ID": mutation.id, "X-CubbyLog-Occurred-At": mutation.occurredAt } : {}),
     };
 
     return fetch(`${state.apiBaseUrl}${path}`, {
@@ -2745,6 +2877,27 @@
       render();
       return;
     }
+    if (action === "close-activity") {
+      state.sheet = state.sheet?.returnSheet || null;
+      render();
+      return;
+    }
+    if (action === "open-activity") {
+      const form = document.getElementById("item-editor-form");
+      const returnSheet = form && state.sheet?.type === "itemEditor"
+        ? { ...state.sheet, draft: readItemDraftFromForm(form) }
+        : null;
+      await openActivity(
+        element.dataset.homeId || state.actionMenu?.homeId || state.sheet?.homeId,
+        element.dataset.itemId || null,
+        returnSheet
+      );
+      return;
+    }
+    if (action === "load-more-activity") {
+      await loadActivity(false);
+      return;
+    }
     if (action === "open-photo-preview") {
       if (state.selectionMode) {
         const chip = element.closest("[data-draggable-item]");
@@ -3164,6 +3317,17 @@
         await saveItemFromForm(form);
         state.sheet = null;
       }, "Item saved");
+      return;
+    }
+
+    if (kind === "activity-filters" && state.sheet?.type === "activity") {
+      state.sheet.filters = {
+        actorId: form.elements.actorId.value,
+        action: form.elements.action.value,
+        entityType: form.elements.entityType.value,
+        from: form.elements.from.value,
+      };
+      await loadActivity(true);
     }
   }
 

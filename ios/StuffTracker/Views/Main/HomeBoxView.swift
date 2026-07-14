@@ -403,6 +403,12 @@ struct HomeBoxView: View {
                             Label("Sort rooms by name", systemImage: "arrow.up.arrow.down")
                         }
                         Divider()
+                        NavigationLink {
+                            ActivityHistoryView(homeId: home.id, title: "\(home.name) Activity")
+                        } label: {
+                            Label("Activity", systemImage: "clock.arrow.circlepath")
+                        }
+                        Divider()
                         Button(role: .destructive) {
                             if hasDescendants { showDeleteConfirm = true }
                             else { homeStore.deleteHome(home.id) }
@@ -509,6 +515,185 @@ struct HomeBoxView: View {
     }
 
     private var homeId: String { home.id }
+}
+
+// MARK: - Shared-home activity
+
+struct ActivityHistoryView: View {
+    let homeId: String
+    let title: String
+    var itemId: String? = nil
+
+    @State private var events: [ActivityEvent] = []
+    @State private var nextCursor: String?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var actors: [ActivityActor] = []
+    @State private var actorId = ""
+    @State private var action = ""
+    @State private var entityType = ""
+    @State private var dateRange = ActivityDateRange.all
+
+    var body: some View {
+        List {
+            if itemId == nil {
+                Section {
+                    filterPickers
+                }
+            }
+
+            if events.isEmpty && !isLoading {
+                ContentUnavailableView(
+                    errorMessage == nil ? "No Activity" : "Couldn’t Load Activity",
+                    systemImage: errorMessage == nil ? "clock" : "exclamationmark.triangle",
+                    description: Text(errorMessage ?? "Changes to this shared home will appear here.")
+                )
+            } else {
+                Section {
+                    ForEach(events) { event in
+                        ActivityEventRow(event: event)
+                    }
+                    if nextCursor != nil {
+                        Button(isLoading ? "Loading…" : "Load More") {
+                            Task { await load(reset: false) }
+                        }
+                        .disabled(isLoading)
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .overlay { if isLoading && events.isEmpty { ProgressView() } }
+        .task { await load(reset: true) }
+        .refreshable { await load(reset: true) }
+        .onChange(of: actorId) { _, _ in reload() }
+        .onChange(of: action) { _, _ in reload() }
+        .onChange(of: entityType) { _, _ in reload() }
+        .onChange(of: dateRange) { _, _ in reload() }
+    }
+
+    private var filterPickers: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                filterMenu("Person", selection: $actorId, options: [("", "Everyone")] + actors.map { ($0.id, $0.name) })
+                filterMenu("Action", selection: $action, options: [
+                    ("", "All actions"), ("created", "Created"), ("updated", "Updated"),
+                    ("moved", "Moved"), ("reordered", "Reordered"), ("flagged", "Flagged"),
+                    ("unflagged", "Unflagged"), ("deleted", "Deleted"),
+                    ("member_added", "Member added"), ("member_role_changed", "Role changed"),
+                    ("member_removed", "Member removed")
+                ])
+            }
+            HStack {
+                filterMenu("Type", selection: $entityType, options: [
+                    ("", "All types"), ("home", "Homes"), ("location", "Locations"),
+                    ("item", "Items"), ("member", "Members")
+                ])
+                Picker("Date", selection: $dateRange) {
+                    ForEach(ActivityDateRange.allCases) { range in Text(range.label).tag(range) }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func filterMenu(_ label: String, selection: Binding<String>, options: [(String, String)]) -> some View {
+        Picker(label, selection: selection) {
+            ForEach(options, id: \.0) { value, name in Text(name).tag(value) }
+        }
+        .pickerStyle(.menu)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func reload() {
+        Task { await load(reset: true) }
+    }
+
+    @MainActor
+    private func load(reset: Bool) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let page = try await APIClient.shared.activity(
+                homeId: homeId,
+                itemId: itemId,
+                cursor: reset ? nil : nextCursor,
+                actorId: actorId.isEmpty ? nil : actorId,
+                action: action.isEmpty ? nil : action,
+                entityType: entityType.isEmpty ? nil : entityType,
+                from: dateRange.startDate
+            )
+            events = reset ? page.events : events + page.events
+            nextCursor = page.nextCursor
+            actors = page.actors
+            errorMessage = nil
+        } catch {
+            if reset { events = [] }
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum ActivityDateRange: String, CaseIterable, Identifiable {
+    case all, week, month
+    var id: String { rawValue }
+    var label: String { self == .all ? "Any date" : self == .week ? "Past week" : "Past month" }
+    var startDate: Date? {
+        switch self {
+        case .all: return nil
+        case .week: return Calendar.current.date(byAdding: .day, value: -7, to: Date())
+        case .month: return Calendar.current.date(byAdding: .month, value: -1, to: Date())
+        }
+    }
+}
+
+private struct ActivityEventRow: View {
+    let event: ActivityEvent
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.summary).font(.body.weight(.medium))
+                if let path = event.locationPath, !path.isEmpty {
+                    Label(path, systemImage: "mappin.and.ellipse")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 6) {
+                    Text(event.actorName ?? event.actorEmail ?? "System")
+                    Text("•")
+                    Text(relativeDate)
+                    if event.isOfflineChange {
+                        Text("Synced later")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(.orange.opacity(0.16), in: Capsule())
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var icon: String {
+        switch event.entityType {
+        case "home": return "house"
+        case "location": return "shippingbox"
+        case "member": return "person.2"
+        default: return "tag"
+        }
+    }
+
+    private var relativeDate: String {
+        guard let date = ISO8601DateFormatter().date(from: event.createdAt) else { return event.createdAt }
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+    }
 }
 
 // MARK: - Floor box

@@ -159,19 +159,31 @@ final class APIClient {
 
     // MARK: - Core request
 
+    struct MutationMetadata {
+        let id: String
+        let occurredAt: Date
+
+        static func automatic() -> MutationMetadata {
+            MutationMetadata(id: UUID().uuidString, occurredAt: Date())
+        }
+    }
+
     func request<T: Decodable>(
         _ method: String,
         path: String,
         body: (some Encodable)? = nil as String?,
-        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase,
+        mutationMetadata: MutationMetadata? = nil
     ) async throws -> T {
         let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+        let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
         let data = try await performRequest(
             method,
             path: path,
             bodyData: bodyData,
             allowRefresh: true,
-            errorFallback: "Unknown error"
+            errorFallback: "Unknown error",
+            mutationMetadata: metadata
         )
 
         do {
@@ -185,15 +197,18 @@ final class APIClient {
         _ method: String,
         path: String,
         body: (some Encodable)? = nil as String?,
-        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase
+        keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase,
+        mutationMetadata: MutationMetadata? = nil
     ) async throws {
         let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+        let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
         _ = try await performRequest(
             method,
             path: path,
             bodyData: bodyData,
             allowRefresh: true,
-            errorFallback: "Request failed"
+            errorFallback: "Request failed",
+            mutationMetadata: metadata
         )
     }
 
@@ -202,13 +217,18 @@ final class APIClient {
         path: String,
         bodyData: Data?,
         allowRefresh: Bool,
-        errorFallback: String
+        errorFallback: String,
+        mutationMetadata: MutationMetadata?
     ) async throws -> Data {
         guard let url = URL(string: baseURL + path) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        if let mutationMetadata {
+            req.setValue(mutationMetadata.id, forHTTPHeaderField: "X-CubbyLog-Mutation-ID")
+            req.setValue(ISO8601DateFormatter().string(from: mutationMetadata.occurredAt), forHTTPHeaderField: "X-CubbyLog-Occurred-At")
+        }
         req.httpBody = bodyData
 
         let (data, response): (Data, URLResponse)
@@ -225,7 +245,8 @@ final class APIClient {
                 path: path,
                 bodyData: bodyData,
                 allowRefresh: false,
-                errorFallback: errorFallback
+                errorFallback: errorFallback,
+                mutationMetadata: mutationMetadata
             )
         }
 
@@ -390,8 +411,8 @@ final class APIClient {
         try await request("GET", path: "/homes")
     }
 
-    func createHome(name: String, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Home {
-        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged))
+    func createHome(name: String, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Home {
+        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
     func getHome(_ id: String) async throws -> HomeDetail {
@@ -421,12 +442,12 @@ final class APIClient {
         }
     }
 
-    func updateHome(_ id: String, name: String, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Home {
-        try await request("PATCH", path: "/homes/\(id)", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged))
+    func updateHome(_ id: String, name: String, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Home {
+        try await request("PATCH", path: "/homes/\(id)", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
-    func deleteHome(_ id: String) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(id)")
+    func deleteHome(_ id: String, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await requestEmpty("DELETE", path: "/homes/\(id)", mutationMetadata: mutationMetadata)
     }
 
     // MARK: - Members
@@ -482,9 +503,9 @@ final class APIClient {
         }
     }
 
-    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Location {
+    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Location {
         try await request("POST", path: "/homes/\(homeId)/locations",
-                          body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged))
+                          body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
     struct UpdateLocationBody: Encodable {
@@ -519,13 +540,13 @@ final class APIClient {
         }
     }
 
-    func updateLocation(homeId: String, locationId: String, newHomeId: String? = nil, name: String? = nil, parentId: String? = nil, sortOrder: Int? = nil, icon: String? = nil, isFlagged: Bool? = nil) async throws -> Location {
+    func updateLocation(homeId: String, locationId: String, newHomeId: String? = nil, name: String? = nil, parentId: String? = nil, sortOrder: Int? = nil, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Location {
         return try await request("PATCH", path: "/homes/\(homeId)/locations/\(locationId)",
-                                 body: UpdateLocationBody(homeId: newHomeId, name: name, parentId: parentId, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged))
+                                 body: UpdateLocationBody(homeId: newHomeId, name: name, parentId: parentId, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
-    func deleteLocation(homeId: String, locationId: String) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(homeId)/locations/\(locationId)")
+    func deleteLocation(homeId: String, locationId: String, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await requestEmpty("DELETE", path: "/homes/\(homeId)/locations/\(locationId)", mutationMetadata: mutationMetadata)
     }
 
     // MARK: - Items
@@ -601,16 +622,30 @@ final class APIClient {
         }
     }
 
-    func createItem(homeId: String, body: ItemBody) async throws -> Item {
-        try await request("POST", path: "/homes/\(homeId)/items", body: body)
+    func createItem(homeId: String, body: ItemBody, mutationMetadata: MutationMetadata? = nil) async throws -> Item {
+        try await request("POST", path: "/homes/\(homeId)/items", body: body, mutationMetadata: mutationMetadata)
     }
 
-    func updateItem(homeId: String, itemId: String, body: ItemBody) async throws -> Item {
-        try await request("PATCH", path: "/homes/\(homeId)/items/\(itemId)", body: body)
+    func updateItem(homeId: String, itemId: String, body: ItemBody, mutationMetadata: MutationMetadata? = nil) async throws -> Item {
+        try await request("PATCH", path: "/homes/\(homeId)/items/\(itemId)", body: body, mutationMetadata: mutationMetadata)
     }
 
-    func deleteItem(homeId: String, itemId: String) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(homeId)/items/\(itemId)")
+    func deleteItem(homeId: String, itemId: String, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await requestEmpty("DELETE", path: "/homes/\(homeId)/items/\(itemId)", mutationMetadata: mutationMetadata)
+    }
+
+    func activity(homeId: String, itemId: String? = nil, cursor: String? = nil, actorId: String? = nil, action: String? = nil, entityType: String? = nil, from: Date? = nil) async throws -> ActivityPage {
+        var components = URLComponents()
+        components.path = "/homes/\(homeId)/activity"
+        components.queryItems = [
+            itemId.map { URLQueryItem(name: "entity_id", value: $0) },
+            cursor.map { URLQueryItem(name: "cursor", value: $0) },
+            actorId.map { URLQueryItem(name: "actor_id", value: $0) },
+            action.map { URLQueryItem(name: "action", value: $0) },
+            entityType.map { URLQueryItem(name: "entity_type", value: $0) },
+            from.map { URLQueryItem(name: "from", value: ISO8601DateFormatter().string(from: $0)) },
+        ].compactMap { $0 }
+        return try await request("GET", path: components.string ?? components.path)
     }
 
     func searchItems(homeId: String, query: String) async throws -> [Item] {

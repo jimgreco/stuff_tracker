@@ -16,6 +16,7 @@ import appStoreRouter from './routes/appStore';
 import homesRouter from './routes/homes';
 import locationsRouter from './routes/locations';
 import itemsRouter from './routes/items';
+import activityRouter from './routes/activity';
 import { authRateLimit } from './lib/rateLimits';
 import { getCsvEnv, isProduction } from './lib/env';
 import { sendOperationalAlert } from './lib/alerts';
@@ -64,6 +65,7 @@ export function createApp() {
   app.use('/account', accountRouter);
   app.use('/app-store', appStoreRouter);
   app.use('/homes', homesRouter);
+  app.use('/homes/:homeId/activity', activityRouter);
   app.use('/homes/:homeId/locations', locationsRouter);
   app.use('/homes/:homeId/items', itemsRouter);
 

@@ -1,6 +1,42 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Shared-home activity
+
+struct ActivityChange: Codable, Hashable {
+    let field: String
+}
+
+struct ActivityEvent: Codable, Identifiable {
+    let id: String
+    let homeId: String
+    let actorId: String?
+    let actorName: String?
+    let actorEmail: String?
+    let action: String
+    let entityType: String
+    let entityId: String?
+    let entityName: String
+    let locationPath: String?
+    let summary: String
+    let changes: [ActivityChange]
+    let clientOccurredAt: String?
+    let createdAt: String
+    let isOfflineChange: Bool
+}
+
+struct ActivityPage: Codable {
+    let events: [ActivityEvent]
+    let nextCursor: String?
+    let retentionDays: Int
+    let actors: [ActivityActor]
+}
+
+struct ActivityActor: Codable, Identifiable {
+    let id: String
+    let name: String
+}
+
 // MARK: - User
 
 struct User: Codable, Identifiable {

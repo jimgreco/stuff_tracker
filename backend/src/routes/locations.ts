@@ -3,6 +3,7 @@ import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { getHomeRole, canEdit } from '../lib/access';
 import { LocationSchema } from '../lib/schemas';
+import { withActivityTransaction } from '../lib/activity';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -25,13 +26,16 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon, is_flagged)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, home_id, parent_id, name, type, sort_order, icon, is_flagged`,
-    [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null, is_flagged ?? false]
-  );
-  res.status(201).json(rows[0]);
+  const location = await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon, is_flagged)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, home_id, parent_id, name, type, sort_order, icon, is_flagged`,
+      [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null, is_flagged ?? false]
+    );
+    return rows[0];
+  });
+  res.status(201).json(location);
 });
 
 // ── Update location ────────────────────────────────────────────────────────────
@@ -104,9 +108,7 @@ router.patch('/:locationId', async (req: AuthRequest, res: Response) => {
   if (updates.is_flagged !== undefined) { fields.push(`is_flagged = $${i++}`); values.push(updates.is_flagged); }
   if (!fields.length) { res.status(400).json({ error: 'Nothing to update' }); return; }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  const movedLocation = await withActivityTransaction(req, async (client) => {
     fields.push(`updated_at = NOW()`);
     values.push(locationId);
 
@@ -116,9 +118,7 @@ router.patch('/:locationId', async (req: AuthRequest, res: Response) => {
       values
     );
     if (!rows[0]) {
-      await client.query('ROLLBACK');
-      res.status(404).json({ error: 'Location not found' });
-      return;
+      return null;
     }
 
     if (updates.home_id !== undefined && updates.home_id !== currentHomeId) {
@@ -148,15 +148,11 @@ router.patch('/:locationId', async (req: AuthRequest, res: Response) => {
       );
     }
 
-    await client.query('COMMIT');
-    const moved = await pool.query('SELECT * FROM locations WHERE id = $1', [locationId]);
-    res.json(moved.rows[0]);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    const moved = await client.query('SELECT * FROM locations WHERE id = $1', [locationId]);
+    return moved.rows[0];
+  });
+  if (!movedLocation) { res.status(404).json({ error: 'Location not found' }); return; }
+  res.json(movedLocation);
 });
 
 // ── Delete location ────────────────────────────────────────────────────────────
@@ -165,10 +161,10 @@ router.delete('/:locationId', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  await pool.query(
+  await withActivityTransaction(req, (client) => client.query(
     'DELETE FROM locations WHERE id = $1 AND home_id = $2',
     [locationId, homeId]
-  );
+  ));
   res.status(204).send();
 });
 

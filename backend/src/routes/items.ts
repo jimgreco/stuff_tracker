@@ -19,6 +19,7 @@ import {
   canUploadAttachment,
   type QuotaDecision,
 } from '../lib/entitlements';
+import { withActivityTransaction } from '../lib/activity';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -102,8 +103,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO items (
+  const item = await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO items (
        home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
        documents, purchase_date, serial_number, model_number, warranty_expires_date,
        estimated_value_cents, is_flagged, sort_order, created_by
@@ -128,9 +130,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       is_flagged ?? false,
       sort_order ?? 0,
       req.user!.userId,
-    ]
-  );
-  res.status(201).json(await signItemAttachmentUrls(rows[0]));
+      ]
+    );
+    return rows[0];
+  });
+  res.status(201).json(await signItemAttachmentUrls(item));
 });
 
 // ── Update item ────────────────────────────────────────────────────────────────
@@ -215,13 +219,16 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   fields.push(`updated_at = NOW()`);
   values.push(itemId);
 
-  const { rows } = await pool.query(
-    `UPDATE items SET ${fields.join(', ')}
-     WHERE id = $${i++} RETURNING *`,
-    values
-  );
-  if (!rows[0]) { res.status(404).json({ error: 'Item not found' }); return; }
-  res.json(await signItemAttachmentUrls(rows[0]));
+  const item = await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query(
+      `UPDATE items SET ${fields.join(', ')}
+       WHERE id = $${i++} RETURNING *`,
+      values
+    );
+    return rows[0];
+  });
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(await signItemAttachmentUrls(item));
 });
 
 // ── Delete item ────────────────────────────────────────────────────────────────
@@ -230,7 +237,10 @@ router.delete('/:itemId', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  await pool.query('DELETE FROM items WHERE id = $1 AND home_id = $2', [itemId, homeId]);
+  await withActivityTransaction(req, (client) => client.query(
+    'DELETE FROM items WHERE id = $1 AND home_id = $2',
+    [itemId, homeId]
+  ));
   res.status(204).send();
 });
 

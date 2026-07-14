@@ -143,17 +143,20 @@ Treat a failing scheduled health run as an availability incident and follow the 
 
 ## Production Ops Checks
 
-The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host and runs these read-only checks:
+The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host, runs the checks below, and applies the activity-history retention policy:
 
 ```sh
 # Host backup freshness check against ~/deploy/backups/stuff by default.
 npm run storage:s3:check
 npm run db:hardening:check
+npm run activity:cleanup
 ```
 
 The backup freshness check reads host backups from `~/deploy/backups/stuff` by default. Override that path on the production host with `STUFF_DB_BACKUP_DIR` in `~/deploy/.env`. Freshness failures should be treated as incidents.
 
 Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
+
+Shared-home activity is append-only and retained for 365 days by default. Set `ACTIVITY_RETENTION_DAYS` to a value of at least 30 to change the window. The daily cleanup permanently removes only events older than that window; deleting a home, location, item, or member does not cascade-delete retained activity rows.
 
 ## Production Logging
 

@@ -126,17 +126,17 @@ final class SyncManager: ObservableObject {
     private func pushHome(_ home: LocalHome) async {
         do {
             if home.isDeleted {
-                try await api.deleteHome(home.id)
+                try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
                 local.hardDelete(home: home)
             } else {
                 // Try to create or update
                 do {
                     let _ = try await api.getHome(home.id)
                     // Exists on server, update
-                    let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged)
+                    let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-update", id: home.id, at: home.updatedAt))
                 } catch {
                     // Doesn't exist, create
-                    let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged)
+                    let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
                     // Remap the local ID to server ID if different
                     if created.id != home.id {
                         local.remapHomeId(from: home.id, to: created.id)
@@ -172,7 +172,7 @@ final class SyncManager: ObservableObject {
         // Delete homes
         for home in local.fetchDeletedHomes() {
             do {
-                try await api.deleteHome(home.id)
+                try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
             } catch {
                 // Might already be deleted on server
             }
@@ -182,7 +182,7 @@ final class SyncManager: ObservableObject {
         // Delete locations
         for loc in local.fetchDeletedLocations() {
             do {
-                try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id)
+                try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id, mutationMetadata: mutationMetadata("location-delete", id: loc.id, at: loc.updatedAt))
             } catch {}
             local.hardDelete(location: loc)
         }
@@ -190,7 +190,7 @@ final class SyncManager: ObservableObject {
         // Delete items
         for item in local.fetchDeletedItems() {
             do {
-                try await api.deleteItem(homeId: item.homeId, itemId: item.id)
+                try await api.deleteItem(homeId: item.homeId, itemId: item.id, mutationMetadata: mutationMetadata("item-delete", id: item.id, at: item.updatedAt))
             } catch {}
             local.hardDelete(item: item)
         }
@@ -257,7 +257,7 @@ final class SyncManager: ObservableObject {
         do {
             let detail = try await api.getHome(home.id)
             if home.needsSync {
-                let updated: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged)
+                let updated: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-update", id: home.id, at: home.updatedAt))
                 home.needsSync = false
                 local.save()
                 return updated
@@ -271,7 +271,7 @@ final class SyncManager: ObservableObject {
                 isFlagged: detail.isFlagged
             )
         } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
-            let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged)
+            let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
             let oldId = home.id
             if created.id != oldId {
                 local.remapHomeId(from: oldId, to: created.id)
@@ -323,7 +323,8 @@ final class SyncManager: ObservableObject {
                 parentId: loc.parentId,
                 sortOrder: loc.sortOrder,
                 icon: loc.icon,
-                isFlagged: loc.isFlagged
+                isFlagged: loc.isFlagged,
+                mutationMetadata: mutationMetadata("location-update", id: loc.id, at: loc.updatedAt)
             )
             loc.update(from: updated)
             local.save()
@@ -336,7 +337,8 @@ final class SyncManager: ObservableObject {
                 type: loc.type,
                 sortOrder: loc.sortOrder,
                 icon: loc.icon,
-                isFlagged: loc.isFlagged
+                isFlagged: loc.isFlagged,
+                mutationMetadata: mutationMetadata("location-create", id: loc.id, at: loc.updatedAt)
             )
             if created.id != oldId {
                 local.remapLocationId(from: oldId, to: created.id)
@@ -404,12 +406,12 @@ final class SyncManager: ObservableObject {
 
     private func saveItemToServer(_ item: LocalItem) async throws {
         do {
-            let updated = try await api.updateItem(homeId: item.homeId, itemId: item.id, body: itemBody(item))
+            let updated = try await api.updateItem(homeId: item.homeId, itemId: item.id, body: itemBody(item), mutationMetadata: mutationMetadata("item-update", id: item.id, at: item.updatedAt))
             item.update(from: updated)
             local.save()
         } catch APIError.httpError(404, _) {
             let oldId = item.id
-            let created = try await api.createItem(homeId: item.homeId, body: itemBody(item))
+            let created = try await api.createItem(homeId: item.homeId, body: itemBody(item), mutationMetadata: mutationMetadata("item-create", id: item.id, at: item.updatedAt))
             if created.id != oldId {
                 local.remapItemId(from: oldId, to: created.id)
             }
@@ -426,6 +428,13 @@ final class SyncManager: ObservableObject {
             item.homeId = uploadedHome.id
             local.save()
         }
+    }
+
+    private func mutationMetadata(_ operation: String, id: String, at date: Date) -> APIClient.MutationMetadata {
+        APIClient.MutationMetadata(
+            id: "ios:\(operation):\(id):\(date.timeIntervalSince1970)",
+            occurredAt: date
+        )
     }
 
     private func ensureItemLocationUploaded(_ item: LocalItem) async throws {

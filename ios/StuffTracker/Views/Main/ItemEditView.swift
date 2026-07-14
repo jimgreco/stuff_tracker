@@ -222,6 +222,7 @@ struct ItemEditView: View {
     @State private var showDocumentImporter = false
     @State private var showSubscriptionSheet = false
     @State private var attachmentError: String?
+    @State private var showActivityHistory = false
 
     private let editorListInsets = EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20)
     private let editorActionInsets = EdgeInsets(top: 7, leading: 20, bottom: 7, trailing: 20)
@@ -284,7 +285,15 @@ struct ItemEditView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    shareMenu
+                    Menu {
+                        Button { showActivityHistory = true } label: {
+                            Label("View Item History", systemImage: "clock.arrow.circlepath")
+                        }
+                        Divider()
+                        shareMenuItems
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -301,6 +310,16 @@ struct ItemEditView: View {
                     .environmentObject(authStore)
                     .environmentObject(subscriptionStore)
                     .environmentObject(syncManager)
+            }
+            .sheet(isPresented: $showActivityHistory) {
+                NavigationStack {
+                    ActivityHistoryView(homeId: selectedHomeId, title: "Item History", itemId: item.id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { showActivityHistory = false }
+                            }
+                        }
+                }
             }
             .fullScreenCover(item: $viewedPhotoAttachment) { attachment in
                 PhotoAttachmentViewer(attachment: attachment)
@@ -334,6 +353,16 @@ struct ItemEditView: View {
 
     private var shareMenu: some View {
         Menu {
+            shareMenuItems
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .disabled(normalizedText(name) == nil)
+        .accessibilityLabel("Share item")
+    }
+
+    @ViewBuilder
+    private var shareMenuItems: some View {
             if let deepLink = deepLinkForSharing {
                 ShareLink(item: deepLink.url) {
                     Label("Share Item Link", systemImage: "link")
@@ -353,11 +382,6 @@ struct ItemEditView: View {
             ShareLink(item: shareText(.locationAndDetails)) {
                 Label("Share Location and Details", systemImage: "square.and.arrow.up")
             }
-        } label: {
-            Image(systemName: "square.and.arrow.up")
-        }
-        .disabled(normalizedText(name) == nil)
-        .accessibilityLabel("Share item")
     }
 
     private func shareText(_ scope: ItemShareScope) -> String {
