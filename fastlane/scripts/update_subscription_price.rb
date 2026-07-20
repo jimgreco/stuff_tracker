@@ -65,6 +65,14 @@ def request_json(method, path_or_url, query: nil, body: nil)
   raise "#{method.upcase} #{uri} failed with #{response.code}: #{detail.empty? ? response.body : detail}"
 end
 
+def request_json_optional(method, path_or_url, query: nil)
+  request_json(method, path_or_url, query: query)
+rescue RuntimeError => error
+  return { "data" => nil } if error.message.include?(" failed with 404:")
+
+  raise
+end
+
 def paged_get(path, query: nil)
   results = []
   included = []
@@ -135,7 +143,7 @@ def subscription_review_details(subscription_id)
       "fields[subscriptionAppStoreReviewScreenshots]" => "fileName,assetDeliveryState"
     }
   )["data"]
-  availability = request_json(
+  availability = request_json_optional(
     "get",
     "/v1/subscriptions/#{subscription_id}/subscriptionAvailability",
     query: {
