@@ -43,4 +43,28 @@ final class StuffTrackerScreenshots: XCTestCase {
         XCTAssertTrue(app.textFields["Name"].waitForExistence(timeout: 5))
         snapshot("04-Item-Details")
     }
+
+    func testNewContainerAppearsImmediatelyInItsRoom() throws {
+        let searchButton = app.buttons["Search stuff..."]
+        XCTAssertTrue(searchButton.waitForExistence(timeout: 5))
+        searchButton.tap()
+
+        let searchField = app.textFields["Search stuff..."]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        searchField.typeText("coffee\n")
+        XCTAssertTrue(app.staticTexts["Coffee Filters"].waitForExistence(timeout: 5))
+
+        app.buttons["location-menu-screenshot-location-kitchen"].tap()
+
+        let addContainer = app.buttons["Add Container"]
+        XCTAssertTrue(addContainer.waitForExistence(timeout: 5))
+        addContainer.tap()
+
+        let nameField = app.textFields["Container name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.typeText("Serving Bin")
+        app.buttons["Add container"].tap()
+
+        XCTAssertTrue(app.staticTexts["Serving Bin"].waitForExistence(timeout: 5))
+    }
 }

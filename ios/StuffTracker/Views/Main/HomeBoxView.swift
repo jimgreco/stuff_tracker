@@ -976,6 +976,7 @@ struct RoomBoxView: View {
                             else { homeStore.deleteLocation(homeId: home.id, locationId: room.id) }
                         } label: { Label("Delete", systemImage: "trash") }
                     } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
+                    .accessibilityIdentifier("location-menu-\(room.id)")
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 6)

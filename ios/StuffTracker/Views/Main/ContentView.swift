@@ -433,6 +433,7 @@ struct ContentView: View {
         let name = itemComposer.submittedName
         let homeId = itemComposer.homeId
         let locationId = itemComposer.locationId
+        revealHierarchy(homeId: homeId, locationId: locationId)
         itemComposer.dismiss()
         homeStore.createItem(homeId: homeId, name: name, locationId: locationId)
     }
@@ -461,7 +462,24 @@ struct ContentView: View {
             }
             homeStore.createHome(name: name)
         case .location(let homeId, let parentId, let type):
+            revealHierarchy(homeId: homeId, locationId: parentId)
             homeStore.createLocation(homeId: homeId, name: name, parentId: parentId, type: type.rawValue)
+        }
+    }
+
+    private func revealHierarchy(homeId: String, locationId: String?) {
+        searchText = ""
+        showFlaggedOnly = false
+        dismissSearchInput()
+
+        collapseStore.setCollapsed(false, for: .home(homeId))
+
+        guard let home = homeStore.homeDetails.first(where: { $0.id == homeId }) else { return }
+        var currentLocationId = locationId
+        while let currentId = currentLocationId,
+              let location = home.locations.first(where: { $0.id == currentId }) {
+            collapseStore.setCollapsed(false, for: .location(currentId))
+            currentLocationId = location.parentId
         }
     }
 
