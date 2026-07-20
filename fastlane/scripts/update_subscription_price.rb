@@ -113,6 +113,80 @@ def subscription_for_product_id(app_id, product_id)
   subscription
 end
 
+def subscription_review_details(subscription_id)
+  subscription = request_json(
+    "get",
+    "/v1/subscriptions/#{subscription_id}",
+    query: {
+      "fields[subscriptions]" => "name,productId,state,subscriptionPeriod,reviewNote,groupLevel,familySharable"
+    }
+  )["data"]
+  localizations = paged_get(
+    "/v1/subscriptions/#{subscription_id}/subscriptionLocalizations",
+    query: {
+      "fields[subscriptionLocalizations]" => "name,description,locale,state",
+      "limit" => 200
+    }
+  )["data"]
+  screenshot = request_json(
+    "get",
+    "/v1/subscriptions/#{subscription_id}/appStoreReviewScreenshot",
+    query: {
+      "fields[subscriptionAppStoreReviewScreenshots]" => "fileName,assetDeliveryState"
+    }
+  )["data"]
+  availability = request_json(
+    "get",
+    "/v1/subscriptions/#{subscription_id}/subscriptionAvailability",
+    query: {
+      "fields[subscriptionAvailabilities]" => "availableInNewTerritories"
+    }
+  )["data"]
+
+  {
+    subscription: subscription,
+    localizations: localizations,
+    screenshot: screenshot,
+    availability: availability
+  }
+end
+
+def print_subscription_review_audit(details)
+  subscription = details.fetch(:subscription)
+  attributes = subscription.fetch("attributes", {})
+  localizations = details.fetch(:localizations)
+  screenshot = details[:screenshot]
+  availability = details[:availability]
+
+  puts "Review state: #{attributes["state"] || "unknown"}"
+  puts "Subscription period: #{attributes["subscriptionPeriod"] || "unknown"}"
+  puts "Review note: #{attributes["reviewNote"].to_s.strip.empty? ? "missing" : "present"}"
+  puts "Group level: #{attributes["groupLevel"] || "unset"}"
+  puts "Family sharing: #{attributes["familySharable"] == true ? "enabled" : "disabled"}"
+  if localizations.empty?
+    puts "Localizations: missing"
+  else
+    localization_summary = localizations.map do |localization|
+      localized = localization.fetch("attributes", {})
+      "#{localized["locale"]}=#{localized["name"]} (#{localized["state"] || "unknown"})"
+    end
+    puts "Localizations: #{localization_summary.join(", ")}"
+  end
+  if screenshot
+    screenshot_attributes = screenshot.fetch("attributes", {})
+    delivery_state = screenshot_attributes.dig("assetDeliveryState", "state") || "unknown"
+    puts "Review screenshot: #{screenshot_attributes["fileName"] || screenshot["id"]} (#{delivery_state})"
+  else
+    puts "Review screenshot: missing"
+  end
+  if availability
+    available_in_new_territories = availability.dig("attributes", "availableInNewTerritories")
+    puts "Availability: configured; new territories=#{available_in_new_territories == true ? "enabled" : "disabled"}"
+  else
+    puts "Availability: missing"
+  end
+end
+
 def decimal(value)
   BigDecimal(value.to_s)
 end
@@ -226,7 +300,13 @@ subscription_name = subscription.dig("attributes", "name") || product_id
 puts "Found app #{bundle_id} (#{app_id})"
 puts "Found subscription #{subscription_name} #{product_id} (#{subscription_id})"
 
+review_details = subscription_review_details(subscription_id)
+print_subscription_review_audit(review_details)
+
 base_price_points = subscription_price_points(subscription_id, base_territory)
+current_prices = current_price_point_ids(subscription_id)
+current_base_price_point = base_price_points.find { |price_point| price_point["id"] == current_prices[base_territory] }
+puts "Current #{base_territory} customer price: #{current_base_price_point&.dig("attributes", "customerPrice") || "missing"}"
 target_price_point = base_price_points.find do |price_point|
   price_matches?(price_point.dig("attributes", "customerPrice"), target_price)
 end
@@ -250,7 +330,6 @@ target_price_points = ([target_price_point] + equalizations)
 
 raise "No equalized price points found for #{target_price_point["id"]}" if target_price_points.empty?
 
-current_prices = current_price_point_ids(subscription_id)
 price_points_to_apply = target_price_points.reject do |territory, price_point|
   current_prices[territory] == price_point["id"]
 end
