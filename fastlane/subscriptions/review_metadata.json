@@ -1,0 +1,26 @@
+{
+  "bundleId": "com.jimgreco.stufftracker",
+  "locale": "en-US",
+  "groupDisplayName": "CubbyLog Pro",
+  "reviewNote": "Sign in with the App Review account provided with the app version. From the main screen, tap the account button in the upper-right, then scroll to Subscription. The Monthly and Annual purchase buttons and Restore Purchases are in that section. A successful purchase unlocks additional attachment storage and home sharing.",
+  "products": [
+    {
+      "productId": "com.jimgreco.stufftracker.pro.monthly",
+      "period": "ONE_MONTH",
+      "groupLevel": 1,
+      "displayName": "CubbyLog Pro Monthly",
+      "description": "More storage and sharing, billed monthly.",
+      "baseTerritory": "USA",
+      "customerPrice": "0.99"
+    },
+    {
+      "productId": "com.jimgreco.stufftracker.pro.yearly",
+      "period": "ONE_YEAR",
+      "groupLevel": 2,
+      "displayName": "CubbyLog Pro Annual",
+      "description": "More storage and sharing, billed annually.",
+      "baseTerritory": "USA",
+      "customerPrice": "9.99"
+    }
+  ]
+}

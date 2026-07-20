@@ -103,6 +103,48 @@ test('App Store subscription price workflow updates the yearly Pro product', () 
   assert.match(subscriptionStore, /com\.jimgreco\.stufftracker\.pro\.yearly/);
 });
 
+test('App Store subscription review workflow completes and verifies both Pro products', () => {
+  const workflow = readRepoFile('.github/workflows/app-store-subscription-review.yml');
+  const reviewScript = readRepoFile('fastlane/scripts/configure_subscription_review.rb');
+  const captureScript = readRepoFile('fastlane/scripts/capture_subscription_review_screenshot.sh');
+  const reviewMetadata = JSON.parse(readRepoFile('fastlane/subscriptions/review_metadata.json'));
+  const reviewScreenshot = readFileSync(
+    path.join(repoRoot, 'fastlane/review_assets/subscription-review.png'),
+  );
+  const app = readRepoFile('ios/StuffTracker/StuffTrackerApp.swift');
+  const account = readRepoFile('ios/StuffTracker/Views/Auth/AccountView.swift');
+
+  assert.match(workflow, /bundle exec ruby fastlane\/scripts\/configure_subscription_review\.rb/);
+  assert.match(workflow, /SUBSCRIPTION_PRODUCT_ID: com\.jimgreco\.stufftracker\.pro\.monthly/);
+  assert.match(workflow, /TARGET_CUSTOMER_PRICE: "0\.99"/);
+  assert.match(workflow, /VERIFY_ONLY: "true"/);
+  assert.match(reviewScript, /\/v1\/subscriptionGroupLocalizations/);
+  assert.match(reviewScript, /\/v1\/subscriptionLocalizations/);
+  assert.match(reviewScript, /\/v1\/subscriptionAvailabilities/);
+  assert.match(reviewScript, /\/v1\/subscriptionAppStoreReviewScreenshots/);
+  assert.match(reviewScript, /sourceFileChecksum: Digest::MD5\.hexdigest\(bytes\)/);
+  assert.match(captureScript, /--subscription-review-screenshot/);
+  assert.match(app, /SubscriptionReviewScreenshotView/);
+  assert.ok(account.includes('Text("Subscribe \\(plan.name)")'));
+  assert.equal(reviewScreenshot.subarray(1, 4).toString(), 'PNG');
+  assert.equal(reviewScreenshot.readUInt32BE(16), 1320);
+  assert.equal(reviewScreenshot.readUInt32BE(20), 2868);
+  assert.deepEqual(
+    reviewMetadata.products.map((product: { productId: string }) => product.productId),
+    [
+      'com.jimgreco.stufftracker.pro.monthly',
+      'com.jimgreco.stufftracker.pro.yearly',
+    ],
+  );
+  for (const product of reviewMetadata.products) {
+    assert.ok(product.displayName.length <= 30);
+    assert.ok(product.description.length <= 45);
+    assert.ok(account.includes(product.displayName));
+    assert.ok(account.includes(product.description));
+    assert.ok(account.includes(`price: "$${product.customerPrice}"`));
+  }
+});
+
 test('App Store metadata copy stays within key App Store limits', () => {
   const subtitle = readRepoFile('fastlane/metadata/en-US/subtitle.txt').trim();
   const promotionalText = readRepoFile('fastlane/metadata/en-US/promotional_text.txt').trim();

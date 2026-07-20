@@ -96,6 +96,12 @@ struct StuffTrackerApp: App {
     @StateObject private var tutorialController = FirstRunTutorialController()
     @StateObject private var deepLinkStore = DeepLinkStore()
 
+    #if DEBUG
+    private static let isSubscriptionReviewScreenshotMode = ProcessInfo.processInfo.arguments.contains(
+        "--subscription-review-screenshot"
+    )
+    #endif
+
     init() {
         // Configure Google Sign-In with client ID from Info.plist
         if let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String {
@@ -107,13 +113,15 @@ struct StuffTrackerApp: App {
         _ = LocalDataManager.shared
 
         #if DEBUG
-        ScreenshotSeedData.installIfNeeded()
+        if !Self.isSubscriptionReviewScreenshotMode {
+            ScreenshotSeedData.installIfNeeded()
+        }
         #endif
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            rootView
                 .tint(CubbyTheme.green)
                 .environmentObject(authStore)
                 .environmentObject(syncManager)
@@ -131,12 +139,29 @@ struct StuffTrackerApp: App {
                     }
                 }
                 .task {
+                    #if DEBUG
+                    guard !Self.isSubscriptionReviewScreenshotMode else { return }
+                    #endif
+
                     // Sync when app launches if authenticated
                     if authStore.isAuthenticated {
                         await subscriptionStore.refresh()
                         await syncManager.performFullSync()
                     }
                 }
+            }
         }
+
+    @ViewBuilder
+    private var rootView: some View {
+        #if DEBUG
+        if Self.isSubscriptionReviewScreenshotMode {
+            SubscriptionReviewScreenshotView()
+        } else {
+            ContentView()
+        }
+        #else
+        ContentView()
+        #endif
     }
 }

@@ -3,6 +3,105 @@ import AuthenticationServices
 import GoogleSignIn
 import StoreKit
 
+#if DEBUG
+struct SubscriptionReviewScreenshotView: View {
+    private let plans = [
+        ReviewPlan(
+            name: "CubbyLog Pro Monthly",
+            description: "More storage and sharing, billed monthly.",
+            price: "$0.99"
+        ),
+        ReviewPlan(
+            name: "CubbyLog Pro Annual",
+            description: "More storage and sharing, billed annually.",
+            price: "$9.99"
+        ),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Subscription") {
+                    HStack {
+                        Text("Plan")
+                        Spacer()
+                        Label("Free", systemImage: "circle")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("Subscribe to Pro to store more photos and documents and share homes with collaborators.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    quotaRow(title: "Homes", used: 1, limit: 1)
+                    quotaRow(title: "Photos", used: 5, limit: 5)
+                    quotaRow(title: "Documents", used: 5, limit: 5)
+
+                    ForEach(plans) { plan in
+                        Button {} label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Subscribe \(plan.name)")
+                                        .font(.body.weight(.semibold))
+                                    Text(plan.description)
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.82))
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 12)
+                                Text(plan.price)
+                                    .font(.body.weight(.bold))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(CubbyTheme.green)
+                    }
+
+                    Button {} label: {
+                        HStack {
+                            Spacer()
+                            Text("Restore Purchases")
+                            Spacer()
+                        }
+                    }
+                }
+                .cubbySheetRows()
+            }
+            .cubbySheetChrome()
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    CubbyNavigationBrandTitle(title: "Account")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {}
+                }
+            }
+        }
+    }
+
+    private func quotaRow(title: String, used: Int, limit: Int) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text("\(used)/\(limit)")
+                .foregroundStyle(used >= limit ? CubbyTheme.amber : .secondary)
+        }
+    }
+
+    private struct ReviewPlan: Identifiable {
+        let name: String
+        let description: String
+        let price: String
+
+        var id: String { name }
+    }
+}
+#endif
+
 struct AccountView: View {
     @ObservedObject var homeStore: HomeStore
     var onReplayTutorial: () -> Void = {}
