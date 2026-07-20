@@ -34,14 +34,14 @@ jobs:
           APPLY: ${{ inputs.apply }}
         run: bundle exec ruby fastlane/scripts/configure_subscription_review.rb
 
-      - name: Configure Monthly price in every territory
+      - name: Verify Monthly price in every territory
         if: ${{ inputs.apply }}
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           SUBSCRIPTION_PRODUCT_ID: com.jimgreco.stufftracker.pro.monthly
-          TARGET_CUSTOMER_PRICE: "0.99"
+          TARGET_CUSTOMER_PRICE: "2.99"
           BASE_TERRITORY: USA
           DRY_RUN: "false"
         run: bundle exec ruby fastlane/scripts/update_subscription_price.rb
@@ -53,7 +53,7 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           SUBSCRIPTION_PRODUCT_ID: com.jimgreco.stufftracker.pro.monthly
-          TARGET_CUSTOMER_PRICE: "0.99"
+          TARGET_CUSTOMER_PRICE: "2.99"
           BASE_TERRITORY: USA
           DRY_RUN: "true"
         run: bundle exec ruby fastlane/scripts/update_subscription_price.rb

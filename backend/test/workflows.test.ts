@@ -116,7 +116,7 @@ test('App Store subscription review workflow completes and verifies both Pro pro
 
   assert.match(workflow, /bundle exec ruby fastlane\/scripts\/configure_subscription_review\.rb/);
   assert.match(workflow, /SUBSCRIPTION_PRODUCT_ID: com\.jimgreco\.stufftracker\.pro\.monthly/);
-  assert.match(workflow, /TARGET_CUSTOMER_PRICE: "0\.99"/);
+  assert.match(workflow, /TARGET_CUSTOMER_PRICE: "2\.99"/);
   assert.match(workflow, /VERIFY_ONLY: "true"/);
   assert.match(reviewScript, /\/v1\/subscriptionGroupLocalizations/);
   assert.match(reviewScript, /\/v1\/subscriptionLocalizations/);

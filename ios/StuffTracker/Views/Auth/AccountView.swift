@@ -9,7 +9,7 @@ struct SubscriptionReviewScreenshotView: View {
         ReviewPlan(
             name: "CubbyLog Pro Monthly",
             description: "More storage and sharing, billed monthly.",
-            price: "$0.99"
+            price: "$2.99"
         ),
         ReviewPlan(
             name: "CubbyLog Pro Annual",
