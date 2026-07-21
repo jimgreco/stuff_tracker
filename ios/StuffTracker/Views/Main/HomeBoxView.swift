@@ -296,6 +296,13 @@ private func breadcrumbPath(for locationId: String?, homeName: String, locations
     return path
 }
 
+private func breadcrumbMinY(in geometry: GeometryProxy) -> CGFloat {
+    if #available(iOS 18.0, *) {
+        return geometry.frame(in: .named("scrollContent")).minY
+    }
+    return geometry.frame(in: .named("scroll")).minY
+}
+
 // MARK: - Home box (outermost)
 
 struct HomeBoxView: View {
@@ -480,7 +487,7 @@ struct HomeBoxView: View {
                     CubbyShelfLip(kind: .home, height: 12)
                 }
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
-                        BreadcrumbAnchor(path: [home.name], minY: geo.frame(in: .named("scroll")).minY)
+                        BreadcrumbAnchor(path: [home.name], minY: breadcrumbMinY(in: geo))
                     ])
             }
         )
@@ -848,7 +855,7 @@ struct FloorBoxView: View {
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: floor.id, homeName: home.name, locations: home.locations),
-                            minY: geo.frame(in: .named("scroll")).minY
+                            minY: breadcrumbMinY(in: geo)
                         )
                     ])
             }
@@ -1025,7 +1032,7 @@ struct RoomBoxView: View {
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: room.id, homeName: home.name, locations: home.locations),
-                            minY: geo.frame(in: .named("scroll")).minY
+                            minY: breadcrumbMinY(in: geo)
                         )
                     ])
             }
@@ -1189,7 +1196,7 @@ struct ContainerBoxView: View {
                     .preference(key: BreadcrumbPreferenceKey.self, value: [
                         BreadcrumbAnchor(
                             path: breadcrumbPath(for: container.id, homeName: home.name, locations: home.locations),
-                            minY: geo.frame(in: .named("scroll")).minY
+                            minY: breadcrumbMinY(in: geo)
                         )
                     ])
             }

@@ -2,6 +2,27 @@ import XCTest
 @testable import StuffTracker
 
 final class LocationTreePresentationTests: XCTestCase {
+    @MainActor
+    func testBreadcrumbScrollTrackerUsesStableContentPositions() {
+        let tracker = BreadcrumbScrollTracker()
+        tracker.updateAnchors([
+            BreadcrumbAnchor(path: ["Home", "Floor", "Room"], minY: 240),
+            BreadcrumbAnchor(path: ["Home"], minY: 16),
+            BreadcrumbAnchor(path: ["Home", "Floor"], minY: 100)
+        ])
+
+        XCTAssertEqual(tracker.path, [])
+
+        tracker.updateVisibleContentMinY(80)
+        XCTAssertEqual(tracker.path, ["Home", "Floor"])
+
+        tracker.updateVisibleContentMinY(200)
+        XCTAssertEqual(tracker.path, ["Home", "Floor", "Room"])
+
+        tracker.updateVisibleContentMinY(-20)
+        XCTAssertEqual(tracker.path, [])
+    }
+
     func testSelectedLabelHandlesMissingHomeAndTopLevelSelection() {
         XCTAssertEqual(LocationTreePresentation.selectedLabel(home: nil, selectedId: nil), "None")
 

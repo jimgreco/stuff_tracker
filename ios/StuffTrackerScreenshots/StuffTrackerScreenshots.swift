@@ -67,4 +67,16 @@ final class StuffTrackerScreenshots: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Serving Bin"].waitForExistence(timeout: 5))
     }
+
+    func testScrollingUpdatesBreadcrumb() throws {
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 5))
+
+        let breadcrumb = app.descendants(matching: .any)["breadcrumb-bar"]
+        for _ in 0..<3 where !breadcrumb.exists {
+            scrollView.swipeUp(velocity: .fast)
+        }
+
+        XCTAssertTrue(breadcrumb.waitForExistence(timeout: 5))
+    }
 }

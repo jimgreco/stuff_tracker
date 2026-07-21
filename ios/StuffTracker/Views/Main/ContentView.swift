@@ -16,6 +16,66 @@ struct BreadcrumbPreferenceKey: PreferenceKey {
 }
 
 @MainActor
+final class BreadcrumbScrollTracker: ObservableObject {
+    @Published private(set) var path: [String] = []
+
+    private var anchors: [BreadcrumbAnchor] = []
+    private var visibleContentMinY: CGFloat = 0
+    private let viewportThreshold: CGFloat
+
+    init(viewportThreshold: CGFloat = 48) {
+        self.viewportThreshold = viewportThreshold
+    }
+
+    func updateAnchors(_ anchors: [BreadcrumbAnchor]) {
+        self.anchors = anchors.sorted { $0.minY < $1.minY }
+        updatePath()
+    }
+
+    func updateVisibleContentMinY(_ visibleContentMinY: CGFloat) {
+        self.visibleContentMinY = visibleContentMinY
+        updatePath()
+    }
+
+    func updateViewportAnchors(_ anchors: [BreadcrumbAnchor]) {
+        let candidatePath = anchors
+            .filter { $0.minY <= viewportThreshold }
+            .max(by: { $0.minY < $1.minY })?
+            .path ?? []
+        publish(candidatePath)
+    }
+
+    private func updatePath() {
+        let contentThreshold = visibleContentMinY + viewportThreshold
+        let candidatePath = lastAnchor(atOrBefore: contentThreshold)?.path ?? []
+        publish(candidatePath)
+    }
+
+    private func publish(_ candidatePath: [String]) {
+        let nextPath = candidatePath.count > 1 ? candidatePath : []
+        guard path != nextPath else { return }
+        path = nextPath
+    }
+
+    private func lastAnchor(atOrBefore threshold: CGFloat) -> BreadcrumbAnchor? {
+        var lowerBound = 0
+        var upperBound = anchors.count
+
+        while lowerBound < upperBound {
+            let midpoint = lowerBound + (upperBound - lowerBound) / 2
+            if anchors[midpoint].minY <= threshold {
+                lowerBound = midpoint + 1
+            } else {
+                upperBound = midpoint
+            }
+        }
+
+        guard lowerBound > 0 else { return nil }
+        return anchors[lowerBound - 1]
+    }
+}
+
+@MainActor
 final class FirstRunTutorialController: ObservableObject {
     static let completedDefaultsKey = "has_completed_first_run_tutorial_v1"
 
@@ -165,6 +225,7 @@ struct ContentView: View {
     @StateObject private var itemSelection = ItemSelectionController()
     @StateObject private var itemComposer = ItemAddComposerController()
     @StateObject private var hierarchyComposer = HierarchyAddComposerController()
+    @StateObject private var breadcrumbTracker = BreadcrumbScrollTracker()
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
     @State private var showAccountSheet = false
@@ -172,7 +233,6 @@ struct ContentView: View {
     @State private var showBulkDeleteConfirm = false
     @State private var deepLinkedItem: Item?
     @State private var deepLinkScrollTargetID: String?
-    @State private var breadcrumbPath: [String] = []
     @State private var hasCompletedInitialHomeLoad = false
     @FocusState private var isSearchFocused: Bool
     @State private var isSearchInputPresented = false
@@ -235,10 +295,16 @@ struct ContentView: View {
                                 }
                                 .padding()
                                 .padding(.bottom, 104)
+                                .coordinateSpace(name: "scrollContent")
                             }
                             .coordinateSpace(name: "scroll")
+                            .trackBreadcrumbScroll(using: breadcrumbTracker)
                             .onPreferenceChange(BreadcrumbPreferenceKey.self) { anchors in
-                                updateBreadcrumbPath(from: anchors)
+                                if #available(iOS 18.0, *) {
+                                    breadcrumbTracker.updateAnchors(anchors)
+                                } else {
+                                    breadcrumbTracker.updateViewportAnchors(anchors)
+                                }
                             }
                             .scrollDismissesKeyboard(.interactively)
                             .task(id: deepLinkScrollTargetID) {
@@ -251,7 +317,7 @@ struct ContentView: View {
             .background(CubbyWallBackground())
             .overlay(alignment: .top) {
                 if !isSearchInputPresented {
-                    BreadcrumbBar(path: breadcrumbPath)
+                    BreadcrumbOverlay(tracker: breadcrumbTracker)
                 }
             }
             .overlay {
@@ -617,23 +683,6 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             homeStore.deleteItems(homeId: homeId, itemIds: itemSelection.selectedItemIds)
             itemSelection.clearSelection()
-        }
-    }
-
-    private func updateBreadcrumbPath(from anchors: [BreadcrumbAnchor]) {
-        let threshold: CGFloat = 48
-        let candidate = anchors
-            .filter { $0.minY <= threshold }
-            .max(by: { $0.minY < $1.minY })
-        let candidatePath = candidate?.path ?? []
-        let nextPath = candidatePath.count > 1 ? candidatePath : []
-
-        guard nextPath != breadcrumbPath else { return }
-
-        DispatchQueue.main.async {
-            if breadcrumbPath != nextPath {
-                breadcrumbPath = nextPath
-            }
         }
     }
 
@@ -1529,6 +1578,14 @@ private struct StartupPhotoLoadingView: View {
     }
 }
 
+private struct BreadcrumbOverlay: View {
+    @ObservedObject var tracker: BreadcrumbScrollTracker
+
+    var body: some View {
+        BreadcrumbBar(path: tracker.path)
+    }
+}
+
 private struct BreadcrumbBar: View {
     let path: [String]
 
@@ -1553,6 +1610,8 @@ private struct BreadcrumbBar: View {
             .padding(.horizontal, 14)
             .padding(.top, 6)
             .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("breadcrumb-bar")
             .transition(.move(edge: .top).combined(with: .opacity))
             .animation(.easeInOut(duration: 0.16), value: path)
         }
@@ -1582,6 +1641,19 @@ private struct FloatingBreadcrumbSurfaceModifier: ViewModifier {
 }
 
 private extension View {
+    @ViewBuilder
+    func trackBreadcrumbScroll(using tracker: BreadcrumbScrollTracker) -> some View {
+        if #available(iOS 18.0, *) {
+            onScrollGeometryChange(for: CGFloat.self, of: { geometry in
+                geometry.visibleRect.minY
+            }) { _, visibleContentMinY in
+                tracker.updateVisibleContentMinY(visibleContentMinY)
+            }
+        } else {
+            self
+        }
+    }
+
     func floatingBreadcrumbSurface() -> some View {
         modifier(FloatingBreadcrumbSurfaceModifier())
     }
