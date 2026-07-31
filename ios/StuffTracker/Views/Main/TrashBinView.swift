@@ -35,25 +35,34 @@ struct TrashBinView: View {
                                 Label("Restore", systemImage: "arrow.uturn.backward")
                                     .font(.caption)
                                     .padding(.horizontal, 10)
-                                    .frame(minHeight: 30)
+                                    .frame(minHeight: 44)
                                     .cubbyWoodButtonSurface()
                             }
                             .buttonStyle(.plain)
-                            .controlSize(.small)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .background(CubbyTheme.paper.opacity(0.88))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(CubbyTheme.containerBorder, lineWidth: 0.75)
+                        }
                     }
                 }
                 .padding(.top, 4)
             } label: {
                 Label("Recently Deleted (\(deleted.count))", systemImage: "trash")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(CubbyTheme.mutedInk)
             }
-            .tint(.secondary)
+            .tint(CubbyTheme.green)
+            .padding(14)
+            .background(CubbyTheme.paper.opacity(0.74), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75)
+            }
         }
     }
 }

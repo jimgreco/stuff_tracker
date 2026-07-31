@@ -256,9 +256,15 @@ struct ItemEditView: View {
         homeStore.homeDetails.first(where: { $0.id == selectedHomeId })
     }
 
+    private var summaryLocation: String {
+        LocationTreePresentation.selectedLabel(home: selectedHome, selectedId: selectedLocationId)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                summarySection
+                    .cubbySheetRows(prominence: 1.04)
                 detailsSection
                     .cubbySheetRows()
                 lifecycleSection
@@ -275,6 +281,8 @@ struct ItemEditView: View {
                     .cubbySheetRows(prominence: 0.92)
             }
             .cubbySheetChrome()
+            .disabled(isSaving)
+            .accessibilityHidden(isSaving)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -283,6 +291,7 @@ struct ItemEditView: View {
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -294,12 +303,13 @@ struct ItemEditView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         save()
                     }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
             }
             .sheet(isPresented: $showIconPicker) {
@@ -340,7 +350,26 @@ struct ItemEditView: View {
                 }
                 Task { await loadPhotos(newItems) }
             }
-            .alert("Attachment Error", isPresented: Binding(
+            .overlay {
+                if isSaving {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(CubbyTheme.green)
+                        Text("Saving item…")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(CubbyTheme.mutedInk)
+                    }
+                    .cubbyPanel(padding: 22, elevated: true)
+                    .frame(maxWidth: 220)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.ultraThinMaterial)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Saving item")
+                }
+            }
+            .interactiveDismissDisabled(isSaving)
+            .alert("Couldn’t Complete Action", isPresented: Binding(
                 get: { attachmentError != nil },
                 set: { if !$0 { attachmentError = nil } }
             )) {
@@ -348,6 +377,45 @@ struct ItemEditView: View {
             } message: {
                 Text(attachmentError ?? "")
             }
+        }
+    }
+
+    private var summarySection: some View {
+        Section {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: selectedIcon.isEmpty ? "shippingbox.fill" : selectedIcon)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(CubbyTheme.green)
+                    .frame(width: 54, height: 54)
+                    .background(CubbyTheme.greenSoft.opacity(0.78), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Item" : name)
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                        .foregroundStyle(CubbyTheme.warmInk)
+                        .lineLimit(2)
+
+                    Label(summaryLocation, systemImage: "mappin.and.ellipse")
+                        .font(.caption)
+                        .foregroundStyle(CubbyTheme.mutedInk)
+                        .lineLimit(2)
+
+                    FlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
+                        if quantity > 1 {
+                            CubbyStatusPill(title: "\(quantity) total", systemImage: "number")
+                        }
+                        if isFlagged {
+                            CubbyStatusPill(title: "Flagged", systemImage: "flag.fill", tint: CubbyTheme.amber)
+                        }
+                        if item.needsSync {
+                            CubbyStatusPill(title: "Pending", systemImage: "arrow.triangle.2.circlepath", tint: CubbyTheme.amber)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
         }
     }
 
@@ -1147,7 +1215,13 @@ private struct DocumentAttachmentEditor: View {
     let contentType: String?
 
     var body: some View {
-        Label {
+        HStack(spacing: 12) {
+            Image(systemName: "doc.text.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(CubbyTheme.green)
+                .frame(width: 36, height: 36)
+                .background(CubbyTheme.greenSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
             VStack(alignment: .leading, spacing: 2) {
                 TextField("File name", text: $name)
                     .lineLimit(1)
@@ -1158,8 +1232,6 @@ private struct DocumentAttachmentEditor: View {
                         .lineLimit(1)
                 }
             }
-        } icon: {
-            Image(systemName: "doc")
         }
     }
 }
@@ -1169,7 +1241,7 @@ private struct PhotoAttachmentThumbnail: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(.quaternary)
 
             if let remoteURL = attachment.remoteURL,
@@ -1186,8 +1258,13 @@ private struct PhotoAttachmentThumbnail: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(CubbyTheme.floorBorder.opacity(0.72), lineWidth: 0.75)
+        }
+        .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 8, y: 4)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -1708,6 +1785,8 @@ private struct LocationTreeSheet: View {
             }
         }
         .cubbyNavigationBarChrome()
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .onAppear {
             guard let home = selectedHome else { return }
             path = [.home(home.id)] + LocationTreePresentation

@@ -28,6 +28,7 @@
     accountPlan: null,
     homes: HAS_STORED_SESSION ? readJson(STORAGE.homes, []) : [],
     homesLoaded: false,
+    homesLoadError: "",
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
     flaggedOnly: false,
@@ -220,6 +221,7 @@
   function clearCachedData() {
     state.homes = [];
     state.homesLoaded = false;
+    state.homesLoadError = "";
     state.accountPlan = null;
     state.collapsed = new Set();
     localStorage.removeItem(STORAGE.homes);
@@ -420,6 +422,46 @@
     return ICON_SECTIONS.flatMap((section) => section.icons.map(([name, label]) => ({ ...section, name, label })));
   }
 
+  function activeModalDialog() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'))
+      .filter((dialog) => dialog.getAttribute("aria-hidden") !== "true");
+    return dialogs.length ? dialogs[dialogs.length - 1] : null;
+  }
+
+  function focusableDialogElements(dialog) {
+    if (!dialog) return [];
+    return Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
+      .filter((element) => !element.hidden && element.getClientRects().length > 0);
+  }
+
+  function dismissActiveSheet() {
+    const sheet = state.sheet;
+    if (!sheet) return;
+
+    if (sheet.type === "activity" && sheet.returnSheet) {
+      state.sheet = sheet.returnSheet;
+    } else if (sheet.type === "locationPicker") {
+      const path = Array.isArray(sheet.path) ? sheet.path : [];
+      if (path.length) {
+        state.sheet = { ...sheet, path: path.slice(0, -1) };
+      } else {
+        state.sheet = {
+          type: "itemEditor",
+          homeId: sheet.homeId,
+          itemId: sheet.itemId,
+          draft: sheet.draft,
+        };
+      }
+    } else {
+      state.sheet = null;
+      state.photoPreview = null;
+      state.actionMenu = null;
+      state.iconSearch = "";
+    }
+
+    render({ preserveSheetScroll: false });
+  }
+
   function render(options = {}) {
     const active = document.activeElement;
     const activeId = active && active.id;
@@ -429,6 +471,25 @@
     const sheetScrollTop = options.preserveSheetScroll === false ? null : sheetBody?.scrollTop ?? null;
 
     app.innerHTML = renderApp();
+
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+    const activeDialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
+    dialogs.forEach((dialog) => {
+      const isActive = dialog === activeDialog;
+      dialog.inert = !isActive;
+      dialog.setAttribute("aria-modal", isActive ? "true" : "false");
+      if (isActive) dialog.removeAttribute("aria-hidden");
+      else dialog.setAttribute("aria-hidden", "true");
+    });
+    document.body.classList.toggle("has-modal", Boolean(activeDialog));
+    if (activeDialog) {
+      document.querySelectorAll(".top-bar, .content, .marketing-nav, .marketing-main, .shared-link-main, .selection-action-bar").forEach((element) => {
+        if (!activeDialog.contains(element)) {
+          element.inert = true;
+          element.setAttribute("aria-hidden", "true");
+        }
+      });
+    }
 
     if (sheetScrollTop !== null) {
       const nextSheetBody = document.querySelector(".sheet-body");
@@ -453,6 +514,10 @@
     if (options.focusSelector) {
       const nextFocus = document.querySelector(options.focusSelector);
       if (nextFocus) nextFocus.focus({ preventScroll: true });
+    }
+
+    if (activeDialog && !activeDialog.contains(document.activeElement)) {
+      focusableDialogElements(activeDialog)[0]?.focus({ preventScroll: true });
     }
 
     requestAnimationFrame(updateBreadcrumb);
@@ -495,17 +560,20 @@
           </div>
         </header>
         <div id="breadcrumb" class="breadcrumb is-hidden" aria-hidden="true"></div>
-        <main class="content">
+        <main class="content" aria-busy="${state.isLoading ? "true" : "false"}">
+          ${state.homesLoadError && state.homes.length ? renderHomesStaleBanner() : ""}
           ${
-            state.isLoading
+            state.isLoading && !state.homes.length
               ? renderLoading()
+              : state.homesLoadError && !state.homes.length
+                ? renderHomesLoadError()
               : homes.length
                 ? `<div class="home-list">${homes.map((home) => renderHome(home, isFiltering)).join("")}</div>`
                 : isFiltering
                   ? renderNoResults()
                   : renderEmptyState()
           }
-          ${!state.isLoading && !isFiltering ? renderAddHomeArea() : ""}
+          ${!state.isLoading && !(state.homesLoadError && !state.homes.length) && !isFiltering ? renderAddHomeArea() : ""}
         </main>
         ${renderSheet()}
         ${renderPhotoPreviewModal()}
@@ -757,7 +825,38 @@
   }
 
   function renderLoading() {
-    return `<div class="loading-state"><div class="spinner" aria-label="Loading"></div></div>`;
+    return `<div class="loading-state" role="status"><div class="spinner" aria-hidden="true"></div><span class="sr-only">Loading CubbyLog</span></div>`;
+  }
+
+  function renderHomesLoadError() {
+    return `
+      <div class="empty-state">
+        <div class="empty-panel" role="alert">
+          ${svgIcon("cloud")}
+          <h2>We couldn’t load your homes</h2>
+          <p>${escapeHtml(state.homesLoadError || "Check your connection and try again.")}</p>
+          <button type="button" class="primary-button" data-action="reload-server">
+            ${svgIcon("refresh")} Try Again
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderHomesStaleBanner() {
+    const refreshing = state.isLoading;
+    return `
+      <div class="sync-warning ${refreshing ? "is-refreshing" : ""}">
+        <span class="sync-warning-icon" aria-hidden="true">${svgIcon("cloud")}</span>
+        <span class="sync-warning-copy">
+          <strong>${refreshing ? "Refreshing your saved copy" : "Showing your saved copy"}</strong>
+          <span>${refreshing ? "Checking the server for the latest changes…" : "We couldn’t refresh from the server."}</span>
+        </span>
+        <button type="button" class="secondary-button" data-action="reload-server" ${refreshing ? "disabled" : ""}>
+          ${svgIcon("refresh")} ${refreshing ? "Refreshing…" : "Retry"}
+        </button>
+      </div>
+    `;
   }
 
   function renderNoResults() {
@@ -1014,7 +1113,7 @@
       <div class="sheet-backdrop">
         <section class="sheet${options.sheetClass ? ` ${escapeAttr(options.sheetClass)}` : ""}" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
           <header class="sheet-header">
-            <button type="button" class="sheet-close" data-action="${escapeAttr(closeAction)}">${escapeHtml(options.closeLabel || "Done")}</button>
+            <button type="button" class="sheet-close" data-action="${escapeAttr(closeAction)}" ${state.isUploadingAttachment ? "disabled" : ""}>${escapeHtml(options.closeLabel || "Done")}</button>
             <div class="sheet-title">${escapeHtml(title)}</div>
             ${save}
           </header>
@@ -1074,7 +1173,7 @@
       <section class="form-section">
         <h2 class="section-title">Sync</h2>
         <div class="form-list">
-          <button type="button" class="row-button" data-action="reload-server">${svgIcon("refresh")} Reload Server Data</button>
+          <button type="button" class="row-button" data-action="reload-server" ${state.isLoading ? "disabled" : ""}>${svgIcon("refresh")} ${state.isLoading ? "Reloading…" : "Reload Server Data"}</button>
         </div>
       </section>
     `;
@@ -1102,11 +1201,12 @@
   function renderSubscriptionSection() {
     const plan = state.accountPlan;
     if (!plan) {
+      const status = state.homesLoadError ? "Unavailable" : "Loading…";
       return `
         <section class="form-section">
           <h2 class="section-title">Subscription</h2>
           <div class="form-list">
-            <div class="form-row"><span>Plan</span><strong>Loading...</strong></div>
+            <div class="form-row"><span>Plan</span><strong>${status}</strong></div>
           </div>
         </section>
       `;
@@ -1396,7 +1496,7 @@
             <div class="form-row location-picker-row">
               <span>Stored In</span>
               <input type="hidden" name="locationId" value="${escapeAttr(draft.locationId || "")}">
-              <button type="button" class="location-select-button" data-action="open-location-picker" aria-label="Choose storage location">
+              <button type="button" class="location-select-button" data-action="open-location-picker" aria-label="Choose storage location" ${state.isUploadingAttachment ? "disabled" : ""}>
                 <span>${escapeHtml(selectedLocationLabel(home, draft.locationId))}</span>
                 ${svgIcon("chevron")}
               </button>
@@ -1414,14 +1514,14 @@
         ${renderDocumentSection(draft.documents)}
         <section class="form-section">
           <div class="form-list">
-            <button type="button" class="row-button" data-action="open-activity" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+            <button type="button" class="row-button" data-action="open-activity" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" ${state.isUploadingAttachment ? "disabled" : ""}>
               ${svgIcon("refresh")} View Item History
             </button>
           </div>
         </section>
         <section class="form-section">
           <div class="form-list">
-            <button type="button" class="row-button danger" data-action="open-delete" data-kind="item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+            <button type="button" class="row-button danger" data-action="open-delete" data-kind="item" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" ${state.isUploadingAttachment ? "disabled" : ""}>
               ${svgIcon("trash")} Delete Item
             </button>
           </div>
@@ -2184,16 +2284,23 @@
   }
 
   async function loadServerHomes() {
-    const [plan, homes] = await Promise.all([
-      apiRequest("GET", "/account/plan"),
-      apiRequest("GET", "/homes"),
-    ]);
-    state.accountPlan = plan;
-    const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
-    state.homes = details.map(normalizeHomeDetail);
-    state.homesLoaded = true;
-    pruneSelection();
-    persistData();
+    try {
+      const [plan, homes] = await Promise.all([
+        apiRequest("GET", "/account/plan"),
+        apiRequest("GET", "/homes"),
+      ]);
+      state.accountPlan = plan;
+      const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
+      state.homes = details.map(normalizeHomeDetail);
+      state.homesLoaded = true;
+      state.homesLoadError = "";
+      pruneSelection();
+      persistData();
+    } catch (error) {
+      state.homesLoadError = error?.message || "Check your connection and try again.";
+      state.homesLoaded = state.homes.length > 0;
+      throw error;
+    }
   }
 
   function normalizeHomeDetail(raw) {
@@ -2279,8 +2386,9 @@
     };
   }
 
-  async function runMutation(work, successMessage) {
+  async function runMutation(work, successMessage, options = {}) {
     state.isLoading = true;
+    if (options.renderAtStart) render();
     try {
       await work();
       if (successMessage) showToast(successMessage);
@@ -2647,12 +2755,15 @@
     if (!link || state.deepLinkHandled || !hasAuthSession() || !state.homesLoaded) return;
 
     const context = findItemContext(link.homeId, link.itemId);
-    state.deepLinkHandled = true;
 
     if (!context) {
+      if (state.homesLoadError) return;
+      state.deepLinkHandled = true;
       showToast("Could not open that item. Sign in with an account that can access it.");
+      render();
       return;
     }
+    state.deepLinkHandled = true;
 
     prepareHierarchyForItem(context.home, context.item);
     state.highlightedItemId = context.item.id;
@@ -2845,6 +2956,7 @@
 
   async function handleAction(element) {
     const action = element.dataset.action;
+    if (state.isUploadingAttachment && ["open-location-picker", "open-activity", "open-delete"].includes(action)) return;
     if (action === "open-account") {
       state.sheet = { type: "account" };
       state.actionMenu = null;
@@ -2870,6 +2982,7 @@
       return;
     }
     if (action === "close-sheet") {
+      if (state.isUploadingAttachment) return;
       state.sheet = null;
       state.photoPreview = null;
       state.actionMenu = null;
@@ -3239,7 +3352,7 @@
       return;
     }
     if (action === "reload-server") {
-      await runMutation(loadServerHomes, "Server data reloaded");
+      await runMutation(loadServerHomes, "Server data reloaded", { renderAtStart: true });
       return;
     }
     if (action === "sign-out") {
@@ -3429,9 +3542,32 @@
     void handleAttachmentFileChange(event);
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.photoPreview) {
-      state.photoPreview = null;
-      render();
+    const activeDialog = activeModalDialog();
+    if (event.key === "Tab" && activeDialog) {
+      const focusable = focusableDialogElements(activeDialog);
+      if (focusable.length) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      if (state.photoPreview) {
+        state.photoPreview = null;
+        render();
+      } else if (state.sheet && !state.isUploadingAttachment) {
+        dismissActiveSheet();
+      } else if (state.actionMenu) {
+        state.actionMenu = null;
+        render();
+      }
     }
   });
   document.addEventListener("dragstart", handleDragStart);
@@ -3444,6 +3580,9 @@
   window.addEventListener("resize", updateBreadcrumb);
   window.addEventListener("load", () => requestAnimationFrame(renderProviderSignInButtons));
 
+  if (hasAuthSession()) {
+    state.isLoading = true;
+  }
   render();
 
   if (state.pendingItemLink && !hasAuthSession() && !state.authConfigLoaded) {

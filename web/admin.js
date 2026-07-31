@@ -211,21 +211,26 @@
   function renderGate() {
     return `
       <main class="admin-gate">
-        <section class="gate-panel">
-          <img src="/assets/app-icon.png?v=20260705-layered-icon" alt="">
-          <h1>CubbyLog Admin</h1>
+        <section class="gate-panel" aria-labelledby="admin-gate-title">
+          <div class="gate-brand">
+            <img src="/assets/app-icon.png?v=20260705-layered-icon" alt="">
+            <div>
+              <p class="gate-kicker">Operations workspace</p>
+              <h1 id="admin-gate-title">CubbyLog Admin</h1>
+            </div>
+          </div>
           <p>Sign in with an admin account to review users, storage, sessions, and entitlement status.</p>
           <div class="auth-controls">
             ${renderAuthControls()}
           </div>
-          ${state.error ? `<div class="status error">${escapeHtml(state.error)}</div>` : ""}
+          ${state.error ? `<div class="status error" role="alert">${escapeHtml(state.error)}</div>` : ""}
         </section>
       </main>
     `;
   }
 
   function renderAuthControls() {
-    if (!state.authConfig) return `<div class="status">Loading sign-in options</div>`;
+    if (!state.authConfig) return `<div class="status" role="status" aria-live="polite">Loading sign-in options…</div>`;
     const controls = [];
     const googleClientId = state.authConfig.google_client_id || state.authConfig.googleClientId;
     if (googleClientId) {
@@ -235,14 +240,15 @@
     if (appleClientId) {
       controls.push(`<button type="button" class="admin-button" data-action="apple-sign-in">Sign in with Apple</button>`);
     }
-    return controls.length ? controls.join("") : `<div class="status error">No web sign-in providers are configured.</div>`;
+    return controls.length ? controls.join("") : `<div class="status error" role="alert">No web sign-in providers are configured.</div>`;
   }
 
   function renderDashboard() {
     const overview = state.overview;
     const user = overview?.current_user || state.user || {};
     return `
-      <main class="admin-shell">
+      <a class="skip-link" href="#admin-main">Skip to admin content</a>
+      <main id="admin-main" class="admin-shell" aria-busy="${state.loading ? "true" : "false"}">
         <header class="admin-topbar">
           <div class="admin-brand">
             <img src="/assets/app-icon.png?v=20260705-layered-icon" alt="">
@@ -252,14 +258,14 @@
             </div>
           </div>
           <div class="admin-actions">
-            <button type="button" class="admin-button" data-action="refresh" ${state.loading ? "disabled" : ""}>Refresh</button>
+            <button type="button" class="admin-button" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "Refreshing…" : "Refresh"}</button>
             <a class="admin-button" href="/">Open App</a>
             <button type="button" class="admin-button danger" data-action="sign-out">Sign Out</button>
           </div>
         </header>
-        ${state.error ? `<div class="status error">${escapeHtml(state.error)}</div>` : ""}
-        ${state.status ? `<div class="status">${escapeHtml(state.status)}</div>` : ""}
-        ${overview ? renderOverview(overview) : `<section class="admin-loading"><span>${state.loading ? "Loading" : "No admin data loaded"}</span></section>`}
+        ${state.error ? `<div class="status error" role="alert">${escapeHtml(state.error)}</div>` : ""}
+        ${state.status ? `<div class="status" role="status" aria-live="polite">${escapeHtml(state.status)}</div>` : ""}
+        ${overview ? renderOverview(overview) : `<section class="admin-loading" role="status" aria-live="polite"><span>${state.loading ? "Loading admin data…" : "No admin data loaded"}</span></section>`}
       </main>
     `;
   }
@@ -267,7 +273,7 @@
   function renderOverview(overview) {
     const totals = overview.totals || {};
     return `
-      <section class="admin-summary">
+      <section class="admin-summary" aria-label="Account overview">
         ${metric("Users", totals.users)}
         ${metric("Homes", totals.homes)}
         ${metric("Locations", totals.locations)}
@@ -284,6 +290,7 @@
         </header>
         <div class="admin-table-wrap">
           <table class="admin-table">
+            <caption class="visually-hidden">Most recent CubbyLog user accounts and their usage, plan, and session status</caption>
             <thead>
               <tr>
                 <th>User</th>
@@ -306,23 +313,23 @@
   }
 
   function metric(label, value) {
-    return `<div class="metric"><span>${escapeHtml(label)}</span><strong>${number(value)}</strong></div>`;
+    return `<article class="metric"><span>${escapeHtml(label)}</span><strong>${number(value)}</strong></article>`;
   }
 
   function renderUserRow(user) {
     return `
       <tr>
-        <td>
+        <td data-label="User">
           <div class="user-email">${escapeHtml(user.email)}</div>
           <div class="user-name">${escapeHtml(user.name || "")}</div>
         </td>
-        <td>${number(user.home_count)}</td>
-        <td>${number(user.shared_home_count)}</td>
-        <td>${number(user.item_count)}</td>
-        <td>${renderPlanControl(user)}</td>
-        <td>${number(user.active_session_count)}</td>
-        <td class="date-cell">${formatDateTime(user.last_seen_at)}</td>
-        <td class="date-cell">${formatDateTime(user.created_at)}</td>
+        <td data-label="Homes">${number(user.home_count)}</td>
+        <td data-label="Shared">${number(user.shared_home_count)}</td>
+        <td data-label="Items">${number(user.item_count)}</td>
+        <td data-label="Plan">${renderPlanControl(user)}</td>
+        <td data-label="Sessions">${number(user.active_session_count)}</td>
+        <td class="date-cell" data-label="Last Seen">${formatDateTime(user.last_seen_at)}</td>
+        <td class="date-cell" data-label="Joined">${formatDateTime(user.created_at)}</td>
       </tr>
     `;
   }
@@ -339,6 +346,7 @@
           class="admin-button compact primary"
           data-action="make-paid"
           data-user-id="${escapeAttr(user.id)}"
+          aria-label="Make ${escapeAttr(user.email || "this account")} paid"
           ${state.loading ? "disabled" : ""}
         >Make Paid</button>
       `);
@@ -349,6 +357,7 @@
           class="admin-button compact danger"
           data-action="make-free"
           data-user-id="${escapeAttr(user.id)}"
+          aria-label="Make ${escapeAttr(user.email || "this account")} free"
           ${state.loading ? "disabled" : ""}
         >Make Free</button>
       `);
@@ -360,7 +369,7 @@
       <div class="plan-cell">
         ${renderEntitlement(user)}
         <div class="plan-controls">
-          ${busy ? `<span class="plan-note">Updating</span>` : controls.join("")}
+          ${busy ? `<span class="plan-note" role="status">Updating…</span>` : controls.join("")}
         </div>
       </div>
     `;
@@ -389,7 +398,7 @@
       theme: "outline",
       size: "large",
       type: "standard",
-      shape: "rectangular",
+      shape: "pill",
       text: "signin_with",
       logo_alignment: "center",
       width: Math.max(Math.round(host.getBoundingClientRect().width || 320), 240),

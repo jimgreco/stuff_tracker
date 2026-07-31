@@ -25,7 +25,8 @@ final class StuffTrackerScreenshots: XCTestCase {
         snapshot("01-Home-Hierarchy")
 
         app.buttons["Show flagged items"].tap()
-        XCTAssertTrue(app.staticTexts["Passports"].waitForExistence(timeout: 5))
+        let passports = app.buttons["Passports"]
+        XCTAssertTrue(scrollUpUntilHittable(passports))
         snapshot("02-Flagged-Items")
 
         app.buttons["Showing flagged items"].tap()
@@ -36,10 +37,11 @@ final class StuffTrackerScreenshots: XCTestCase {
         let searchField = app.textFields["Search stuff..."]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
         app.typeText("camera\n")
-        XCTAssertTrue(app.staticTexts["Camera Bag"].waitForExistence(timeout: 5))
+        let cameraBag = app.buttons["Camera Bag"]
+        XCTAssertTrue(scrollUpUntilHittable(cameraBag))
         snapshot("03-Search")
 
-        app.staticTexts["Camera Bag"].tap()
+        cameraBag.tap()
         XCTAssertTrue(app.textFields["Name"].waitForExistence(timeout: 5))
         snapshot("04-Item-Details")
     }
@@ -52,9 +54,11 @@ final class StuffTrackerScreenshots: XCTestCase {
         let searchField = app.textFields["Search stuff..."]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
         searchField.typeText("coffee\n")
-        XCTAssertTrue(app.staticTexts["Coffee Filters"].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUpUntilHittable(app.buttons["Coffee Filters"]))
 
-        app.buttons["location-menu-screenshot-location-kitchen"].tap()
+        let kitchenMenu = app.buttons["location-menu-screenshot-location-kitchen"]
+        XCTAssertTrue(scrollDownUntilHittable(kitchenMenu))
+        kitchenMenu.tap()
 
         let addContainer = app.buttons["Add Container"]
         XCTAssertTrue(addContainer.waitForExistence(timeout: 5))
@@ -78,5 +82,39 @@ final class StuffTrackerScreenshots: XCTestCase {
         }
 
         XCTAssertTrue(breadcrumb.waitForExistence(timeout: 5))
+    }
+
+    private func scrollUpUntilHittable(_ element: XCUIElement, attempts: Int = 6) -> Bool {
+        scrollUntilHittable(element, attempts: attempts) {
+            $0.swipeUp(velocity: .fast)
+        }
+    }
+
+    private func scrollDownUntilHittable(_ element: XCUIElement, attempts: Int = 6) -> Bool {
+        scrollUntilHittable(element, attempts: attempts) {
+            $0.swipeDown(velocity: .fast)
+        }
+    }
+
+    private func scrollUntilHittable(
+        _ element: XCUIElement,
+        attempts: Int,
+        swipe: (XCUIElement) -> Void
+    ) -> Bool {
+        if element.waitForExistence(timeout: 1), element.isHittable {
+            return true
+        }
+
+        let scrollView = app.scrollViews.firstMatch
+        guard scrollView.waitForExistence(timeout: 2) else { return false }
+
+        for _ in 0..<attempts {
+            swipe(scrollView)
+            if element.waitForExistence(timeout: 0.5), element.isHittable {
+                return true
+            }
+        }
+
+        return element.exists && element.isHittable
     }
 }

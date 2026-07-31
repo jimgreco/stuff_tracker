@@ -25,8 +25,7 @@ struct SubscriptionReviewScreenshotView: View {
                     HStack {
                         Text("Plan")
                         Spacer()
-                        Label("Free", systemImage: "circle")
-                            .foregroundStyle(.secondary)
+                        CubbyStatusPill(title: "Free", systemImage: "circle", tint: CubbyTheme.mutedInk)
                     }
 
                     Text("Subscribe to Pro to store more photos and documents and share homes with collaborators.")
@@ -56,6 +55,7 @@ struct SubscriptionReviewScreenshotView: View {
                             .padding(.vertical, 6)
                         }
                         .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: 14))
                         .tint(CubbyTheme.green)
                     }
 
@@ -259,8 +259,7 @@ struct AccountView: View {
                         Text("Syncing...").foregroundStyle(.secondary)
                     }
                 } else {
-                    Label("Connected", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(CubbyTheme.green)
+                    CubbyStatusPill(title: "Connected", systemImage: "checkmark.circle.fill")
                 }
             }
 
@@ -316,7 +315,7 @@ struct AccountView: View {
             Section("Subscription Error") {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(CubbyTheme.danger)
             }
             .cubbySheetRows(prominence: 0.96)
         }
@@ -340,7 +339,7 @@ struct AccountView: View {
             Section("Error") {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(CubbyTheme.danger)
             }
             .cubbySheetRows(prominence: 0.96)
         }
@@ -380,8 +379,11 @@ struct AccountView: View {
                 HStack {
                     Text("Plan")
                     Spacer()
-                    Label(plan.isPaid ? "Paid" : "Free", systemImage: plan.isPaid ? "checkmark.seal.fill" : "circle")
-                        .foregroundStyle(plan.isPaid ? CubbyTheme.green : .secondary)
+                    CubbyStatusPill(
+                        title: plan.isPaid ? "Pro" : "Free",
+                        systemImage: plan.isPaid ? "checkmark.seal.fill" : "circle",
+                        tint: plan.isPaid ? CubbyTheme.green : CubbyTheme.mutedInk
+                    )
                 }
 
                 if !plan.isPaid {
@@ -466,6 +468,7 @@ struct AccountView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: 14))
         .tint(CubbyTheme.green)
         .disabled(subscriptionStore.isLoading)
     }
@@ -489,25 +492,20 @@ struct AccountView: View {
     private var unauthenticatedSection: some View {
         Section {
             VStack(spacing: 16) {
-                Image(systemName: "cloud.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(CubbyTheme.green)
-                    .padding(18)
-                    .background(CubbyTheme.greenSoft.opacity(0.72), in: Circle())
-                    .overlay {
-                        Circle().stroke(CubbyTheme.floorBorder, lineWidth: 1)
-                    }
+                CubbyBrandMark(size: 68)
                     .padding(.top, 20)
 
-                Text("Sign in to sync your data")
-                    .font(.headline)
-                    .foregroundStyle(CubbyTheme.warmInk)
+                VStack(spacing: 7) {
+                    Text("Take Your Cubbies Everywhere")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                        .foregroundStyle(CubbyTheme.warmInk)
 
-                Text("Your data is saved locally. Sign in to sync across devices and share with others.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    Text("Your inventory already works offline. Sign in to back it up, keep devices in sync, and invite collaborators.")
+                        .font(.subheadline)
+                        .foregroundStyle(CubbyTheme.mutedInk)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
 
                 VStack(spacing: 12) {
                     GoogleSignInButtonCompact(onSignedIn: handlePostSignIn)
@@ -519,7 +517,7 @@ struct AccountView: View {
                     }
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
-                    .cornerRadius(10)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                     #if DEBUG
                     LocalDevSignInButton(onSignedIn: handlePostSignIn)
@@ -537,7 +535,7 @@ struct AccountView: View {
             Section {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(CubbyTheme.danger)
             }
             .cubbySheetRows(prominence: 0.96)
         }
@@ -625,9 +623,14 @@ struct GoogleSignInButtonCompact: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .cubbyWoodButtonSurface()
+            .background(CubbyTheme.paper, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CubbyTheme.floorBorder.opacity(0.86), lineWidth: 0.75)
+            }
+            .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 8, y: 4)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(CubbyTheme.warmInk)
         .buttonStyle(.plain)
     }
 
@@ -715,8 +718,11 @@ struct MergeChoiceView: View {
                         }
                     } label: {
                         VStack(spacing: 4) {
-                            Text("Merge Both")
-                                .font(.headline)
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.triangle.merge")
+                                Text("Merge Both")
+                            }
+                            .font(.headline)
                             Text("Combine local and server data")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.82))
@@ -736,15 +742,23 @@ struct MergeChoiceView: View {
                         }
                     } label: {
                         VStack(spacing: 4) {
-                            Text("Keep Local")
-                                .font(.headline)
+                            HStack(spacing: 6) {
+                                Image(systemName: "iphone")
+                                Text("Keep Local")
+                            }
+                            .font(.headline)
                             Text("Upload device data, overwrite server")
                                 .font(.caption)
-                                .foregroundStyle(.white.opacity(0.82))
+                                .foregroundStyle(CubbyTheme.mutedInk)
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .cubbyWoodButtonSurface()
+                        .foregroundStyle(CubbyTheme.warmInk)
+                        .background(CubbyTheme.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(CubbyTheme.amber.opacity(0.28), lineWidth: 0.75)
+                        }
                     }
                     .buttonStyle(.plain)
 
@@ -757,15 +771,23 @@ struct MergeChoiceView: View {
                         }
                     } label: {
                         VStack(spacing: 4) {
-                            Text("Keep Server")
-                                .font(.headline)
+                            HStack(spacing: 6) {
+                                Image(systemName: "cloud")
+                                Text("Keep Server")
+                            }
+                            .font(.headline)
                             Text("Replace device data with server data")
                                 .font(.caption)
-                                .foregroundStyle(.white.opacity(0.82))
+                                .foregroundStyle(CubbyTheme.mutedInk)
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .cubbyWoodButtonSurface()
+                        .foregroundStyle(CubbyTheme.warmInk)
+                        .background(CubbyTheme.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(CubbyTheme.amber.opacity(0.28), lineWidth: 0.75)
+                        }
                     }
                     .buttonStyle(.plain)
                 }

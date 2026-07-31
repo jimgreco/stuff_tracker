@@ -256,17 +256,27 @@ struct ContentView: View {
                 } else {
                     let filtered = filteredHomes
                     if isFiltering && filtered.isEmpty {
-                        ContentUnavailableView(
-                            emptyFilterTitle,
-                            systemImage: showFlaggedOnly ? "flag" : "magnifyingglass",
-                            description: Text(emptyFilterDescription)
-                        )
+                        VStack {
+                            ContentUnavailableView(
+                                emptyFilterTitle,
+                                systemImage: showFlaggedOnly ? "flag" : "magnifyingglass",
+                                description: Text(emptyFilterDescription)
+                            )
+                            .cubbyPanel(padding: 28, elevated: true)
+                            .frame(maxWidth: 480)
+                        }
+                        .padding(24)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollViewReader { proxy in
                             ScrollView {
                                 VStack(spacing: 8) {
-                                    if !isFiltering {
+                                    if filtered.isEmpty {
+                                        EmptyHomePrompt {
+                                            presentHomeComposer()
+                                        }
+                                        .frame(minHeight: 520)
+                                    } else if !isFiltering {
                                         HomeDropZone(insertionIndex: 0, homeStore: homeStore)
                                     }
                                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, home in
@@ -282,19 +292,23 @@ struct ContentView: View {
                                     }
 
                                     if !isFiltering {
-                                        HStack {
-                                            HierarchyAddChip(title: "Add Home") {
-                                                presentHomeComposer()
+                                        if !filtered.isEmpty {
+                                            HStack {
+                                                HierarchyAddChip(title: "Add Home") {
+                                                    presentHomeComposer()
+                                                }
+                                                Spacer(minLength: 0)
                                             }
-                                            Spacer(minLength: 0)
+                                            .padding(.bottom, 8)
                                         }
-                                        .padding(.bottom, 8)
 
                                         TrashBinView(homeStore: homeStore)
                                     }
                                 }
                                 .padding()
                                 .padding(.bottom, 104)
+                                .frame(maxWidth: 820)
+                                .frame(maxWidth: .infinity)
                                 .coordinateSpace(name: "scrollContent")
                             }
                             .coordinateSpace(name: "scroll")
@@ -1085,20 +1099,15 @@ private struct SelectionActionButtonSurfaceModifier: ViewModifier {
 
         if #available(iOS 26.0, *) {
             content
-                .foregroundStyle(isEnabled ? Color.white : Color.secondary)
-                .background {
-                    CubbyWoodButtonFill(shape: shape)
-                }
-                .glassEffect(.regular.interactive(), in: shape)
-                .overlay(shape.stroke(isEnabled ? CubbyTheme.darkWoodBottom.opacity(0.85) : Color.white.opacity(0.10), lineWidth: 0.75))
+                .foregroundStyle(isEnabled ? tint : Color.secondary)
+                .background(tint.opacity(isEnabled ? 0.10 : 0.035), in: shape)
+                .overlay(shape.stroke(isEnabled ? tint.opacity(0.26) : Color.white.opacity(0.10), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         } else {
             content
-                .foregroundStyle(isEnabled ? Color.white : Color.secondary)
-                .background {
-                    CubbyWoodButtonFill(shape: shape)
-                }
-                .overlay(shape.stroke(isEnabled ? CubbyTheme.darkWoodBottom.opacity(0.85) : Color(.separator).opacity(0.14), lineWidth: 0.75))
+                .foregroundStyle(isEnabled ? tint : Color.secondary)
+                .background(CubbyTheme.paper.opacity(0.94), in: shape)
+                .overlay(shape.stroke(isEnabled ? tint.opacity(0.30) : Color(.separator).opacity(0.14), lineWidth: 0.75))
                 .opacity(isEnabled ? 1 : 0.48)
         }
     }
@@ -1137,6 +1146,8 @@ private struct BulkItemMoveSheet: View {
                 }
         }
         .cubbyNavigationBarChrome()
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -1165,6 +1176,7 @@ private struct BulkItemMoveLevel: View {
                 }
                 .foregroundStyle(.primary)
             }
+            .cubbySheetRows()
 
             if !children.isEmpty {
                 Section {
@@ -1187,8 +1199,10 @@ private struct BulkItemMoveLevel: View {
                         }
                     }
                 }
+                .cubbySheetRows()
             }
         }
+        .cubbySheetChrome()
     }
 
     private func move(to locationId: String?) {
@@ -1216,6 +1230,13 @@ private struct AddComposerBar: View {
     let onSubmit: () -> Void
     @FocusState private var isFocused: Bool
 
+    private var cancelAccessibilityLabel: String {
+        let subject = placeholder
+            .replacingOccurrences(of: " name", with: "")
+            .lowercased()
+        return "Cancel adding \(subject)"
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             TextField(placeholder, text: $text)
@@ -1239,7 +1260,7 @@ private struct AddComposerBar: View {
                     .cubbyWoodButtonSurface()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Cancel adding item")
+            .accessibilityLabel(cancelAccessibilityLabel)
 
             Button(action: onSubmit) {
                 Image(systemName: "checkmark")
@@ -1278,6 +1299,7 @@ private struct HierarchyAddChip: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
+            .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
         .hierarchyAddChipSurface()
@@ -1556,8 +1578,10 @@ private struct StartupPhotoLoadingView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 14) {
+                CubbyBrandMark(size: 58)
+
                 Text("CubbyLog")
-                    .font(.title2.weight(.semibold))
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundStyle(.white)
 
                 ProgressView(message)
@@ -1666,39 +1690,47 @@ struct EmptyHomePrompt: View {
     let onCreate: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "cabinet.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(CubbyTheme.green)
-            
-            Text("Welcome to CubbyLog")
-                .font(.title.bold())
-            
-            Text("Track your stuff across rooms and containers")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-            
-            Button(action: onCreate) {
-                CubbyWoodTextButtonLabel(title: "Create Your First Home")
-            }
-            .buttonStyle(.plain)
-            
-            if !authStore.isAuthenticated {
-                VStack(spacing: 8) {
-                    Text("Working offline")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    Text("Sign in from the menu to sync across devices")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
+        VStack {
+            VStack(spacing: 20) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(CubbyTheme.greenSoft.opacity(0.78))
+                        .frame(width: 88, height: 88)
+
+                    Image(systemName: "cabinet.fill")
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(CubbyTheme.green)
                 }
-                .padding(.top, 8)
+
+                VStack(spacing: 8) {
+                    Text("Make Your First Cubby")
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(CubbyTheme.warmInk)
+
+                    Text("Start with a home, then add rooms, shelves, bins, and the things you want to find again.")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(CubbyTheme.mutedInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: onCreate) {
+                    CubbyWoodTextButtonLabel(title: "Create Your First Home")
+                }
+                .buttonStyle(.plain)
+
+                if !authStore.isAuthenticated {
+                    CubbyStatusPill(
+                        title: "Works offline • Sync after sign-in",
+                        systemImage: "iphone.and.arrow.forward"
+                    )
+                }
             }
+            .cubbyPanel(padding: 30, cornerRadius: CubbyTheme.Radius.hero, elevated: true)
+            .frame(maxWidth: 500)
+            .padding(.horizontal, 8)
         }
-        .padding(40)
+        .padding(.vertical, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -2169,12 +2201,12 @@ private struct TutorialSelectedRow: View {
     var body: some View {
         Label(text, systemImage: systemImage)
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(.green)
+            .foregroundStyle(CubbyTheme.green)
             .lineLimit(2)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(CubbyTheme.greenSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -2184,10 +2216,10 @@ private struct TutorialTextFieldSurfaceModifier: ViewModifier {
             .textFieldStyle(.plain)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(CubbyTheme.paper.opacity(0.92), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color(.separator).opacity(0.26), lineWidth: 0.75)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CubbyTheme.floorBorder.opacity(0.86), lineWidth: 0.75)
             }
     }
 }

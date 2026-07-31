@@ -2,7 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
 
-enum LoginViewMode {
+enum LoginViewMode: Equatable {
     case initial
     case reconnect
 
@@ -38,67 +38,123 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Image("AppLaunchPhoto")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
 
-            VStack(spacing: 40) {
-                Spacer()
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.22),
+                    Color.black.opacity(0.38),
+                    Color.black.opacity(0.72),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                // Logo / title
-                VStack(spacing: 12) {
-                    Image(systemName: mode.icon)
-                        .font(.system(size: 64))
-                    .foregroundStyle(.white)
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 34) {
+                        VStack(spacing: 14) {
+                            CubbyBrandMark(size: 72)
 
-                    Text(mode.title)
-                        .font(.largeTitle.bold())
+                            VStack(spacing: 7) {
+                                Text(mode.title)
+                                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.center)
 
-                    Text(mode.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
+                                Text(mode == .initial ? "A place for everything." : "Reconnect your CubbyLog")
+                                    .font(.headline.weight(.medium))
+                                    .foregroundStyle(.white.opacity(0.82))
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
 
-                Spacer()
+                        VStack(alignment: .leading, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Label(
+                                    mode == .initial ? "Start organizing" : "Your account is ready",
+                                    systemImage: mode.icon
+                                )
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(CubbyTheme.warmInk)
 
-                // Sign-in buttons
-                VStack(spacing: 16) {
-                    GoogleSignInButton()
-                        .environmentObject(authStore)
+                                Text(mode.subtitle)
+                                    .font(.subheadline)
+                                    .foregroundStyle(CubbyTheme.mutedInk)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
 
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        handleApple(result)
+                            VStack(spacing: 12) {
+                                GoogleSignInButton()
+                                    .environmentObject(authStore)
+
+                                SignInWithAppleButton(.signIn) { request in
+                                    request.requestedScopes = [.fullName, .email]
+                                } onCompletion: { result in
+                                    handleApple(result)
+                                }
+                                .signInWithAppleButtonStyle(.black)
+                                .authProviderButtonChrome(background: .black)
+                                .disabled(authStore.isLoading)
+
+                                #if DEBUG
+                                LocalDevSignInButton()
+                                    .environmentObject(authStore)
+                                #endif
+                            }
+
+                            if let error = authStore.errorMessage {
+                                Label(error, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(CubbyTheme.danger)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(CubbyTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+
+                            Text("Your inventory stays private to your account and the people you invite.")
+                                .font(.caption)
+                                .foregroundStyle(CubbyTheme.mutedInk)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .cubbyPanel(padding: 20, cornerRadius: CubbyTheme.Radius.hero, elevated: true)
+                        .frame(maxWidth: 520)
                     }
-                    .signInWithAppleButtonStyle(.white)
-                    .authProviderButtonChrome()
-                    .disabled(authStore.isLoading)
-
-                    #if DEBUG
-                    LocalDevSignInButton()
-                        .environmentObject(authStore)
-                    #endif
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 32)
+                    .frame(maxWidth: 560)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
                 }
-                .padding(.horizontal, 32)
-
-                if let error = authStore.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-
-                Spacer()
+                .scrollIndicators(.hidden)
+                .allowsHitTesting(!authStore.isLoading)
+                .accessibilityHidden(authStore.isLoading)
             }
         }
         .overlay {
             if authStore.isLoading {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.ultraThinMaterial)
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(CubbyTheme.green)
+                    Text("Signing in…")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(CubbyTheme.mutedInk)
+                }
+                .cubbyPanel(padding: 22, elevated: true)
+                .frame(maxWidth: 220)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.ultraThinMaterial)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Signing in")
             }
         }
     }
@@ -154,9 +210,9 @@ struct LocalDevSignInButton: View {
                 Text("Dev Sign In")
                     .font(.body.weight(.medium))
             }
-            .authProviderButtonChrome(background: Color(.secondarySystemBackground))
+            .authProviderButtonChrome(background: CubbyTheme.greenSoft)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(CubbyTheme.warmInk)
         .disabled(authStore.isLoading)
         .buttonStyle(.plain)
     }
@@ -179,9 +235,9 @@ struct GoogleSignInButton: View {
                 Text("Sign in with Google")
                     .font(.body.weight(.medium))
             }
-            .authProviderButtonChrome()
+            .authProviderButtonChrome(background: CubbyTheme.paper)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(CubbyTheme.warmInk)
         .disabled(authStore.isLoading)
         .buttonStyle(.plain)
     }
@@ -234,6 +290,8 @@ private enum AuthProviderButtonMetrics {
 }
 
 private struct AuthProviderButtonChrome: ViewModifier {
+    let background: Color
+
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(
             cornerRadius: AuthProviderButtonMetrics.cornerRadius,
@@ -243,22 +301,20 @@ private struct AuthProviderButtonChrome: ViewModifier {
         content
             .frame(maxWidth: .infinity)
             .frame(height: AuthProviderButtonMetrics.height)
-            .foregroundStyle(.white)
-            .background {
-                CubbyWoodButtonFill(shape: shape)
-            }
+            .background(background, in: shape)
             .clipShape(shape)
             .overlay {
                 shape
-                    .stroke(CubbyTheme.darkWoodBottom.opacity(0.85), lineWidth: 1)
+                    .stroke(CubbyTheme.floorBorder.opacity(0.86), lineWidth: 0.75)
                     .allowsHitTesting(false)
             }
+            .shadow(color: CubbyTheme.shelfShadow.opacity(0.10), radius: 8, y: 4)
             .contentShape(shape)
     }
 }
 
 private extension View {
-    func authProviderButtonChrome(background: Color = Color(.systemBackground)) -> some View {
-        modifier(AuthProviderButtonChrome())
+    func authProviderButtonChrome(background: Color = CubbyTheme.paper) -> some View {
+        modifier(AuthProviderButtonChrome(background: background))
     }
 }

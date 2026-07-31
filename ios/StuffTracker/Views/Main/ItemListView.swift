@@ -203,6 +203,7 @@ private struct AddItemChip: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
+            .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
         .addItemChipSurface()
@@ -376,48 +377,62 @@ struct ItemChip: View {
         itemSelection.isSelected(item.id)
     }
 
+    private var accessibilityValue: String {
+        var details: [String] = []
+        if item.isFlagged { details.append("Flagged") }
+        if item.quantity > 1 { details.append("Quantity \(item.quantity)") }
+        if isSelected { details.append("Selected") }
+        if showUnsyncedOutline { details.append("Waiting to sync") }
+        return details.joined(separator: ", ")
+    }
+
     var body: some View {
-        HStack(spacing: 4) {
-            if item.isFlagged {
-                Image(systemName: "flag.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(CubbyTheme.amber)
-                    .accessibilityLabel("Flagged")
-            }
-
-            Image(systemName: item.icon ?? "circle.fill")
-                .font(.caption2)
-                .foregroundStyle(item.icon != nil ? .primary : CubbyTheme.green.opacity(0.36))
-
-            Text(item.name)
-                .font(.subheadline)
-                .lineLimit(1)
-
-            if item.quantity > 1 {
-                Text("\u{00d7}\(item.quantity)")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.secondary)
-            }
-
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(CubbyTheme.green)
-                    .accessibilityLabel("Selected")
-            }
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .id(ItemDeepLink.itemAnchorID(item.id))
-        .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline, isSelected: isSelected)
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             if itemSelection.isSelecting {
                 itemSelection.toggle(itemId: item.id, homeId: homeId)
             } else {
                 showEdit = true
             }
+        } label: {
+            HStack(spacing: 4) {
+                if item.isFlagged {
+                    Image(systemName: "flag.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(CubbyTheme.amber)
+                        .accessibilityLabel("Flagged")
+                }
+
+                Image(systemName: item.icon ?? "circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(item.icon != nil ? .primary : CubbyTheme.green.opacity(0.36))
+
+                Text(item.name)
+                    .font(.subheadline)
+                    .lineLimit(1)
+
+                if item.quantity > 1 {
+                    Text("\u{00d7}\(item.quantity)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                }
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(CubbyTheme.green)
+                        .accessibilityLabel("Selected")
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .frame(minHeight: 44)
         }
+        .buttonStyle(.plain)
+        .id(ItemDeepLink.itemAnchorID(item.id))
+        .itemChipSurface(showUnsyncedOutline: showUnsyncedOutline, isSelected: isSelected)
+        .contentShape(Rectangle())
+        .accessibilityLabel(item.name)
+        .accessibilityValue(accessibilityValue)
         .draggable(
             DraggedItem(
                 id: item.id,
@@ -457,11 +472,11 @@ private struct ItemChipSurfaceModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         if #available(iOS 26.0, *) {
             content
-                .background(isSelected ? CubbyTheme.green.opacity(0.14) : CubbyTheme.paper.opacity(0.62), in: shape)
+                .background(isSelected ? CubbyTheme.greenSoft.opacity(0.82) : CubbyTheme.paper.opacity(0.82), in: shape)
                 .overlay(shape.stroke(strokeColor, style: strokeStyle))
         } else {
             content

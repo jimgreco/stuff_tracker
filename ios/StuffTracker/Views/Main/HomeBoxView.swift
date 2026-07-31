@@ -119,25 +119,33 @@ final class HierarchyCollapseStore: ObservableObject {
 private struct CollapseToggleButton: View {
     let isCollapsed: Bool
     let isSearchActive: Bool
+    let isAvailable: Bool
     let title: String
     let action: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                action()
+        if isAvailable {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    action()
+                }
+            } label: {
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption.bold())
+                    .foregroundStyle(CubbyTheme.mutedInk)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
-        } label: {
-            Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(isSearchActive)
+            .opacity(isSearchActive ? 0.5 : 1)
+            .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
+        } else {
+            Color.clear
+                .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
-        .disabled(isSearchActive)
-        .opacity(isSearchActive ? 0.5 : 1)
-        .accessibilityLabel(isCollapsed ? "Expand \(title)" : "Collapse \(title)")
     }
 }
 
@@ -352,6 +360,7 @@ struct HomeBoxView: View {
                 CollapseToggleButton(
                     isCollapsed: isCollapsed,
                     isSearchActive: isSearchActive,
+                    isAvailable: hasDescendants,
                     title: home.name
                 ) {
                     collapseStore.toggle(collapseNode)
@@ -425,13 +434,13 @@ struct HomeBoxView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.caption.bold())
-                            .foregroundStyle(.secondary)
-                            .padding(6)
+                            .foregroundStyle(CubbyTheme.mutedInk)
+                            .frame(width: 44, height: 44)
                     }
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.vertical, 3)
 
             if !isCollapsed {
                 Divider().padding(.horizontal, 14)
@@ -491,9 +500,9 @@ struct HomeBoxView: View {
                     ])
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: CubbyTheme.Radius.hero, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: CubbyTheme.Radius.hero, style: .continuous)
                 .stroke(isDropTargeted ? CubbyTheme.green : Color.homeBorder, lineWidth: isDropTargeted ? 2 : 0.75)
         )
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.18), radius: 16, y: 6)
@@ -547,14 +556,19 @@ struct ActivityHistoryView: View {
                 Section {
                     filterPickers
                 }
+                .cubbySheetRows()
             }
 
             if events.isEmpty && !isLoading {
-                ContentUnavailableView(
-                    errorMessage == nil ? "No Activity" : "Couldn’t Load Activity",
-                    systemImage: errorMessage == nil ? "clock" : "exclamationmark.triangle",
-                    description: Text(errorMessage ?? "Changes to this shared home will appear here.")
-                )
+                Section {
+                    ContentUnavailableView(
+                        errorMessage == nil ? "No Activity" : "Couldn’t Load Activity",
+                        systemImage: errorMessage == nil ? "clock.arrow.circlepath" : "exclamationmark.triangle",
+                        description: Text(errorMessage ?? "Changes to this shared home will appear here.")
+                    )
+                    .foregroundStyle(errorMessage == nil ? CubbyTheme.mutedInk : CubbyTheme.danger)
+                }
+                .cubbySheetRows(prominence: 0.82)
             } else {
                 Section {
                     ForEach(events) { event in
@@ -567,9 +581,10 @@ struct ActivityHistoryView: View {
                         .disabled(isLoading)
                     }
                 }
+                .cubbySheetRows()
             }
         }
-        .navigationTitle(title)
+        .cubbySheetChrome(title: title)
         .navigationBarTitleDisplayMode(.inline)
         .overlay { if isLoading && events.isEmpty { ProgressView() } }
         .task { await load(reset: true) }
@@ -604,6 +619,8 @@ struct ActivityHistoryView: View {
             }
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.roundedRectangle(radius: 10))
+        .tint(CubbyTheme.green)
     }
 
     private func filterMenu(_ label: String, selection: Binding<String>, options: [(String, String)]) -> some View {
@@ -663,8 +680,10 @@ private struct ActivityEventRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.tint)
-                .frame(width: 24)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(CubbyTheme.green)
+                .frame(width: 32, height: 32)
+                .background(CubbyTheme.greenSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.summary).font(.body.weight(.medium))
                 if let path = event.locationPath, !path.isEmpty {
@@ -676,10 +695,8 @@ private struct ActivityEventRow: View {
                     Text("•")
                     Text(relativeDate)
                     if event.isOfflineChange {
-                        Text("Synced later")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.orange.opacity(0.16), in: Capsule())
+                        CubbyStatusPill(title: "Synced later", systemImage: "clock.arrow.circlepath", tint: CubbyTheme.amber)
+                            .scaleEffect(0.86, anchor: .leading)
                     }
                 }
                 .font(.caption).foregroundStyle(.secondary)
@@ -726,8 +743,7 @@ struct FloorBoxView: View {
     }
 
     private var hasDescendants: Bool {
-        let d = descendantCount(of: floor.id, in: home)
-        return d.locations > 0 || d.items > 0
+        !home.children(of: floor.id).isEmpty || !home.items(in: floor.id).isEmpty
     }
 
     private var collapseNode: CollapsibleTreeNode {
@@ -755,6 +771,7 @@ struct FloorBoxView: View {
                 CollapseToggleButton(
                     isCollapsed: isCollapsed,
                     isSearchActive: isSearchActive,
+                    isAvailable: hasDescendants,
                     title: floor.name
                 ) {
                     collapseStore.toggle(collapseNode)
@@ -795,10 +812,10 @@ struct FloorBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { homeStore.deleteLocation(homeId: home.id, locationId: floor.id) }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(CubbyTheme.mutedInk).frame(width: 44, height: 44) }
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 2)
             .dropDestination(for: DraggedLocation.self) { items, _ in
                 guard let dragged = items.first, dragged.id != floor.id else { return false }
                 if dragged.homeId == home.id {
@@ -860,8 +877,8 @@ struct FloorBoxView: View {
                     ])
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? CubbyTheme.green : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .clipShape(RoundedRectangle(cornerRadius: CubbyTheme.Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: CubbyTheme.Radius.card, style: .continuous).stroke(isDropTargeted ? CubbyTheme.green : Color.floorBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.08), radius: 10, y: 3)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
@@ -913,8 +930,7 @@ struct RoomBoxView: View {
     }
 
     private var hasDescendants: Bool {
-        let d = descendantCount(of: room.id, in: home)
-        return d.locations > 0 || d.items > 0
+        !home.children(of: room.id).isEmpty || !home.items(in: room.id).isEmpty
     }
 
     private var collapseNode: CollapsibleTreeNode {
@@ -942,6 +958,7 @@ struct RoomBoxView: View {
                 CollapseToggleButton(
                     isCollapsed: isCollapsed,
                     isSearchActive: isSearchActive,
+                    isAvailable: hasDescendants,
                     title: room.name
                 ) {
                     collapseStore.toggle(collapseNode)
@@ -982,11 +999,11 @@ struct RoomBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { homeStore.deleteLocation(homeId: home.id, locationId: room.id) }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(.secondary).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption.bold()).foregroundStyle(CubbyTheme.mutedInk).frame(width: 44, height: 44) }
                     .accessibilityIdentifier("location-menu-\(room.id)")
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 2)
             .dropDestination(for: DraggedLocation.self) { items, _ in
                 guard let dragged = items.first, dragged.id != room.id else { return false }
                 // Drop onto room header = move container into this room
@@ -1037,8 +1054,8 @@ struct RoomBoxView: View {
                     ])
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isDropTargeted ? CubbyTheme.green : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isDropTargeted ? CubbyTheme.green : Color.roomBorder, lineWidth: isDropTargeted ? 2 : 0.75))
         .shadow(color: CubbyTheme.shelfShadow.opacity(0.06), radius: 8, y: 2)
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
@@ -1090,8 +1107,7 @@ struct ContainerBoxView: View {
     }
 
     private var hasDescendants: Bool {
-        let d = descendantCount(of: container.id, in: home)
-        return d.locations > 0 || d.items > 0
+        !home.children(of: container.id).isEmpty || !home.items(in: container.id).isEmpty
     }
 
     private var collapseNode: CollapsibleTreeNode {
@@ -1118,6 +1134,7 @@ struct ContainerBoxView: View {
                 CollapseToggleButton(
                     isCollapsed: isCollapsed,
                     isSearchActive: isSearchActive,
+                    isAvailable: hasDescendants,
                     title: container.name
                 ) {
                     collapseStore.toggle(collapseNode)
@@ -1158,10 +1175,10 @@ struct ContainerBoxView: View {
                             if hasDescendants { showDeleteConfirm = true }
                             else { homeStore.deleteLocation(homeId: home.id, locationId: container.id) }
                         } label: { Label("Delete", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").font(.caption).foregroundStyle(.secondary).padding(6) }
+                    } label: { Image(systemName: "ellipsis").font(.caption).foregroundStyle(CubbyTheme.mutedInk).frame(width: 44, height: 44) }
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .padding(.horizontal, 10).padding(.vertical, 2)
 
             if !isCollapsed {
                 // Nested containers
@@ -1201,8 +1218,8 @@ struct ContainerBoxView: View {
                     ])
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(isDropTargeted ? CubbyTheme.green : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isDropTargeted ? CubbyTheme.green : Color.containerBorder, lineWidth: isDropTargeted ? 2 : 0.5))
         .dropDestination(for: DraggedItem.self) { items, _ in
             guard let dragged = items.first else { return false }
             Task { @MainActor in

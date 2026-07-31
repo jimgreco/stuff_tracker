@@ -16,16 +16,44 @@ struct SharingView: View {
 
     var body: some View {
         List {
+            if !ownedHomeIds.isEmpty {
+                Section {
+                    Label(
+                        ownedHomeIds.count == 1
+                            ? "Access applies to this shared home."
+                            : "Access changes apply across \(ownedHomeIds.count) homes you manage.",
+                        systemImage: "house.fill"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(CubbyTheme.mutedInk)
+                }
+                .cubbySheetRows(prominence: 0.78)
+            }
+
             if isLoading {
-                ProgressView()
+                Section {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(CubbyTheme.green)
+                        Text("Loading collaborators…")
+                            .font(.subheadline)
+                            .foregroundStyle(CubbyTheme.mutedInk)
+                    }
                     .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
+                    .padding(.vertical, 26)
+                }
+                .cubbySheetRows(prominence: 0.82)
             } else {
                 if members.isEmpty {
                     Section {
-                        Text("No one else has access yet.")
-                            .foregroundStyle(.secondary)
+                        ContentUnavailableView(
+                            "Just You for Now",
+                            systemImage: "person.2",
+                            description: Text("Invite someone when you want to organize a home together.")
+                        )
                     }
+                    .cubbySheetRows(prominence: 0.86)
                 } else {
                     Section("Members") {
                         ForEach(members) { member in
@@ -41,6 +69,7 @@ struct SharingView: View {
                             )
                         }
                     }
+                    .cubbySheetRows()
                 }
 
                 if !ownedHomeIds.isEmpty {
@@ -49,22 +78,25 @@ struct SharingView: View {
                             showInvite = true
                         } label: {
                             Label("Invite someone", systemImage: "person.badge.plus")
+                                .font(.body.weight(.semibold))
                         }
+                        .foregroundStyle(CubbyTheme.green)
                     }
+                    .cubbySheetRows()
                 }
             }
 
             if let error = errorMessage {
                 Section {
-                    Text(error)
-                        .foregroundStyle(.red)
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(CubbyTheme.danger)
                         .font(.caption)
                 }
+                .cubbySheetRows(prominence: 0.92)
             }
         }
-        .navigationTitle("Sharing")
+        .cubbySheetChrome(title: "Sharing")
         .navigationBarTitleDisplayMode(.inline)
-        .cubbyNavigationBarChrome(title: "Sharing")
         .sheet(isPresented: $showInvite) {
             InviteSheet(
                 email: $inviteEmail,
@@ -151,11 +183,11 @@ struct MemberRow: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.accentColor.opacity(0.2))
-                    .frame(width: 38, height: 38)
+                    .fill(CubbyTheme.greenSoft.opacity(0.78))
+                    .frame(width: 42, height: 42)
                 Text(String(member.name.prefix(1)).uppercased())
                     .font(.headline)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(CubbyTheme.green)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -185,18 +217,19 @@ struct MemberRow: View {
                     Divider()
                     Button("Remove", role: .destructive) { onRemove() }
                 } label: {
-                    Text(member.role.capitalized)
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(Capsule())
+                    CubbyStatusPill(
+                        title: member.role.capitalized,
+                        systemImage: member.role == "editor" ? "pencil" : "eye"
+                    )
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
             } else {
-                Text(member.role.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                CubbyStatusPill(
+                    title: member.role.capitalized,
+                    systemImage: member.role == "editor" ? "pencil" : "eye",
+                    tint: CubbyTheme.mutedInk
+                )
             }
         }
         .padding(.vertical, 4)
@@ -227,6 +260,7 @@ struct InviteSheet: View {
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                 }
+                .cubbySheetRows()
                 Section("Role") {
                     Picker("Role", selection: $role) {
                         Text("Editor").tag("editor")
@@ -245,10 +279,12 @@ struct InviteSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
+                .cubbySheetRows()
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .cubbyNavigationBarChrome()
+            .cubbySheetChrome()
+            .tint(CubbyTheme.green)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     CubbyNavigationBrandTitle(title: "Invite Member")

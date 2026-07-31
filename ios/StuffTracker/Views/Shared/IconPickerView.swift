@@ -255,6 +255,7 @@ struct IconPickerView: View {
                 }
                 .padding()
             }
+            .background(CubbySheetBackground())
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .cubbyNavigationBarChrome()
@@ -281,11 +282,21 @@ struct IconPickerView: View {
                 Image(systemName: "xmark.circle")
                     .font(.title3)
                 Text("No icon")
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if selectedIcon.isEmpty {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(CubbyTheme.green)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .cubbyWoodButtonSurface()
+            .padding(12)
+            .foregroundStyle(CubbyTheme.warmInk)
+            .background(CubbyTheme.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(selectedIcon.isEmpty ? CubbyTheme.green.opacity(0.42) : CubbyTheme.floorBorder, lineWidth: selectedIcon.isEmpty ? 1.25 : 0.75)
+            }
         }
         .buttonStyle(.plain)
     }
@@ -293,8 +304,10 @@ struct IconPickerView: View {
     private func iconSection(_ section: IconSection) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(section.title)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(CubbyTheme.mutedInk)
+                .textCase(.uppercase)
+                .tracking(0.7)
                 .padding(.horizontal, 4)
 
             LazyVGrid(columns: columns, spacing: 12) {
@@ -323,13 +336,22 @@ struct IconPickerView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 66)
             .padding(.horizontal, 4)
-            .cubbyWoodButtonSurface()
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(selectedIcon == option.name ? Color.white.opacity(0.72) : .clear, lineWidth: 2)
+            .foregroundStyle(selectedIcon == option.name ? CubbyTheme.green : CubbyTheme.warmInk)
+            .background(
+                selectedIcon == option.name ? CubbyTheme.greenSoft.opacity(0.90) : CubbyTheme.paper.opacity(0.92),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(
+                        selectedIcon == option.name ? CubbyTheme.green.opacity(0.48) : CubbyTheme.floorBorder.opacity(0.72),
+                        lineWidth: selectedIcon == option.name ? 1.25 : 0.75
+                    )
+            )
+            .shadow(color: CubbyTheme.shelfShadow.opacity(0.07), radius: 6, y: 3)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(option.name)
+        .accessibilityLabel(option.label)
+        .accessibilityAddTraits(selectedIcon == option.name ? .isSelected : [])
     }
 }
