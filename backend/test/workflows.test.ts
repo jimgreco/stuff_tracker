@@ -65,6 +65,7 @@ test('App Store screenshots workflow uploads to App Store Connect by default', (
 test('App Store metadata workflow uploads editable metadata through fastlane', () => {
   const workflow = readRepoFile('.github/workflows/app-store-metadata.yml');
   const fastfile = readRepoFile('fastlane/Fastfile');
+  const description = readRepoFile('fastlane/metadata/en-US/description.txt');
 
   assert.match(workflow, /bundle exec fastlane ios upload_metadata/);
   assert.match(workflow, /APP_STORE_CONNECT_KEY_ID/);
@@ -78,6 +79,10 @@ test('App Store metadata workflow uploads editable metadata through fastlane', (
   assert.match(fastfile, /return unless options\[:app_review_attachment_file\]/);
   assert.match(fastfile, /skip_binary_upload: true/);
   assert.match(fastfile, /skip_screenshots: true/);
+  assert.match(
+    description,
+    /Terms of Use \(EULA\): https:\/\/www\.apple\.com\/legal\/internet-services\/itunes\/dev\/stdeula\//,
+  );
 });
 
 test('App Store subscription price workflow updates the yearly Pro product', () => {
@@ -126,6 +131,8 @@ test('App Store subscription review workflow completes and verifies both Pro pro
   assert.match(captureScript, /--subscription-review-screenshot/);
   assert.match(app, /SubscriptionReviewScreenshotView/);
   assert.ok(account.includes('Text("Subscribe \\(plan.name)")'));
+  assert.match(account, /Link\("Privacy Policy", destination: SubscriptionLegalLinks\.privacyPolicy\)/);
+  assert.match(account, /Link\("Terms of Use", destination: SubscriptionLegalLinks\.termsOfUse\)/);
   assert.equal(reviewScreenshot.subarray(1, 4).toString(), 'PNG');
   assert.equal(reviewScreenshot.readUInt32BE(16), 1320);
   assert.equal(reviewScreenshot.readUInt32BE(20), 2868);

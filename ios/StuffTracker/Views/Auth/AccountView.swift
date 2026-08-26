@@ -3,6 +3,11 @@ import AuthenticationServices
 import GoogleSignIn
 import StoreKit
 
+private enum SubscriptionLegalLinks {
+    static let privacyPolicy = URL(string: "https://cubbylog.com/privacy.html")!
+    static let termsOfUse = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+}
+
 #if DEBUG
 struct SubscriptionReviewScreenshotView: View {
     private let plans = [
@@ -66,6 +71,8 @@ struct SubscriptionReviewScreenshotView: View {
                             Spacer()
                         }
                     }
+
+                    subscriptionLegalLinks
                 }
                 .cubbySheetRows()
             }
@@ -81,6 +88,15 @@ struct SubscriptionReviewScreenshotView: View {
                 }
             }
         }
+    }
+
+    private var subscriptionLegalLinks: some View {
+        HStack {
+            Link("Privacy Policy", destination: SubscriptionLegalLinks.privacyPolicy)
+            Spacer()
+            Link("Terms of Use", destination: SubscriptionLegalLinks.termsOfUse)
+        }
+        .font(.caption)
     }
 
     private func quotaRow(title: String, used: Int, limit: Int) -> some View {
@@ -440,8 +456,19 @@ struct AccountView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            subscriptionLegalLinks
         }
         .cubbySheetRows()
+    }
+
+    private var subscriptionLegalLinks: some View {
+        HStack {
+            Link("Privacy Policy", destination: SubscriptionLegalLinks.privacyPolicy)
+            Spacer()
+            Link("Terms of Use", destination: SubscriptionLegalLinks.termsOfUse)
+        }
+        .font(.caption)
     }
 
     private func subscriptionProductButton(_ product: Product) -> some View {

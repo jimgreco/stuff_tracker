@@ -13,3 +13,5 @@ Use CubbyLog to:
 CubbyLog works locally first, so you can start organizing without setup. Sign in when you want cloud sync, shared homes, and hosted attachments.
 
 Whether you are moving, preparing for insurance, organizing a garage, or just tired of asking "where did we put that?", CubbyLog gives your stuff a map.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
