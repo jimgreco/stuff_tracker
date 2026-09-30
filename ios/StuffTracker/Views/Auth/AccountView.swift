@@ -127,6 +127,9 @@ struct AccountView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showMergeSheet = false
     @State private var serverHasData = false
+    @State private var showDeleteAccountConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var deletionError: String?
 
     private var ownedHomes: [HomeDetail] {
         homeStore.homeDetails.filter { $0.role == "owner" || $0.role == "admin" }
@@ -170,7 +173,7 @@ struct AccountView: View {
                 }
             }
             .overlay {
-                if authStore.isLoading || syncManager.isSyncing || subscriptionStore.isLoading {
+                if authStore.isLoading || syncManager.isSyncing || isDeletingAccount {
                     ProgressView()
                         .scaleEffect(1.5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -192,6 +195,26 @@ struct AccountView: View {
                 if authStore.isAuthenticated {
                     await subscriptionStore.refresh()
                 }
+            }
+            .confirmationDialog(
+                "Delete your CubbyLog account?",
+                isPresented: $showDeleteAccountConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete My Account", role: .destructive) {
+                    Task { await deleteAccount() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes your account and the homes you own, including their items and attachments. You will lose access to homes shared with you. Items you added to someone else's home stay there. Deleting your account does not cancel an App Store subscription.")
+            }
+            .alert("Could Not Delete Account", isPresented: Binding(
+                get: { deletionError != nil },
+                set: { if !$0 { deletionError = nil } }
+            )) {
+                Button("OK") { deletionError = nil }
+            } message: {
+                Text(deletionError ?? "Please try again.")
             }
         }
     }
@@ -362,6 +385,17 @@ struct AccountView: View {
 
         Section {
             Button(role: .destructive) {
+                showDeleteAccountConfirmation = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Delete Account")
+                    Spacer()
+                }
+            }
+            .disabled(syncManager.isSyncing)
+
+            Button(role: .destructive) {
                 Task {
                     await authStore.signOutEverywhere()
                     dismiss()
@@ -386,6 +420,21 @@ struct AccountView: View {
             }
         }
         .cubbySheetRows(prominence: 0.92)
+    }
+
+    private func deleteAccount() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await APIClient.shared.deleteAccount()
+            authStore.signOut()
+            LocalDataManager.shared.clearAllData()
+            homeStore.reloadFromLocal()
+            await subscriptionStore.refresh()
+            dismiss()
+        } catch {
+            deletionError = error.localizedDescription
+        }
     }
 
     @ViewBuilder

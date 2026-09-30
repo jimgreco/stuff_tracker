@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS home_members (
   home_id UUID NOT NULL REFERENCES homes(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('admin', 'editor', 'viewer')),
-  invited_by UUID REFERENCES users(id),
+  invited_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (home_id, user_id)
 );
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS items (
   estimated_value_cents INTEGER,
   is_flagged BOOLEAN NOT NULL DEFAULT FALSE,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  created_by UUID NOT NULL REFERENCES users(id),
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

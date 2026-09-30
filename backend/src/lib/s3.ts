@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { PutObjectCommandInput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getIntegerEnv } from './env';
@@ -101,6 +101,32 @@ function client(): S3Client {
     s3Client = new S3Client({ region: s3Region() });
   }
   return s3Client;
+}
+
+export async function deleteHomeAttachments(homeIds: string[]): Promise<void> {
+  if (homeIds.length === 0) return;
+  const bucket = s3Bucket();
+  for (const homeId of homeIds) {
+    let continuationToken: string | undefined;
+    do {
+      const page = await client().send(new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: `homes/${homeId}/`,
+        ContinuationToken: continuationToken,
+      }));
+      const objects = (page.Contents ?? []).flatMap(({ Key }) => Key ? [{ Key }] : []);
+      if (objects.length) {
+        const result = await client().send(new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objects, Quiet: true },
+        }));
+        if (result.Errors?.length) {
+          throw new Error(`Could not delete ${result.Errors.length} account attachment objects`);
+        }
+      }
+      continuationToken = page.NextContinuationToken;
+    } while (continuationToken);
+  }
 }
 
 function safeFileName(fileName: string, kind: ItemUploadKind): string {

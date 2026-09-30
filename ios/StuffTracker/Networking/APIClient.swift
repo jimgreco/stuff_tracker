@@ -390,6 +390,14 @@ final class APIClient {
         try await request("GET", path: "/account/plan")
     }
 
+    func deleteAccount() async throws {
+        try await requestEmpty("DELETE", path: "/account", body: DeleteAccountConfirmation())
+    }
+
+    private struct DeleteAccountConfirmation: Encodable {
+        let confirmation = "DELETE"
+    }
+
     func getSubscriptionProductIds() async throws -> [String] {
         let response: SubscriptionProductsResponse = try await request("GET", path: "/account/subscription-products")
         return response.productIds

@@ -158,6 +158,72 @@ test('provider upsert preserves an existing Apple email when later tokens omit i
   assert.equal(second.email, 'real-private-relay@privaterelay.appleid.com');
 });
 
+test('account deletion removes owned data and sessions while preserving shared-home items without identity', { skip: !runDatabaseIntegrationTests }, async (t) => {
+  await resetDatabase();
+  const server = await listen();
+  t.after(() => close(server));
+  const baseUrl = serverBaseUrl(server);
+
+  const firstAuth = await postJson(`${baseUrl}/auth/dev`, { email: 'delete-me@example.com', name: 'Delete Me' });
+  const first = await firstAuth.json() as { token: string; refreshToken: string; user: { id: string } };
+  const secondAuth = await postJson(`${baseUrl}/auth/dev`, { email: 'stay@example.com', name: 'Stay' });
+  const second = await secondAuth.json() as { token: string; user: { id: string } };
+  const ownedHomeResponse = await postJson(`${baseUrl}/homes`, { name: 'Delete Home' }, first.token);
+  const ownedHome = await ownedHomeResponse.json() as { id: string };
+  const sharedHomeResponse = await postJson(`${baseUrl}/homes`, { name: 'Keep Home' }, second.token);
+  const sharedHome = await sharedHomeResponse.json() as { id: string };
+  await pool.query(
+    `INSERT INTO home_members (home_id, user_id, role, invited_by)
+     VALUES ($1, $2, 'editor', $3), ($4, $3, 'viewer', $2)`,
+    [sharedHome.id, first.user.id, second.user.id, ownedHome.id]
+  );
+  await pool.query(
+    `INSERT INTO items (home_id, name, created_by) VALUES ($1, 'Shared Item', $2)`,
+    [sharedHome.id, first.user.id]
+  );
+  await pool.query(
+    `INSERT INTO home_activity_events
+     (home_id, actor_id, actor_name, actor_email, action, entity_type, entity_id, entity_name, summary, event_scope)
+     VALUES ($1, $2, 'Delete Me', 'delete-me@example.com', 'member_added', 'member', $2, 'Delete Me', 'Added Delete Me', 'test-member')`,
+    [sharedHome.id, first.user.id]
+  );
+  await pool.query(
+    `INSERT INTO app_store_transactions
+     (transaction_id, original_transaction_id, user_id, product_id, environment, signed_transaction_info, payload)
+     VALUES ('test-transaction', 'test-original', $1, 'test-product', 'Sandbox', 'signed', '{}')`,
+    [first.user.id]
+  );
+
+  const noConfirmation = await fetch(`${baseUrl}/account`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${first.token}` },
+  });
+  assert.equal(noConfirmation.status, 400);
+  const deletion = await fetch(`${baseUrl}/account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${first.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmation: 'DELETE' }),
+  });
+  assert.equal(deletion.status, 204);
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM users WHERE id = $1', [first.user.id])).rows[0].count, 0);
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM homes WHERE id = $1', [ownedHome.id])).rows[0].count, 0);
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM app_store_transactions WHERE user_id = $1', [first.user.id])).rows[0].count, 0);
+  const sharedItem = await pool.query('SELECT created_by FROM items WHERE home_id = $1', [sharedHome.id]);
+  assert.equal(sharedItem.rows.length, 1);
+  assert.equal(sharedItem.rows[0].created_by, null);
+  const sharedActivity = await pool.query(
+    'SELECT actor_id, actor_name, actor_email, entity_id, entity_name, summary FROM home_activity_events WHERE event_scope = $1',
+    ['test-member']
+  );
+  assert.deepEqual(sharedActivity.rows[0], {
+    actor_id: null, actor_name: null, actor_email: null, entity_id: null,
+    entity_name: 'Former member', summary: 'Member changed',
+  });
+  assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM home_activity_events WHERE home_id = $1', [ownedHome.id])).rows[0].count, 0);
+  assert.equal((await fetch(`${baseUrl}/homes`, { headers: { Authorization: `Bearer ${first.token}` } })).status, 401);
+  assert.equal((await postJson(`${baseUrl}/auth/refresh`, { refreshToken: first.refreshToken })).status, 401);
+  assert.equal((await fetch(`${baseUrl}/homes`, { headers: { Authorization: `Bearer ${second.token}` } })).status, 200);
+});
+
 test('shared-home activity is transactional, scoped, stable, idempotent, and redacted', { skip: !runDatabaseIntegrationTests }, async (t) => {
   await resetDatabase();
   const server = await listen();

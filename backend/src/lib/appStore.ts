@@ -86,6 +86,10 @@ async function applyAppStoreTransaction(
   if (!userId) {
     return { applied: false, ignoredReason: 'transaction_missing_user', productId };
   }
+  const existingUser = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+  if (!existingUser.rows.length) {
+    return { applied: false, ignoredReason: 'transaction_missing_user', productId };
+  }
   if (expectedUserId && userId !== expectedUserId) {
     return { applied: false, ignoredReason: 'transaction_belongs_to_different_user', productId };
   }

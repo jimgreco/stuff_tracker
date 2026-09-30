@@ -149,6 +149,7 @@ The `Production Ops Checks` GitHub Actions workflow runs daily and can also be s
 # Host backup freshness check against ~/deploy/backups/stuff by default.
 npm run storage:s3:check
 npm run db:hardening:check
+npm run storage:cleanup:deleted-homes
 npm run activity:cleanup
 ```
 
@@ -383,7 +384,7 @@ Production S3 posture:
 
 - Public access block: all four settings enabled.
 - Bucket policy: none.
-- EC2 instance role policy: `s3:GetObject`, `s3:PutObject`, and `s3:AbortMultipartUpload` on the attachment bucket objects; `s3:GetBucketLocation`, `s3:GetBucketPublicAccessBlock`, `s3:GetBucketPolicyStatus`, `s3:GetEncryptionConfiguration`, and `s3:GetLifecycleConfiguration` on the bucket for read-only posture checks.
+- EC2 instance role policy: `s3:GetObject`, `s3:PutObject`, and `s3:AbortMultipartUpload` on the attachment bucket objects; `s3:DeleteObject` on `homes/*`; `s3:ListBucket` limited to the `homes/*` prefix; `s3:GetBucketLocation`, `s3:GetBucketPublicAccessBlock`, `s3:GetBucketPolicyStatus`, `s3:GetEncryptionConfiguration`, and `s3:GetLifecycleConfiguration` on the bucket for read-only posture checks.
 - Default bucket encryption: AES256.
 - Direct uploads: the backend includes `x-amz-server-side-encryption` in the required signed-upload headers, defaulting to `AES256`.
 - Lifecycle: abort incomplete multipart uploads after 7 days.

@@ -1075,6 +1075,7 @@
   function renderSheet() {
     if (!state.sheet) return "";
     if (state.sheet.type === "account") return renderAccountSheet();
+    if (state.sheet.type === "deleteAccount") return renderDeleteAccountSheet();
     if (state.sheet.type === "rename") return renderRenameSheet();
     if (state.sheet.type === "iconPicker") return renderIconPickerSheet();
     if (state.sheet.type === "delete") return renderDeleteSheet();
@@ -1161,6 +1162,7 @@
         <div class="form-list">
           ${connected ? `<button type="button" class="row-button danger" data-action="logout-all">${svgIcon("x")} Sign Out Everywhere</button>` : ""}
           ${connected ? `<button type="button" class="row-button danger" data-action="sign-out">${svgIcon("x")} Sign Out</button>` : ""}
+          ${connected ? `<button type="button" class="row-button danger" data-action="open-delete-account">${svgIcon("trash")} Delete Account</button>` : ""}
         </div>
       </section>
       <p class="footnote">Version web.</p>
@@ -1373,6 +1375,22 @@
       </section>
     `;
     return sheetChrome("Confirm Delete", body, { closeLabel: "Cancel" });
+  }
+
+  function renderDeleteAccountSheet() {
+    const body = `
+      <section class="form-section">
+        <div class="form-list">
+          <div class="full-row">
+            <strong>Delete your CubbyLog account?</strong>
+            <p class="footnote">This permanently removes your account and the homes you own, including their items, photos, and documents. You will lose access to homes shared with you. Items you added to someone else's home stay with that home.</p>
+            <p class="footnote">Deleting your account does not cancel an App Store subscription. Manage it separately in your Apple account.</p>
+          </div>
+          <button type="button" class="row-button danger" data-action="confirm-delete-account">${svgIcon("trash")} Delete My Account</button>
+        </div>
+      </section>
+    `;
+    return sheetChrome("Delete Account", body, { closeLabel: "Cancel" });
   }
 
   function renderBulkDeleteSheet() {
@@ -3359,6 +3377,19 @@
       clearSession();
       state.sheet = null;
       render();
+      return;
+    }
+    if (action === "open-delete-account") {
+      state.sheet = { type: "deleteAccount" };
+      render();
+      return;
+    }
+    if (action === "confirm-delete-account") {
+      await runMutation(async () => {
+        await apiRequest("DELETE", "/account", { confirmation: "DELETE" });
+        clearSession();
+        state.sheet = null;
+      }, "Account deleted");
       return;
     }
     if (action === "logout-all") {
