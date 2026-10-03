@@ -65,6 +65,23 @@ class ProfileTests(unittest.TestCase):
         for target in self.p['profiles']:
             self.verify(self.profile(target), target)
 
+    def test_associated_domains_profile_wildcard_representations(self):
+        for value in ['*', ['*'], self.p['profiles']['app']['associatedDomains']]:
+            with self.subTest(value=value):
+                p = self.profile('app')
+                p['Entitlements']['com.apple.developer.associated-domains'] = value
+                self.verify(p)
+
+    def test_associated_domains_rejects_insufficient_or_wrong_types(self):
+        approved = self.p['profiles']['app']['associatedDomains']
+        for value in [None, False, '', [], approved[:1], ['applinks:other.invalid'],
+                      ' '.join(approved), {d: True for d in approved}]:
+            with self.subTest(value=value):
+                p = self.profile('app')
+                p['Entitlements']['com.apple.developer.associated-domains'] = value
+                with self.assertRaisesRegex(ValueError, 'Associated Domains'):
+                    self.verify(p)
+
     def test_profile_failures(self):
         for key, value in [('UUID', 'other'), ('Name', 'new'), ('TeamIdentifier', ['other']),
                            ('ApplicationIdentifierPrefix', ['other']), ('Platform', ['macOS']),

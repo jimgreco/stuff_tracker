@@ -50,7 +50,11 @@ def verify_profile(profile, target, certificate=None, now=None, policy=POLICY):
     check(e.get('aps-environment') == target['push'], 'Profile push entitlement differs.')
     if target.get('associatedDomains'):
         domains = e.get('com.apple.developer.associated-domains', [])
-        check(domains == ['*'] or all(d in domains for d in target['associatedDomains']), 'Profile Associated Domains are insufficient.')
+        # Apple's profile allowlist may encode this wildcard as a scalar string.
+        # The signed app still has to claim the concrete approved domains.
+        check(domains == '*' or domains == ['*']
+              or (isinstance(domains, list) and all(d in domains for d in target['associatedDomains'])),
+              'Profile Associated Domains are insufficient.')
     certificates = profile.get('DeveloperCertificates', [])
     check(len(certificates) == 1 and hashlib.sha256(certificates[0]).hexdigest() == policy['certificateSha256'], 'Profile certificate differs.')
     if certificate is not None:
