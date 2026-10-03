@@ -3,6 +3,12 @@ import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObject
 import type { PutObjectCommandInput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getIntegerEnv } from './env';
+import { pool } from '../db/pool';
+
+const attachmentKeys = require('../../scripts/lib/attachment-keys.cjs') as {
+  attachmentKeyFromUrl(value: string): string | undefined;
+  referencedAttachmentKeys(rows: unknown[]): Set<string>;
+};
 
 export type ItemUploadKind = 'photo' | 'document';
 
@@ -56,6 +62,14 @@ export interface StoredItemAttachments {
   }>;
 }
 
+export interface AttachmentAccessScope {
+  // The route must have verified edit access to each of these homes.
+  homeIds: string[];
+  // Persisted attachments can outlive a move from another home. Trust only the
+  // exact keys already attached to this item, never that entire former home.
+  existing?: StoredItemAttachments;
+}
+
 interface DetectedAttachmentType {
   family: 'image' | 'pdf' | 'archive' | 'compound' | 'text';
   mime: string;
@@ -106,6 +120,10 @@ function client(): S3Client {
 export async function deleteHomeAttachments(homeIds: string[]): Promise<void> {
   if (homeIds.length === 0) return;
   const bucket = s3Bucket();
+  // A moved item keeps its original object key. Remaining items, including
+  // items in another owner's home, must retain their referenced attachments.
+  const { rows } = await pool.query('SELECT photo_urls, documents FROM items');
+  const referenced = attachmentKeys.referencedAttachmentKeys(rows);
   for (const homeId of homeIds) {
     let continuationToken: string | undefined;
     do {
@@ -114,7 +132,7 @@ export async function deleteHomeAttachments(homeIds: string[]): Promise<void> {
         Prefix: `homes/${homeId}/`,
         ContinuationToken: continuationToken,
       }));
-      const objects = (page.Contents ?? []).flatMap(({ Key }) => Key ? [{ Key }] : []);
+      const objects = (page.Contents ?? []).flatMap(({ Key }) => Key && !referenced.has(Key) ? [{ Key }] : []);
       if (objects.length) {
         const result = await client().send(new DeleteObjectsCommand({
           Bucket: bucket,
@@ -204,7 +222,19 @@ export async function signStoredAttachmentUrl(url: string): Promise<string> {
   return key ? createItemAttachmentReadUrl(key) : url;
 }
 
-export async function validateStoredItemAttachments(attachments: StoredItemAttachments): Promise<void> {
+export async function validateStoredItemAttachments(
+  attachments: StoredItemAttachments,
+  scope: AttachmentAccessScope
+): Promise<void> {
+  const existingKeys = new Set(attachmentUrls(scope.existing ?? {})
+    .map(attachmentKeyFromUrl).filter((key): key is string => key !== undefined));
+  for (const url of attachmentUrls(attachments)) {
+    const key = attachmentKeyFromUrl(url);
+    if (key && !existingKeys.has(key) && !scope.homeIds.some((homeId) => key.startsWith(`homes/${homeId}/`))) {
+      throw new UploadValidationError('Attachment does not belong to this home');
+    }
+  }
+
   for (const photoUrl of attachments.photoUrls ?? []) {
     await validateStoredAttachmentBytes({ kind: 'photo', url: photoUrl, contentType: 'image/*' });
   }
@@ -216,6 +246,10 @@ export async function validateStoredItemAttachments(attachments: StoredItemAttac
       contentType: document.content_type,
     });
   }
+}
+
+function attachmentUrls(attachments: StoredItemAttachments): string[] {
+  return [...(attachments.photoUrls ?? []), ...(attachments.documents ?? []).map((document) => document.url)];
 }
 
 export async function validateStoredAttachmentBytes(request: StoredAttachmentValidationRequest): Promise<void> {
@@ -284,40 +318,11 @@ export function assertAllowedAttachmentBytes(
 }
 
 export function attachmentKeyFromUrl(value: string): string | undefined {
-  if (value.startsWith('homes/')) {
-    return value;
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return undefined;
-  }
-
-  const configuredBase = process.env.S3_PUBLIC_BASE_URL?.replace(/\/+$/, '');
-  if (configuredBase && value.startsWith(`${configuredBase}/`)) {
-    return decodeKeyPath(value.slice(configuredBase.length + 1).split('?')[0]);
-  }
-
-  const bucket = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET;
-  if (!bucket) {
-    return undefined;
-  }
-
-  if (parsed.hostname === `${bucket}.s3.amazonaws.com` || parsed.hostname.startsWith(`${bucket}.s3.`)) {
-    return decodeKeyPath(parsed.pathname.replace(/^\/+/, ''));
-  }
-
-  return undefined;
+  return attachmentKeys.attachmentKeyFromUrl(value);
 }
 
 export function stableAttachmentUrlForKey(key: string): string {
   return stableFileUrl(s3Bucket(), s3Region(), key);
-}
-
-function decodeKeyPath(path: string): string {
-  return path.split('/').map(decodeURIComponent).join('/');
 }
 
 function uploadServerSideEncryption(): PutObjectCommandInput['ServerSideEncryption'] | undefined {

@@ -99,7 +99,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
   const quota = await canCreateItem(homeId, photo_urls?.length ?? 0, documents?.length ?? 0);
   if (quota) { sendQuota(res, quota); return; }
-  if (!await validateAttachmentsOrRespond(res, { photoUrls: photo_urls, documents })) {
+  if (!await validateAttachmentsOrRespond(res, { photoUrls: photo_urls, documents }, { homeIds: [homeId] })) {
     return;
   }
 
@@ -212,6 +212,12 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   if (!await validateAttachmentsOrRespond(res, {
     photoUrls: updates.photo_urls,
     documents: updates.documents,
+  }, {
+    homeIds: [currentHomeId, targetHomeId],
+    existing: {
+      photoUrls: existingItem.rows[0].photo_urls,
+      documents: existingItem.rows[0].documents,
+    },
   })) {
     return;
   }
@@ -271,10 +277,11 @@ export default router;
 
 async function validateAttachmentsOrRespond(
   res: Response,
-  attachments: Parameters<typeof validateStoredItemAttachments>[0]
+  attachments: Parameters<typeof validateStoredItemAttachments>[0],
+  scope: Parameters<typeof validateStoredItemAttachments>[1]
 ): Promise<boolean> {
   try {
-    await validateStoredItemAttachments(attachments);
+    await validateStoredItemAttachments(attachments, scope);
     return true;
   } catch (err) {
     if (err instanceof UploadValidationError) {

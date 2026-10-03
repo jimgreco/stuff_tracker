@@ -148,21 +148,27 @@ router.post('/google', async (req: Request, res: Response) => {
       audience: googleAudiences(),
     });
     const payload = ticket.getPayload();
-    if (!payload?.sub || !payload.email) {
+    // Email is used for account linking, so an unverified claim cannot identify
+    // an existing account even when the provider signature is valid.
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
       res.status(401).json({ error: 'Invalid Google token' });
       return;
     }
 
     const { sub: googleId, email, name = email, picture } = payload;
-    const user = await upsertUser({ googleId, email, name, avatarUrl: picture });
+    // Google is authoritative for Gmail and verified Workspace addresses, but
+    // a third-party email may have changed owners since Google verified it.
+    const allowEmailLinking = email.toLowerCase().endsWith('@gmail.com') || Boolean(payload.hd);
+    const user = await upsertUser({ googleId, email, name, avatarUrl: picture, allowEmailLinking });
     res.json(await issueAuthResponse(req, user));
   } catch (err: any) {
     if (err instanceof UserIdentityConflictError) {
       res.status(409).json({ error: err.message });
       return;
     }
-    console.error('Google sign-in verification failed:', err);
-    res.status(401).json({ error: err.message ?? 'Google token verification failed' });
+    // Provider errors can contain the original ID token or decoded claims.
+    console.error('Google sign-in verification failed');
+    res.status(401).json({ error: 'Google token verification failed' });
   }
 });
 
@@ -197,8 +203,8 @@ router.post('/apple', async (req: Request, res: Response) => {
       res.status(409).json({ error: err.message });
       return;
     }
-    console.error('Apple sign-in verification failed:', err);
-    res.status(401).json({ error: err.message ?? 'Apple token verification failed' });
+    console.error('Apple sign-in verification failed');
+    res.status(401).json({ error: 'Apple token verification failed' });
   }
 });
 

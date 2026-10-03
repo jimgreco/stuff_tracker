@@ -24,6 +24,7 @@ interface UpsertUserParams {
   name: string;
   avatarUrl?: string;
   emailIsFallback?: boolean;
+  allowEmailLinking?: boolean;
 }
 
 type Queryable = Pick<PoolClient, 'query'>;
@@ -72,6 +73,9 @@ export async function upsertUserWithClient(client: Queryable, params: UpsertUser
   );
 
   if (byEmail.rows[0]) {
+    if (provider && params.allowEmailLinking === false) {
+      throw new UserIdentityConflictError('Sign in with the provider already linked to this account');
+    }
     return updateExistingUser(client, byEmail.rows[0], { ...params, email });
   }
 
