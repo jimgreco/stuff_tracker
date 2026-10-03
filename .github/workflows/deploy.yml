@@ -179,7 +179,7 @@ jobs:
             "cd ~/deploy && docker-compose exec -T stuff npm run smoke:deploy || (docker-compose ps stuff && docker-compose logs --tail=100 stuff && false)"
 
   notify-failure:
-    if: ${{ always() && github.event_name == 'push' && (needs.verify.result == 'failure' || needs.verify.result == 'cancelled' || needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled') }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (needs.verify.result == 'failure' || needs.verify.result == 'cancelled' || needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled') }}
     needs: [verify, deploy]
     runs-on: ubuntu-latest
     steps:
