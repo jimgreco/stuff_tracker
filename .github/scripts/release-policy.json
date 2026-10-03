@@ -1,0 +1,45 @@
+{
+  "app": "stuff",
+  "appId": "6768726156",
+  "bundleId": "com.jimgreco.stufftracker",
+  "teamId": "V6JPQCD336",
+  "certificateSha256": "7fb57dbf0cd7923f9ba97d8801824de79e1ba235dbe78d4a821f8195c30f0bf8",
+  "certificateSha1": "963A7A5107DB8D4C141371C285F71CCAE84A5452",
+  "testerEmailSha256": "a46343858cf3e5e2fda6339f7063190f295ece10dea50979932e69ec57ea4baa",
+  "groups": [
+    {
+      "id": "7ee896b0-eb39-49a5-91f4-f22c9d9cd2d3",
+      "name": "Family",
+      "internal": true,
+      "testers": 1,
+      "automatic": true
+    },
+    {
+      "id": "cac6e606-706c-47f9-a43c-cfdf653b1cbf",
+      "name": "Friends",
+      "internal": true,
+      "testers": 0,
+      "automatic": true
+    }
+  ],
+  "profiles": {
+    "app": {
+      "uuid": "ed3ddf0e-a45d-4fd6-a294-e7ac86e9fc8d",
+      "name": "Stuff Tacker App Store",
+      "bundleId": "com.jimgreco.stufftracker",
+      "groups": [],
+      "appleSignin": [
+        "Default"
+      ],
+      "push": null,
+      "associatedDomains": [
+        "applinks:cubbylog.com",
+        "applinks:www.cubbylog.com"
+      ]
+    }
+  },
+  "marketingVersion": "1.1",
+  "apiOrigin": null,
+  "infoPlists": [],
+  "configuredPlistKeys": []
+}
