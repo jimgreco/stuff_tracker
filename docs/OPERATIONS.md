@@ -21,7 +21,20 @@ Protect `main` in GitHub and require these status checks before merge:
 - `verify`
 - `test`
 
-Keep direct pushes limited to maintainers. The deploy workflow only deploys on pushes to `main`; pull requests run verification without deploying.
+Keep direct pushes limited to maintainers. Pushes and pull requests run verification
+without deploying or uploading a native build. Deployment is a manual dispatch of
+`deploy.yml` on `main` with `deploy=true`, after exact-commit verification and
+shared-host release coordination. TestFlight archive/upload is a separate manual
+dispatch of `testflight.yml` on `main`.
+
+Before deployment, retain the current Stuff image ID under an explicit rollback
+tag and record the effective running configuration without exposing credentials.
+Check that the current Compose configuration preserves that configuration before
+recreating the service. Deployment rebuilds only `stuff` with `--no-deps` and does
+not prune images or restart dependencies. Workflow concurrency only serializes
+this repository; the release coordinator must also serialize other apps using
+the host. Confirm the resulting container image/source commit, `/health/live`,
+`/health`, public shell, and smoke results before proceeding to the next app.
 
 ## Incident Response
 
@@ -58,7 +71,8 @@ Preferred rollback path is a revert or forward-fix through `main`, because the d
    npm audit --omit=dev
    ```
 
-4. Push to `main` and watch the `Deploy to EC2` workflow.
+4. Push to `main`, verify its checks, then manually dispatch `Deploy to EC2` with
+   `deploy=true` after coordinating the shared host.
 5. Confirm `/health` after deploy completion.
 
 If GitHub Actions is unavailable and production is down, manually deploy a clean checkout of the last known-good commit from a trusted machine using the same backend files and pinned SSH host key. Record that manual action and reconcile `main` afterward.

@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: stuff-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: macos-latest
@@ -24,9 +28,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "run_tests=true" >> "$GITHUB_OUTPUT"
             echo "run_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "run_build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -142,7 +152,7 @@ jobs:
             test
 
   build:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.test.outputs.run_build == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.test.outputs.run_build == 'true'
     needs: test
     runs-on: macos-latest
     timeout-minutes: 45

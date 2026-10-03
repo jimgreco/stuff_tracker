@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy this verified main commit to the shared host
+        type: boolean
+        default: false
+
+concurrency:
+  group: stuff-backend-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -47,7 +57,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            changed_files=$(git ls-tree -r --name-only HEAD)
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
             changed_files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
@@ -96,7 +108,7 @@ jobs:
         run: npm audit --omit=dev
 
   deploy:
-    if: github.event_name == 'push' && needs.verify.outputs.run_deploy == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy && needs.verify.outputs.run_deploy == 'true'
     needs: verify
     runs-on: ubuntu-latest
     steps:
@@ -131,7 +143,7 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            "cd ~/deploy && docker-compose up -d --build stuff && docker system prune -f"
+            "cd ~/deploy && docker-compose up -d --no-deps --build stuff"
 
       - name: Wait for stuff service
         env:
