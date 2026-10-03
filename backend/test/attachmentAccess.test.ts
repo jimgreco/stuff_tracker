@@ -23,6 +23,8 @@ const url = (homeId: string, file = 'photo.jpg') =>
   `https://audit-synthetic-bucket.s3.amazonaws.com/homes/${homeId}/items/photos/${file}`;
 
 test('item writes cannot turn another home attachment URL into a fresh read grant', async (t) => {
+  const originalIntegrationMode = process.env.RUN_DATABASE_INTEGRATION_TESTS;
+  process.env.RUN_DATABASE_INTEGRATION_TESTS = 'true';
   const originalQuery = pool.query;
   const originalConnect = pool.connect;
   const originalSend = S3Client.prototype.send;
@@ -31,6 +33,10 @@ test('item writes cannot turn another home attachment URL into a fresh read gran
   let s3Reads = 0;
   let writes = 0;
   pool.query = (async (sql: string, values: unknown[] = []) => {
+    if (sql === 'SELECT tokens_revoked_before FROM users WHERE id = $1') {
+      assert.equal(values[0], 'synthetic-owner');
+      return { rows: [{ tokens_revoked_before: null }] };
+    }
     if (sql.includes('SELECT home_id, photo_urls, documents FROM items')) {
       return { rows: [{ home_id: storedHome, photo_urls: storedPhotos, documents: [] }] };
     }
@@ -60,6 +66,8 @@ test('item writes cannot turn another home attachment URL into a fresh read gran
 
   const app = createApp();
   t.after(() => {
+    if (originalIntegrationMode === undefined) delete process.env.RUN_DATABASE_INTEGRATION_TESTS;
+    else process.env.RUN_DATABASE_INTEGRATION_TESTS = originalIntegrationMode;
     pool.query = originalQuery;
     pool.connect = originalConnect;
     S3Client.prototype.send = originalSend;
