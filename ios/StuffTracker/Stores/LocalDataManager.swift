@@ -8,11 +8,33 @@ final class LocalDataManager {
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
     
-    private init() {
-        setupContainer()
+    private let accountDefaults: UserDefaults
+    static let accountOwnerKey = "local_inventory_owner_user_id_v1"
+
+    init(inMemory: Bool = false, accountDefaults: UserDefaults = .standard) {
+        self.accountDefaults = accountDefaults
+        setupContainer(inMemory: inMemory)
+    }
+
+    var boundAccountID: String? { accountDefaults.string(forKey: Self.accountOwnerKey) }
+
+    enum AccountAccess: Equatable { case allowed, claimRequired, differentAccount }
+
+    // Count every entity, including tombstones and old queued operations. A failed
+    // read is not an empty store and must never permit reassignment.
+    func bindAccount(userID: String, claimLegacy: Bool = false) throws -> AccountAccess {
+        guard let context = modelContext else { throw CocoaError(.fileReadUnknown) }
+        let hasData = try context.fetchCount(FetchDescriptor<LocalHome>()) > 0
+            || context.fetchCount(FetchDescriptor<LocalLocation>()) > 0
+            || context.fetchCount(FetchDescriptor<LocalItem>()) > 0
+            || context.fetchCount(FetchDescriptor<SyncOperation>()) > 0
+        if let owner = boundAccountID, owner != userID, hasData { return .differentAccount }
+        if boundAccountID == nil, hasData, !claimLegacy { return .claimRequired }
+        accountDefaults.set(userID, forKey: Self.accountOwnerKey)
+        return .allowed
     }
     
-    private func setupContainer() {
+    private func setupContainer(inMemory: Bool) {
         let schema = Schema([
             LocalHome.self,
             LocalLocation.self,
@@ -20,7 +42,7 @@ final class LocalDataManager {
             SyncOperation.self
         ])
         
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         
         do {
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])

@@ -30,76 +30,91 @@ final class SyncManager: ObservableObject {
     @Published var pendingSyncCount: Int = 0
     @Published var deferredServerChangeCount: Int = 0
 
-    private let api = APIClient.shared
-    private let local = LocalDataManager.shared
+    private let api: APIClient
+    private let local: LocalDataManager
     private var isSyncInFlight = false
 
-    private init() {
+    init(api: APIClient = .shared, local: LocalDataManager? = nil) {
+        self.api = api
+        self.local = local ?? .shared
         updatePendingSyncCount()
     }
 
-    // MARK: - Full sync (push local → server, then pull server → local)
+    private func requireSyncSession() throws {
+        try api.requireCurrentSession()
+        guard api.hasToken, let userID = api.localAccountID, userID == local.boundAccountID else {
+            throw CancellationError()
+        }
+    }
 
-    func performFullSync() async {
-        guard api.hasToken, !isSyncInFlight else { return }
+    private func runSync(_ operation: () async throws -> Void) async {
+        guard !isSyncInFlight, (try? requireSyncSession()) != nil else { return }
         isSyncInFlight = true
         isSyncing = true
         syncError = nil
-
-        // Push pending local changes before pulling so server data cannot clobber unsynced local edits.
-        await pushPendingChanges()
-
-        // Pull server data after local changes have either synced or remained marked pending.
-        await pullFromServer()
-
-        lastSyncDate = Date()
-        isSyncing = false
-        isSyncInFlight = false
-        updatePendingSyncCount()
+        defer {
+            isSyncing = false
+            isSyncInFlight = false
+            updatePendingSyncCount()
+        }
+        await api.withSessionScope {
+            do {
+                try await operation()
+                try requireSyncSession()
+                if syncError == nil { lastSyncDate = Date() }
+            } catch is CancellationError {
+                // Sign-out/account changes invalidate late results; preserve work.
+            } catch {
+                syncError = "Sync failed: \(error.localizedDescription)"
+            }
+        }
     }
 
-    // MARK: - Push only (called after each local mutation)
+    // Check connectivity/authorization before a sign-in-triggered upload. Failure
+    // is never interpreted as an empty account or permission to recreate homes.
+    func performFullSync() async {
+        await runSync {
+            _ = try await api.listHomes()
+            try requireSyncSession()
+            try await pushPendingChanges()
+            try requireSyncSession()
+            try await pullFromServer()
+        }
+    }
 
     func syncPendingChanges() async {
-        guard api.hasToken, !isSyncInFlight else { return }
-        isSyncInFlight = true
-        isSyncing = true
-
-        await pushPendingChanges()
-
-        isSyncing = false
-        isSyncInFlight = false
-        updatePendingSyncCount()
+        await runSync { try await pushPendingChanges() }
     }
 
     // MARK: - Pull server data into local
 
-    private func pullFromServer() async {
-        do {
-            var mergeResult = ServerMergeResult()
-            let serverHomes = try await api.listHomes()
-            mergeResult.add(local.mergeFromServer(homes: serverHomes))
-
-            for home in serverHomes {
-                do {
-                    let detail = try await api.getHome(home.id)
-                    mergeResult.add(local.mergeHomeDetail(homeDetail: detail))
-                } catch {
-                    // Skip individual failures
-                }
+    private func pullFromServer() async throws {
+        try requireSyncSession()
+        var mergeResult = ServerMergeResult()
+        let serverHomes = try await api.listHomes()
+        try requireSyncSession()
+        mergeResult.add(local.mergeFromServer(homes: serverHomes))
+        for home in serverHomes {
+            do {
+                let detail = try await api.getHome(home.id)
+                try requireSyncSession()
+                mergeResult.add(local.mergeHomeDetail(homeDetail: detail))
+            } catch {
+                try requireSyncSession()
+                syncError = "Some home details could not be refreshed. Saved changes are preserved."
             }
-            deferredServerChangeCount = mergeResult.deferred
-        } catch {
-            syncError = "Pull failed: \(error.localizedDescription)"
         }
+        deferredServerChangeCount = mergeResult.deferred
     }
 
     // MARK: - Push local changes to server
 
-    private func pushPendingChanges() async {
+    private func pushPendingChanges() async throws {
+        try requireSyncSession()
         // Push homes that need sync
         let pendingHomes = local.fetchHomes().filter { $0.needsSync }
         for home in pendingHomes {
+            try requireSyncSession()
             await pushHome(home)
         }
 
@@ -116,6 +131,7 @@ final class SyncManager: ObservableObject {
         // Push items that need sync
         let pendingItems = local.fetchPendingItems()
         for item in pendingItems {
+            try requireSyncSession()
             await pushItem(item)
         }
 
@@ -127,16 +143,20 @@ final class SyncManager: ObservableObject {
         do {
             if home.isDeleted {
                 try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
+                try requireSyncSession()
                 local.hardDelete(home: home)
             } else {
                 // Try to create or update
                 do {
                     let _ = try await api.getHome(home.id)
+                    try requireSyncSession()
                     // Exists on server, update
                     let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-update", id: home.id, at: home.updatedAt))
-                } catch {
-                    // Doesn't exist, create
+                    try requireSyncSession()
+                } catch APIError.httpError(404, _) {
+                    // Only a confirmed missing home may be recreated.
                     let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
+                    try requireSyncSession()
                     // Remap the local ID to server ID if different
                     if created.id != home.id {
                         local.remapHomeId(from: home.id, to: created.id)
@@ -154,6 +174,7 @@ final class SyncManager: ObservableObject {
         guard !loc.isDeleted else { return }
         do {
             try await upsertLocation(loc)
+            try requireSyncSession()
         } catch {
             syncError = "Failed to sync location '\(loc.name)': \(error.localizedDescription)"
         }
@@ -163,101 +184,98 @@ final class SyncManager: ObservableObject {
         guard !item.isDeleted else { return }
         do {
             try await upsertItem(item)
+            try requireSyncSession()
         } catch {
             syncError = "Failed to sync item '\(item.name)': \(error.localizedDescription) \(itemSyncContext(item))"
         }
     }
 
+    private func deleteConfirmed(_ request: () async throws -> Void) async throws {
+        try requireSyncSession()
+        do { try await request() }
+        catch APIError.httpError(404, _) { /* Already absent. */ }
+        try requireSyncSession()
+    }
+
     private func pushDeleted() async {
-        // Delete homes
         for home in local.fetchDeletedHomes() {
             do {
-                try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
-            } catch {
-                // Might already be deleted on server
-            }
-            local.hardDelete(home: home)
+                try await deleteConfirmed {
+                    try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
+                }
+                try requireSyncSession()
+                local.hardDelete(home: home)
+            } catch { syncError = "A deletion is still waiting to sync." }
         }
-
-        // Delete locations
         for loc in local.fetchDeletedLocations() {
             do {
-                try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id, mutationMetadata: mutationMetadata("location-delete", id: loc.id, at: loc.updatedAt))
-            } catch {}
-            local.hardDelete(location: loc)
+                try await deleteConfirmed {
+                    try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id, mutationMetadata: mutationMetadata("location-delete", id: loc.id, at: loc.updatedAt))
+                }
+                try requireSyncSession()
+                local.hardDelete(location: loc)
+            } catch { syncError = "A deletion is still waiting to sync." }
         }
-
-        // Delete items
         for item in local.fetchDeletedItems() {
             do {
-                try await api.deleteItem(homeId: item.homeId, itemId: item.id, mutationMetadata: mutationMetadata("item-delete", id: item.id, at: item.updatedAt))
-            } catch {}
-            local.hardDelete(item: item)
+                try await deleteConfirmed {
+                    try await api.deleteItem(homeId: item.homeId, itemId: item.id, mutationMetadata: mutationMetadata("item-delete", id: item.id, at: item.updatedAt))
+                }
+                try requireSyncSession()
+                local.hardDelete(item: item)
+            } catch { syncError = "A deletion is still waiting to sync." }
         }
     }
 
-    // MARK: - First sign-in: upload all local data to server
+    private func uploadBoundInventory() async throws {
+        try requireSyncSession()
+        _ = try await api.listHomes()
+        try requireSyncSession()
+        for home in local.fetchHomes() {
+            let uploadedHome = try await ensureHomeUploaded(home)
+            try requireSyncSession()
+            try await pushPendingLocations(homeId: uploadedHome.id)
+            try await pushPendingItems(homeId: uploadedHome.id)
+        }
+    }
 
     func uploadLocalToServer() async {
-        isSyncing = true
-        syncError = nil
-
-        let homes = local.fetchHomes()
-        for home in homes {
-            do {
-                let uploadedHome = try await ensureHomeUploaded(home)
-                try await pushPendingLocations(homeId: uploadedHome.id)
-                try await pushPendingItems(homeId: uploadedHome.id)
-            } catch {
-                syncError = "Upload failed: \(error.localizedDescription)"
-            }
-        }
-
-        local.save()
-        lastSyncDate = Date()
-        isSyncing = false
-        updatePendingSyncCount()
+        await runSync { try await uploadBoundInventory() }
     }
-
-    // MARK: - First sign-in: replace local with server data
 
     func replaceLocalWithServer() async {
-        isSyncing = true
-        syncError = nil
-
-        local.clearAllData()
-
-        await pullFromServer()
-
-        lastSyncDate = Date()
-        isSyncing = false
-        updatePendingSyncCount()
+        await runSync {
+            // Fetch a complete replacement before touching the retained store.
+            let homes = try await api.listHomes()
+            var details: [HomeDetail] = []
+            for home in homes {
+                details.append(try await api.getHome(home.id))
+            }
+            try requireSyncSession()
+            local.clearAllData()
+            _ = local.mergeFromServer(homes: homes)
+            for detail in details { _ = local.mergeHomeDetail(homeDetail: detail) }
+        }
     }
 
-    // MARK: - First sign-in: merge local + server
-
     func mergeLocalAndServer() async {
-        isSyncing = true
-        syncError = nil
-
-        // First upload local data
-        await uploadLocalToServer()
-
-        // Then pull server data (which now includes our uploads + anything else)
-        await pullFromServer()
-
-        lastSyncDate = Date()
-        isSyncing = false
-        updatePendingSyncCount()
+        await runSync {
+            try await uploadBoundInventory()
+            try requireSyncSession()
+            try await pullFromServer()
+        }
     }
 
     // MARK: - Helpers
 
     private func ensureHomeUploaded(_ home: LocalHome) async throws -> Home {
+        try requireSyncSession()
         do {
             let detail = try await api.getHome(home.id)
+            try requireSyncSession()
             if home.needsSync {
                 let updated: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-update", id: home.id, at: home.updatedAt))
+                try requireSyncSession()
                 home.needsSync = false
                 local.save()
                 return updated
@@ -270,8 +288,9 @@ final class SyncManager: ObservableObject {
                 icon: detail.icon,
                 isFlagged: detail.isFlagged
             )
-        } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
+        } catch APIError.httpError(let code, _) where code == 404 {
             let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
+            try requireSyncSession()
             let oldId = home.id
             if created.id != oldId {
                 local.remapHomeId(from: oldId, to: created.id)
@@ -285,6 +304,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func pushPendingLocations(homeId: String) async throws {
+        try requireSyncSession()
         let locations = local.fetchLocations(homeId: homeId)
         let orderedLocationIds = try SyncUploadPlanner.orderedPendingLocationIds(
             locations.map {
@@ -303,15 +323,18 @@ final class SyncManager: ObservableObject {
                 continue
             }
             try await upsertLocation(location)
+            try requireSyncSession()
         }
     }
 
     private func upsertLocation(_ loc: LocalLocation) async throws {
+        try requireSyncSession()
         if let parentId = loc.parentId {
             guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
                 throw SyncUploadError.missingParent(locationName: loc.name)
             }
             try await ensureLocationUploaded(parent, visiting: [loc.id])
+            try requireSyncSession()
         }
 
         do {
@@ -326,9 +349,10 @@ final class SyncManager: ObservableObject {
                 isFlagged: loc.isFlagged,
                 mutationMetadata: mutationMetadata("location-update", id: loc.id, at: loc.updatedAt)
             )
+            try requireSyncSession()
             loc.update(from: updated)
             local.save()
-        } catch APIError.httpError(let code, _) where code == 403 || code == 404 {
+        } catch APIError.httpError(let code, _) where code == 404 {
             let oldId = loc.id
             let created = try await api.createLocation(
                 homeId: loc.homeId,
@@ -340,6 +364,7 @@ final class SyncManager: ObservableObject {
                 isFlagged: loc.isFlagged,
                 mutationMetadata: mutationMetadata("location-create", id: loc.id, at: loc.updatedAt)
             )
+            try requireSyncSession()
             if created.id != oldId {
                 local.remapLocationId(from: oldId, to: created.id)
             }
@@ -350,6 +375,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func ensureLocationUploaded(_ loc: LocalLocation, visiting: Set<String> = []) async throws {
+        try requireSyncSession()
         if visiting.contains(loc.id) {
             throw SyncUploadError.cyclicLocation(locationName: loc.name)
         }
@@ -362,17 +388,21 @@ final class SyncManager: ObservableObject {
                 throw SyncUploadError.missingParent(locationName: loc.name)
             }
             try await ensureLocationUploaded(parent, visiting: nextVisiting)
+            try requireSyncSession()
         }
 
         try await upsertLocation(loc)
+        try requireSyncSession()
     }
 
     private func pushPendingItems(homeId: String) async throws {
+        try requireSyncSession()
         let items = local.fetchItems(homeId: homeId).filter { $0.needsSync && !$0.isDeleted }
 
         for item in items {
             do {
                 try await upsertItem(item)
+                try requireSyncSession()
             } catch {
                 throw SyncUploadError.itemUploadFailed(
                     itemName: item.name,
@@ -384,34 +414,44 @@ final class SyncManager: ObservableObject {
     }
 
     private func upsertItem(_ item: LocalItem) async throws {
+        try requireSyncSession()
         try await ensureItemHomeUploaded(item)
+        try requireSyncSession()
         try await ensureItemLocationUploaded(item)
+        try requireSyncSession()
         let latest = refreshedItem(item)
 
         do {
             try await saveItemToServer(latest)
+            try requireSyncSession()
         } catch APIError.httpError(400, let message) where message == "Location not found" {
             try await ensureItemLocationUploaded(latest)
+            try requireSyncSession()
             let repaired = refreshedItem(latest)
             do {
                 try await saveItemToServer(repaired)
+                try requireSyncSession()
             } catch APIError.httpError(400, let retryMessage) where retryMessage == "Location not found" {
                 repaired.locationId = nil
                 repaired.needsSync = true
                 local.save()
                 try await saveItemToServer(repaired)
+                try requireSyncSession()
             }
         }
     }
 
     private func saveItemToServer(_ item: LocalItem) async throws {
+        try requireSyncSession()
         do {
             let updated = try await api.updateItem(homeId: item.homeId, itemId: item.id, body: itemBody(item), mutationMetadata: mutationMetadata("item-update", id: item.id, at: item.updatedAt))
+            try requireSyncSession()
             item.update(from: updated)
             local.save()
         } catch APIError.httpError(404, _) {
             let oldId = item.id
             let created = try await api.createItem(homeId: item.homeId, body: itemBody(item), mutationMetadata: mutationMetadata("item-create", id: item.id, at: item.updatedAt))
+            try requireSyncSession()
             if created.id != oldId {
                 local.remapItemId(from: oldId, to: created.id)
             }
@@ -422,8 +462,10 @@ final class SyncManager: ObservableObject {
     }
 
     private func ensureItemHomeUploaded(_ item: LocalItem) async throws {
+        try requireSyncSession()
         guard let home = local.fetchHome(id: item.homeId) else { return }
         let uploadedHome = try await ensureHomeUploaded(home)
+        try requireSyncSession()
         if item.homeId != uploadedHome.id {
             item.homeId = uploadedHome.id
             local.save()
@@ -438,6 +480,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func ensureItemLocationUploaded(_ item: LocalItem) async throws {
+        try requireSyncSession()
         let currentItem = refreshedItem(item)
         guard let locationId = currentItem.locationId else { return }
         guard let location = local.fetchLocation(id: locationId), !location.isDeleted else {
@@ -446,6 +489,7 @@ final class SyncManager: ObservableObject {
 
         try alignLocationChain(location, toHomeId: currentItem.homeId)
         try await ensureLocationUploaded(location)
+        try requireSyncSession()
 
         let repairedItem = refreshedItem(currentItem)
         guard let syncedLocationId = repairedItem.locationId else { return }
@@ -456,6 +500,7 @@ final class SyncManager: ObservableObject {
         if let repairedLocation = local.fetchLocation(id: syncedLocationId), !repairedLocation.isDeleted {
             repairedLocation.needsSync = true
             try await ensureLocationUploaded(repairedLocation)
+            try requireSyncSession()
         }
 
         let finalItem = refreshedItem(repairedItem)
@@ -515,7 +560,9 @@ final class SyncManager: ObservableObject {
     }
 
     private func serverHasLocation(homeId: String, locationId: String) async throws -> Bool {
+        try requireSyncSession()
         let detail = try await api.getHome(homeId)
+        try requireSyncSession()
         return detail.locations.contains { $0.id == locationId }
     }
 

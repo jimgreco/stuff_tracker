@@ -622,31 +622,16 @@ struct AccountView: View {
     private func handlePostSignIn() {
         guard authStore.isAuthenticated else { return }
 
-        let hasLocalData = !LocalDataManager.shared.fetchHomes().isEmpty
-
         Task {
-            // Check if server has data
-            let hasServer: Bool
-            do {
-                let serverHomes: [Home] = try await APIClient.shared.listHomes()
-                hasServer = !serverHomes.isEmpty
-            } catch {
-                hasServer = false
-            }
-
-            if hasLocalData && hasServer {
-                // Both have data — ask user
-                serverHasData = true
-                showMergeSheet = true
-            } else if hasLocalData && !hasServer {
-                // Only local data — upload it
-                await syncManager.uploadLocalToServer()
-                homeStore.reloadFromLocal()
-                dismiss()
+            let generation = APIClient.shared.sessionGeneration
+            // Account binding/explicit legacy claim is complete before this point.
+            // A failed preflight fetch preserves the store and sends no uploads.
+            await syncManager.performFullSync()
+            guard (try? APIClient.shared.requireCurrentSession(generation)) != nil else { return }
+            homeStore.reloadFromLocal()
+            if let error = syncManager.syncError {
+                authStore.errorMessage = error
             } else {
-                // Only server data (or neither) — pull from server
-                await syncManager.replaceLocalWithServer()
-                homeStore.reloadFromLocal()
                 dismiss()
             }
         }

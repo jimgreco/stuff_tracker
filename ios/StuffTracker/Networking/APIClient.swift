@@ -16,11 +16,47 @@ enum APIError: LocalizedError {
     }
 }
 
+// One scope covers a complete sync, including retries and refresh. New sign-in
+// and sign-out invalidate old scopes; refreshing the same session does not.
+private enum APIRequestScope {
+    @TaskLocal static var generation: UUID?
+}
+
 final class APIClient {
     static let shared = APIClient()
 
-    private init() {
+    private let session: URLSession
+    private let sessionLock = NSRecursiveLock()
+    private var generation = UUID()
+    private var verifiedUserID: String?
+
+    init(session: URLSession = .shared) {
+        self.session = session
         SecureTokenStore.migrateLegacyTokenIfNeeded()
+    }
+
+    var sessionGeneration: UUID { sessionLock.withLock { generation } }
+    var localAccountID: String? { sessionLock.withLock { verifiedUserID } }
+
+    func verifyLocalAccount(_ userID: String, generation expected: UUID) throws {
+        try sessionLock.withLock {
+            guard generation == expected else { throw CancellationError() }
+            verifiedUserID = userID
+        }
+    }
+
+    func withSessionScope<T>(_ operation: () async throws -> T) async rethrows -> T {
+        try await APIRequestScope.$generation.withValue(APIRequestScope.generation ?? sessionGeneration) {
+            try await operation()
+        }
+    }
+
+    func requireCurrentSession(_ expected: UUID? = nil) throws {
+        try sessionLock.withLock {
+            guard generation == (expected ?? APIRequestScope.generation ?? generation), !Task.isCancelled else {
+                throw CancellationError()
+            }
+        }
     }
 
     #if DEBUG
@@ -40,18 +76,28 @@ final class APIClient {
     }
 
     var hasToken: Bool {
-        SecureTokenStore.migrateLegacyTokenIfNeeded()
-        return token != nil || refreshToken != nil
+        sessionLock.withLock {
+            SecureTokenStore.migrateLegacyTokenIfNeeded()
+            return token != nil || refreshToken != nil
+        }
     }
     
-    func setToken(_ t: String?) { token = t }
+    func setToken(_ t: String?) { setAuthTokens(token: t, refreshToken: nil) }
     func setAuthTokens(token: String?, refreshToken: String?) {
-        self.token = token
-        self.refreshToken = refreshToken
+        sessionLock.withLock {
+            generation = UUID()
+            verifiedUserID = nil
+            self.token = token
+            self.refreshToken = refreshToken
+        }
     }
 
     func clearAuthTokens() {
-        SecureTokenStore.clearTokens()
+        sessionLock.withLock {
+            generation = UUID()
+            verifiedUserID = nil
+            SecureTokenStore.clearTokens()
+        }
     }
 
     #if DEBUG
@@ -175,21 +221,23 @@ final class APIClient {
         keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase,
         mutationMetadata: MutationMetadata? = nil
     ) async throws -> T {
-        let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
-        let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
-        let data = try await performRequest(
-            method,
-            path: path,
-            bodyData: bodyData,
-            allowRefresh: true,
-            errorFallback: "Unknown error",
-            mutationMetadata: metadata
-        )
+        return try await withSessionScope {
+            let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+            let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
+            let data = try await performRequest(
+                method,
+                path: path,
+                bodyData: bodyData,
+                allowRefresh: true,
+                errorFallback: "Unknown error",
+                mutationMetadata: metadata
+            )
 
-        do {
-            return try decoder.decode(T.self, from: data)
-        } catch {
-            throw APIError.decodingError(error)
+            do {
+                return try decoder.decode(T.self, from: data)
+            } catch {
+                throw APIError.decodingError(error)
+            }
         }
     }
 
@@ -200,16 +248,18 @@ final class APIClient {
         keyEncodingStrategy: JSONEncoder.KeyEncodingStrategy = .convertToSnakeCase,
         mutationMetadata: MutationMetadata? = nil
     ) async throws {
-        let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
-        let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
-        _ = try await performRequest(
-            method,
-            path: path,
-            bodyData: bodyData,
-            allowRefresh: true,
-            errorFallback: "Request failed",
-            mutationMetadata: metadata
-        )
+        return try await withSessionScope {
+            let bodyData = try body.map { try encodeBody($0, keyEncodingStrategy: keyEncodingStrategy) }
+            let metadata = method == "GET" ? nil : mutationMetadata ?? .automatic()
+            _ = try await performRequest(
+                method,
+                path: path,
+                bodyData: bodyData,
+                allowRefresh: true,
+                errorFallback: "Request failed",
+                mutationMetadata: metadata
+            )
+        }
     }
 
     private func performRequest(
@@ -224,7 +274,10 @@ final class APIClient {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        try sessionLock.withLock {
+            try requireCurrentSession()
+            if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        }
         if let mutationMetadata {
             req.setValue(mutationMetadata.id, forHTTPHeaderField: "X-CubbyLog-Mutation-ID")
             req.setValue(ISO8601DateFormatter().string(from: mutationMetadata.occurredAt), forHTTPHeaderField: "X-CubbyLog-Occurred-At")
@@ -233,10 +286,12 @@ final class APIClient {
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: req)
+            (data, response) = try await session.data(for: req)
         } catch {
+            try requireCurrentSession()
             throw APIError.networkError(error)
         }
+        try requireCurrentSession()
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401, allowRefresh, path != "/auth/refresh", await refreshAccessTokenIfPossible() {
@@ -250,6 +305,7 @@ final class APIClient {
             )
         }
 
+        try requireCurrentSession()
         guard (200..<300).contains(status) else {
             let msg = Self.errorMessage(from: data, fallback: errorFallback)
             throw APIError.httpError(status, msg)
@@ -259,16 +315,28 @@ final class APIClient {
     }
 
     private func refreshAccessTokenIfPossible() async -> Bool {
-        guard let refreshToken else {
-            return false
+        let currentRefreshToken: String? = sessionLock.withLock {
+            guard (try? requireCurrentSession()) != nil else { return nil }
+            return refreshToken
         }
+        guard let refreshToken = currentRefreshToken else { return false }
 
         do {
             let response = try await refreshSession(refreshToken: refreshToken)
-            setAuthTokens(token: response.token, refreshToken: response.refreshToken)
+            try sessionLock.withLock {
+                try requireCurrentSession()
+                self.token = response.token
+                self.refreshToken = response.refreshToken
+            }
             return true
         } catch {
-            clearAuthTokens()
+            sessionLock.withLock {
+                // An old refresh must never clear a newer account's credentials.
+                if (try? requireCurrentSession()) != nil,
+                   case APIError.httpError(401, _) = error {
+                    clearAuthTokens()
+                }
+            }
             return false
         }
     }
@@ -342,12 +410,15 @@ final class APIClient {
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: req)
+            (data, response) = try await session.data(for: req)
         } catch {
+            try requireCurrentSession()
             throw APIError.networkError(error)
         }
+        try requireCurrentSession()
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        try requireCurrentSession()
         guard (200..<300).contains(status) else {
             let msg = Self.errorMessage(from: data, fallback: "Session refresh failed")
             throw APIError.httpError(status, msg)
@@ -668,35 +739,41 @@ final class APIClient {
         contentType: String,
         data: Data
     ) async throws -> ItemUploadResponse {
-        let upload: ItemUploadResponse = try await request(
-            "POST",
-            path: "/homes/\(homeId)/items/uploads",
-            body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType, sizeBytes: data.count),
-            keyEncodingStrategy: .useDefaultKeys
-        )
+        return try await withSessionScope {
+            let upload: ItemUploadResponse = try await request(
+                "POST",
+                path: "/homes/\(homeId)/items/uploads",
+                body: ItemUploadBody(kind: kind, fileName: fileName, contentType: contentType, sizeBytes: data.count),
+                keyEncodingStrategy: .useDefaultKeys
+            )
 
-        guard let url = URL(string: upload.uploadUrl) else { throw APIError.invalidURL }
-        var req = URLRequest(url: url)
-        req.httpMethod = "PUT"
-        for (header, value) in upload.headers {
-            req.setValue(value, forHTTPHeaderField: header)
+            try requireCurrentSession()
+            guard let url = URL(string: upload.uploadUrl) else { throw APIError.invalidURL }
+            var req = URLRequest(url: url)
+            req.httpMethod = "PUT"
+            for (header, value) in upload.headers {
+                req.setValue(value, forHTTPHeaderField: header)
+            }
+
+            let (responseData, response): (Data, URLResponse)
+            do {
+                (responseData, response) = try await session.upload(for: req, from: data)
+            } catch {
+                try requireCurrentSession()
+                throw APIError.networkError(error)
+            }
+            try requireCurrentSession()
+
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else {
+                let msg = Self.errorMessage(from: responseData, fallback: "Upload failed")
+                throw APIError.httpError(status, msg)
+            }
+
+            return upload
         }
-
-        let (responseData, response): (Data, URLResponse)
-        do {
-            (responseData, response) = try await URLSession.shared.upload(for: req, from: data)
-        } catch {
-            throw APIError.networkError(error)
-        }
-
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            let msg = Self.errorMessage(from: responseData, fallback: "Upload failed")
-            throw APIError.httpError(status, msg)
-        }
-
-        return upload
     }
+
 }
 
 struct AuthResponse: Codable {

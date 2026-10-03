@@ -8,6 +8,11 @@ final class AuthStore: ObservableObject {
     @Published var isRestoringSession = false
     @Published private(set) var hasCompletedAuthentication: Bool
     @Published var errorMessage: String?
+    @Published private(set) var pendingInventoryClaim: User?
+    private var pendingResponse: AuthResponse?
+    private var pendingGeneration: UUID?
+    private let api: APIClient
+    private let local: LocalDataManager
 
     var isAuthenticated: Bool { currentUser != nil }
     var requiresSignIn: Bool {
@@ -21,7 +26,9 @@ final class AuthStore: ObservableObject {
 
     nonisolated static let completedAuthenticationDefaultsKey = "has_completed_authentication"
 
-    init() {
+    init(api: APIClient = .shared, local: LocalDataManager? = nil, restoreSession: Bool = true) {
+        self.api = api
+        self.local = local ?? .shared
         #if DEBUG
         ScreenshotSeedData.prepareAuthenticationStateIfNeeded()
         #endif
@@ -33,7 +40,8 @@ final class AuthStore: ObservableObject {
         hasCompletedAuthentication = Self.hasCompletedAuthentication
 
         // Restore session if a current or migrated token exists.
-        if hasStoredSession {
+        if hasStoredSession && restoreSession {
+            isRestoringSession = true
             Task { await restoreStoredSession() }
         }
     }
@@ -56,7 +64,7 @@ final class AuthStore: ObservableObject {
         isAuthenticated: Bool,
         isRestoringSession: Bool
     ) -> Bool {
-        hasCompletedAuthentication && !hasStoredSession && !isAuthenticated && !isRestoringSession
+        (hasCompletedAuthentication || hasStoredSession) && !isAuthenticated && !isRestoringSession
     }
 
     nonisolated static func shouldClearStoredSession(after error: Error) -> Bool {
@@ -68,11 +76,13 @@ final class AuthStore: ObservableObject {
 
     func signInWithGoogle(idToken: String) async {
         isLoading = true
+        let generation = api.sessionGeneration
         defer { isLoading = false }
         do {
             errorMessage = nil
-            let resp = try await APIClient.shared.signInWithGoogle(idToken: idToken)
-            completeSignIn(with: resp)
+            let resp = try await api.signInWithGoogle(idToken: idToken)
+            try api.requireCurrentSession(generation)
+            try acceptVerifiedUser(resp.user, response: resp)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -81,11 +91,13 @@ final class AuthStore: ObservableObject {
     #if DEBUG
     func signInForLocalDevelopment() async {
         isLoading = true
+        let generation = api.sessionGeneration
         defer { isLoading = false }
         do {
             errorMessage = nil
-            let resp = try await APIClient.shared.signInForLocalDevelopment()
-            completeSignIn(with: resp)
+            let resp = try await api.signInForLocalDevelopment()
+            try api.requireCurrentSession(generation)
+            try acceptVerifiedUser(resp.user, response: resp)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -99,57 +111,106 @@ final class AuthStore: ObservableObject {
             return
         }
         isLoading = true
+        let generation = api.sessionGeneration
         defer { isLoading = false }
         do {
             errorMessage = nil
-            let resp = try await APIClient.shared.signInWithApple(
+            let resp = try await api.signInWithApple(
                 identityToken: identityToken,
                 fullName: credential.fullName
             )
-            completeSignIn(with: resp)
+            try api.requireCurrentSession(generation)
+            try acceptVerifiedUser(resp.user, response: resp)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     func signOut() {
-        APIClient.shared.clearAuthTokens()
+        api.clearAuthTokens()
         currentUser = nil
+        pendingInventoryClaim = nil
+        pendingResponse = nil
+        pendingGeneration = nil
     }
 
     func signOutEverywhere() async {
         isLoading = true
+        let generation = api.sessionGeneration
         defer { isLoading = false }
         do {
             errorMessage = nil
-            try await APIClient.shared.logoutAll()
+            try await api.logoutAll()
+            try api.requireCurrentSession(generation)
             signOut()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func completeSignIn(with response: AuthResponse) {
-        APIClient.shared.setAuthTokens(token: response.token, refreshToken: response.refreshToken)
+    // A verified identity may only open its retained store. Legacy inventory has
+    // no trustworthy owner field: preserve it and ask, never infer from home owners.
+    func acceptVerifiedUser(_ user: User, response: AuthResponse? = nil) throws {
         Self.markAuthenticationCompleted()
         hasCompletedAuthentication = true
-        currentUser = response.user
+        currentUser = nil
+        pendingInventoryClaim = nil
+        pendingResponse = nil
+        pendingGeneration = nil
+        switch try local.bindAccount(userID: user.id) {
+        case .allowed:
+            try activate(user, response: response)
+        case .claimRequired:
+            pendingInventoryClaim = user
+            pendingResponse = response
+            pendingGeneration = api.sessionGeneration
+        case .differentAccount:
+            api.clearAuthTokens()
+            errorMessage = "This device has inventory saved for another account. Sign in with that account to access it. Your saved inventory and unsynced changes have been preserved."
+        }
     }
 
-    private func restoreStoredSession() async {
+    func confirmInventoryClaim() {
+        guard let user = pendingInventoryClaim, let generation = pendingGeneration else { return }
+        do {
+            try api.requireCurrentSession(generation)
+            guard try local.bindAccount(userID: user.id, claimLegacy: true) == .allowed else {
+                throw CocoaError(.fileReadNoPermission)
+            }
+            try activate(user, response: pendingResponse)
+            pendingInventoryClaim = nil
+            pendingResponse = nil
+            pendingGeneration = nil
+        } catch {
+            errorMessage = "Could not open the saved inventory. Sign in again. Your local data is unchanged."
+        }
+    }
+
+    private func activate(_ user: User, response: AuthResponse?) throws {
+        if let response {
+            api.setAuthTokens(token: response.token, refreshToken: response.refreshToken)
+        }
+        try api.verifyLocalAccount(user.id, generation: api.sessionGeneration)
+        currentUser = user
+        errorMessage = nil
+    }
+
+    func restoreStoredSession() async {
         isRestoringSession = true
+        let generation = api.sessionGeneration
         defer { isRestoringSession = false }
 
         do {
-            let user: User = try await APIClient.shared.request("GET", path: "/auth/me")
-            Self.markAuthenticationCompleted()
-            hasCompletedAuthentication = true
-            currentUser = user
-            errorMessage = nil
+            let user: User = try await api.request("GET", path: "/auth/me")
+            try api.requireCurrentSession(generation)
+            try acceptVerifiedUser(user)
         } catch {
+            guard (try? api.requireCurrentSession(generation)) != nil else { return }
             if Self.shouldClearStoredSession(after: error) {
-                APIClient.shared.clearAuthTokens()
+                api.clearAuthTokens()
                 errorMessage = "Your session expired. Sign in again to keep syncing."
+            } else {
+                errorMessage = "Could not verify your account. Reconnect and sign in again. Your saved inventory is unchanged."
             }
         }
     }

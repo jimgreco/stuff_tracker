@@ -109,6 +109,22 @@ struct LoginView: View {
                                 #endif
                             }
 
+                            if let user = authStore.pendingInventoryClaim {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Claim saved inventory")
+                                        .font(.headline)
+                                    Text("This device has inventory from an older version or from local use. Only continue if all of it belongs to \(user.email). Continuing allows its saved changes to sync to this account.")
+                                        .font(.subheadline)
+                                    Button("This is my inventory — continue") {
+                                        authStore.confirmInventoryClaim()
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    Button("Cancel and keep inventory saved") {
+                                        authStore.signOut()
+                                    }
+                                }
+                            }
+
                             if let error = authStore.errorMessage {
                                 Label(error, systemImage: "exclamationmark.triangle.fill")
                                     .font(.caption)

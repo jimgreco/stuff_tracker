@@ -10,7 +10,7 @@ final class HomeStore: ObservableObject {
     private let api = APIClient.shared
     private let local = LocalDataManager.shared
 
-    var isAuthenticated: Bool { api.hasToken }
+    var isAuthenticated: Bool { api.localAccountID != nil && api.localAccountID == local.boundAccountID }
 
     private func detailIndex(for homeId: String) -> Int? {
         homeDetails.firstIndex(where: { $0.id == homeId })
@@ -41,29 +41,10 @@ final class HomeStore: ObservableObject {
     }
 
     private func syncFromServer() async {
-        do {
-            // Push deletes first so server doesn't send back deleted items
-            await SyncManager.shared.syncPendingChanges()
-
-            let serverHomes = try await api.listHomes()
-            var mergeResult = local.mergeFromServer(homes: serverHomes)
-
-            for home in serverHomes {
-                do {
-                    let detail = try await api.getHome(home.id)
-                    mergeResult.add(local.mergeHomeDetail(homeDetail: detail))
-                } catch {
-                    // Individual home detail fetch failed, skip
-                }
-            }
-
-            SyncManager.shared.deferredServerChangeCount = mergeResult.deferred
-
-            // Reload UI from local (now updated with server data)
-            reloadFromLocal()
-        } catch {
-            // Server unavailable, that's fine — we have local data
-        }
+        let generation = api.sessionGeneration
+        await SyncManager.shared.performFullSync()
+        guard (try? api.requireCurrentSession(generation)) != nil, isAuthenticated else { return }
+        reloadFromLocal()
     }
 
     // MARK: - Homes

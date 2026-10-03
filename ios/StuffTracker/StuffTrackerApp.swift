@@ -158,10 +158,10 @@ struct StuffTrackerApp: App {
         if Self.isSubscriptionReviewScreenshotMode {
             SubscriptionReviewScreenshotView()
         } else {
-            ContentView()
+            ContentView().id(authStore.currentUser?.id ?? "signed-out")
         }
         #else
-        ContentView()
+        ContentView().id(authStore.currentUser?.id ?? "signed-out")
         #endif
     }
 }
