@@ -131,8 +131,11 @@ def inspect_package(ipa, sha, build, policy=POLICY):
             info = plistlib.loads(archive.read(path)); bundle = info.get('CFBundleIdentifier')
             check(bundle not in bundles and bundle in [p['bundleId'] for p in policy['profiles'].values()], 'Unexpected artifact bundle.')
             bundles.add(bundle)
-            check(info.get('CFBundleShortVersionString') == policy['marketingVersion'] and info.get('CFBundleVersion') == build
-                  and info.get('ReleaseCommit') == sha and info.get('DTPlatformName') == 'iphoneos', 'Artifact version/build/source/platform differs.')
+            expected_metadata = {'CFBundleShortVersionString': policy['marketingVersion'], 'CFBundleVersion': build,
+                                 'ReleaseCommit': sha, 'DTPlatformName': 'iphoneos'}
+            mismatches = {key: {'expected': value, 'actual': info.get(key)}
+                          for key, value in expected_metadata.items() if info.get(key) != value}
+            check(not mismatches, 'Artifact version/build/source/platform differs: ' + json.dumps(mismatches))
             if path == main and policy.get('apiOrigin'):
                 check(info.get('API_BASE_URL') == policy['apiOrigin'], 'Artifact production origin differs.')
             profile_path = path.removesuffix('Info.plist') + 'embedded.mobileprovision'

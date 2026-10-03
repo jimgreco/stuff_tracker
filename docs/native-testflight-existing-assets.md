@@ -28,3 +28,5 @@ If upload succeeds but Apple processing verification stops, run the manual **Ver
 The current existing profile encodes its Associated Domains allowlist as the scalar string `"*"`. This is accepted alongside the equivalent `['*']` profile representation; malformed types or insufficient concrete domain lists still fail. The signed app must still claim its approved concrete domains. No profile, App ID capability, signing identity or app entitlement is changed by this compatibility check.
 
 The archive passes the pinned UUID through `APP_STORE_PROFILE`, which only the app target's Release configuration consumes. Dependency resource bundles do not receive an app provisioning profile. Local Release builds retain the existing profile-name default; CI and exported IPA checks still require the exact approved UUID and signing identity.
+
+The existing build-info phase writes the full Git SHA to `ReleaseCommit` in the processed app plist before signing. The artifact guard requires that full SHA, the expected marketing version and Git-count build, and the iPhoneOS platform; any mismatch stops upload and reports only those nonsecret metadata fields.

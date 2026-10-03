@@ -36,6 +36,35 @@ class PublicCertificateCommandTests(unittest.TestCase):
                     v.signing_certificate('/usr/bin/true', directory)
 
 
+class BuildStampTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'macOS Xcode build-phase integration')
+    def test_real_build_phase_stamps_full_source_before_signing(self):
+        project = Path(__file__).resolve().parents[2] / 'ios/StuffTracker.xcodeproj/project.pbxproj'
+        objects = json.loads(subprocess.check_output(['plutil', '-convert', 'json', '-o', '-', str(project)]))['objects']
+        script = objects['ABUMP']['shellScript']
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=Release Test', '-c',
+                            'user.email=release@example.invalid', 'commit', '-qm', 'fixture', '--allow-empty'], check=True)
+            sha = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip()
+            for name in ['ios', 'products/App.app', 'derived']:
+                (root / name).mkdir(parents=True)
+            info_path = root / 'products/App.app/Info.plist'
+            env = {'PATH': '/usr/bin:/bin', 'SRCROOT': str(root / 'ios'), 'TARGET_BUILD_DIR': str(root / 'products'),
+                   'INFOPLIST_PATH': 'App.app/Info.plist', 'DERIVED_FILE_DIR': str(root / 'derived'), 'CI_BUILD_NUMBER': '213'}
+            for previous_stamp in [None, 'b' * 40]:
+                info = {'CFBundleVersion': '1'}
+                if previous_stamp is not None:
+                    info['ReleaseCommit'] = previous_stamp
+                info_path.write_bytes(plistlib.dumps(info))
+                subprocess.run(['/bin/sh', '-e', '-c', script], env=env, check=True, capture_output=True)
+                result = plistlib.loads(info_path.read_bytes())
+                self.assertEqual(result['CFBundleVersion'], '213')
+                self.assertEqual(result['ReleaseCommit'], sha)
+                self.assertTrue(result['GitCommitHash'].startswith(sha[:7]))
+
+
 class ProfileTests(unittest.TestCase):
     def setUp(self):
         self.p = copy.deepcopy(v.POLICY)
