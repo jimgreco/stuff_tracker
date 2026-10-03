@@ -36,7 +36,7 @@ jobs:
 
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "run_tests=true" >> "$GITHUB_OUTPUT"
-            echo "run_build=false" >> "$GITHUB_OUTPUT"
+            echo "run_build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -152,7 +152,7 @@ jobs:
             test
 
   build:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.test.outputs.run_build == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.test.outputs.run_build == 'true'
     needs: test
     runs-on: macos-latest
     timeout-minutes: 45
