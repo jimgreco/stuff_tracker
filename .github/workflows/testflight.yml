@@ -281,7 +281,7 @@ jobs:
           CODE_SIGN_IDENTITY=963A7A5107DB8D4C141371C285F71CCAE84A5452 \
           CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
           OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-          PROVISIONING_PROFILE_SPECIFIER="ee6f6bdf-ea78-4f46-a746-cdba6fab1bdd" \
+          APP_STORE_PROFILE="ee6f6bdf-ea78-4f46-a746-cdba6fab1bdd" \
           INFOPLIST_KEY_ReleaseCommit="$GITHUB_SHA"
     - name: Export internal-only IPA without provisioning updates
       run: |
