@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "17 10 * * *"
   workflow_dispatch:
+    inputs:
+      skip_prune:
+        description: Keep every existing backup; skip retention pruning for this run
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,18 +41,24 @@ jobs:
         if: steps.config.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          printf '%s' "$EC2_SSH_KEY" > key.pem
+          printf '%s\n' "$EC2_SSH_KEY" > key.pem
           chmod 600 key.pem
+          ssh-keygen -y -P '' -f key.pem > /dev/null
           printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
           chmod 600 known_hosts
           test -s known_hosts
 
       - name: Back up production database
         if: steps.config.outputs.configured == 'true'
+        env:
+          PRUNE_OLD_BACKUPS: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_prune }}
         run: |
           set -euo pipefail
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" 'bash -se' <<'REMOTE'
+          case "$PRUNE_OLD_BACKUPS" in true|false) ;; *) exit 1 ;; esac
+          ssh -i key.pem -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" "bash -se -- $PRUNE_OLD_BACKUPS" <<'REMOTE'
             set -euo pipefail
+            prune_old_backups="$1"
+            case "$prune_old_backups" in true|false) ;; *) exit 1 ;; esac
             cd ~/deploy
 
             read_env() {
@@ -77,13 +88,18 @@ jobs:
             tmp_path="$backup_dir/stuff-tracker-$stamp.sql.gz.tmp"
             final_path="${tmp_path%.tmp}"
 
-            rm -f "$tmp_path"
+            test ! -e "$tmp_path"
+            test ! -e "$final_path"
             docker-compose exec -T -e PGPASSWORD="$DB_PASSWORD" db pg_dump -U admin -d stuff < /dev/null | gzip -c > "$tmp_path"
             test -s "$tmp_path"
             mv "$tmp_path" "$final_path"
             chmod 600 "$final_path"
 
-            find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -mtime +"$retention_days" -delete
+            if [ "$prune_old_backups" = true ]; then
+              find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -mtime +"$retention_days" -delete
+            else
+              echo "Retention pruning disabled; all existing backups retained."
+            fi
             echo "Backup written to $final_path"
           REMOTE
 
