@@ -169,6 +169,23 @@ npm run activity:cleanup
 
 The backup freshness check reads host backups from `~/deploy/backups/stuff` by default. Override that path on the production host with `STUFF_DB_BACKUP_DIR` in `~/deploy/.env`. Freshness failures should be treated as incidents.
 
+Manual runs default to `check_only=true`: backup freshness, S3 hardening, and
+database runtime hardening are checked, while both deleted-home attachment
+cleanup and activity-history deletion are skipped. The log records the mode and
+the skipped deletion commands. For an authorized verification without deletion:
+
+```sh
+gh workflow run ops-checks.yml --ref main -f check_only=true
+```
+
+Scheduled runs retain normal cleanup behavior. A manual run with
+`check_only=false` also enables cleanup and requires authorization for deletion.
+Both hardening checks run even if one fails; any failed check prevents cleanup.
+Successful workflow status alone does not prove checks ran: verify the SSH and
+remote check steps executed, since missing SSH configuration skips them.
+Health probes and alert delivery also remain unverified when
+`PRODUCTION_BASE_URL` or `OPERATIONS_ALERT_WEBHOOK_URL` is unset.
+
 Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
 
 Shared-home activity is append-only and retained for 365 days by default. Set `ACTIVITY_RETENTION_DAYS` to a value of at least 30 to change the window. The daily cleanup permanently removes only events older than that window; deleting a home, location, item, or member does not cascade-delete retained activity rows.

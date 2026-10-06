@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "43 11 * * *"
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: Run read-only checks; skip all attachment and activity deletion
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -36,54 +41,78 @@ jobs:
         if: steps.config.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          printf '%s' "$EC2_SSH_KEY" > key.pem
+          printf '%s\n' "$EC2_SSH_KEY" > key.pem
           chmod 600 key.pem
+          ssh-keygen -y -P '' -f key.pem > /dev/null
           printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
           chmod 600 known_hosts
           test -s known_hosts
 
-      - name: Run backup freshness and S3 hardening checks
+      - name: Run production operations checks
         if: steps.config.outputs.configured == 'true'
+        env:
+          CHECK_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.check_only }}
         run: |
           set -euo pipefail
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            'cd ~/deploy &&
-              read_env() {
-                key="$1"
-                line="$(grep -E "^${key}=" .env | tail -n 1 || true)"
-                value="${line#*=}"
-                value="${value%\"}"
-                value="${value#\"}"
-                value="${value%\047}"
-                value="${value#\047}"
-                printf "%s" "$value"
-              } &&
-              backup_dir="$(read_env STUFF_DB_BACKUP_DIR)" &&
-              backup_dir="${backup_dir:-$HOME/deploy/backups/stuff}" &&
-              max_age_hours="$(read_env DB_BACKUP_MAX_AGE_HOURS)" &&
-              max_age_hours="${max_age_hours:-26}" &&
-              if [ ! -d "$backup_dir" ]; then
-                echo "::error title=Backup freshness failed::Backup directory is missing: $backup_dir"
-                exit 1
-              fi &&
-              newest="$(find "$backup_dir" -type f -name "stuff-tracker-*.sql.gz" -size +0c -printf "%T@ %p\n" | sort -nr | head -n 1 | cut -d " " -f 2-)" &&
-              if [ -z "$newest" ]; then
-                echo "::error title=Backup freshness failed::No non-empty stuff-tracker backups found in $backup_dir"
-                exit 1
-              fi &&
-              newest_epoch="$(stat -c %Y "$newest")" &&
-              now_epoch="$(date +%s)" &&
-              max_age_seconds="$((max_age_hours * 3600))" &&
-              age_seconds="$((now_epoch - newest_epoch))" &&
-              if [ "$age_seconds" -gt "$max_age_seconds" ]; then
-                echo "::error title=Backup freshness failed::Newest backup is older than ${max_age_hours}h: $newest"
-                exit 1
-              fi &&
-              echo "Newest backup is fresh: $newest" &&
-              docker-compose exec -T stuff npm run storage:s3:check &&
-              docker-compose exec -T -e DB_EXPECTED_APP_ROLE="${STUFF_DB_APP_ROLE:-stuff_app}" stuff npm run db:hardening:check &&
-              docker-compose exec -T stuff npm run storage:cleanup:deleted-homes &&
-              docker-compose exec -T stuff npm run activity:cleanup'
+          case "$CHECK_ONLY" in true|false) ;; *) exit 1 ;; esac
+          ssh -i key.pem -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" "bash -se -- $CHECK_ONLY" <<'REMOTE'
+            set -euo pipefail
+            check_only="$1"
+            case "$check_only" in true|false) ;; *) exit 1 ;; esac
+            echo "Operations mode: check_only=$check_only"
+            if [ "$check_only" = true ]; then
+              echo "Deletion disabled: skipping storage:cleanup:deleted-homes and activity:cleanup."
+            fi
+            cd ~/deploy
+
+            read_env() {
+              key="$1"
+              line="$(grep -E "^${key}=" .env | tail -n 1 || true)"
+              value="${line#*=}"
+              value="${value%\"}"
+              value="${value#\"}"
+              value="${value%\'}"
+              value="${value#\'}"
+              printf '%s' "$value"
+            }
+
+            backup_dir="$(read_env STUFF_DB_BACKUP_DIR)"
+            backup_dir="${backup_dir:-$HOME/deploy/backups/stuff}"
+            max_age_hours="$(read_env DB_BACKUP_MAX_AGE_HOURS)"
+            max_age_hours="${max_age_hours:-26}"
+            if [ ! -d "$backup_dir" ]; then
+              echo "::error title=Backup freshness failed::Backup directory is missing: $backup_dir"
+              exit 1
+            fi
+            newest="$(find "$backup_dir" -type f -name 'stuff-tracker-*.sql.gz' -size +0c -printf '%T@ %p\n' | sort -nr | sed -n '1s/^[^ ]* //p')"
+            if [ -z "$newest" ]; then
+              echo "::error title=Backup freshness failed::No non-empty stuff-tracker backups found in $backup_dir"
+              exit 1
+            fi
+            newest_epoch="$(stat -c %Y "$newest")"
+            now_epoch="$(date +%s)"
+            max_age_seconds="$((max_age_hours * 3600))"
+            age_seconds="$((now_epoch - newest_epoch))"
+            if [ "$age_seconds" -gt "$max_age_seconds" ]; then
+              echo "::error title=Backup freshness failed::Newest backup is older than ${max_age_hours}h: $newest"
+              exit 1
+            fi
+            echo "Newest backup is fresh: $newest"
+
+            checks_failed=0
+            docker-compose exec -T stuff npm run storage:s3:check < /dev/null || checks_failed=1
+            docker-compose exec -T -e DB_EXPECTED_APP_ROLE="${STUFF_DB_APP_ROLE:-stuff_app}" stuff npm run db:hardening:check < /dev/null || checks_failed=1
+            if [ "$checks_failed" != 0 ]; then
+              echo "::error title=Production ops checks failed::One or more hardening checks failed; cleanup will not run."
+              exit 1
+            fi
+
+            if [ "$check_only" = false ]; then
+              docker-compose exec -T stuff npm run storage:cleanup:deleted-homes < /dev/null
+              docker-compose exec -T stuff npm run activity:cleanup < /dev/null
+            fi
+            echo "Production operations checks completed (check_only=$check_only)."
+          REMOTE
 
   notify-failure:
     if: ${{ always() && (needs.ops-checks.result == 'failure' || needs.ops-checks.result == 'cancelled') }}

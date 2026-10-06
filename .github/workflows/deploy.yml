@@ -118,11 +118,14 @@ jobs:
       - name: Transfer stuff app to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > key.pem
+          set -euo pipefail
+          printf '%s\n' "$EC2_SSH_KEY" > key.pem
           chmod 600 key.pem
+          ssh-keygen -y -P '' -f key.pem > /dev/null
           test -n "$EC2_SSH_KNOWN_HOSTS"
           printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
           chmod 600 known_hosts
