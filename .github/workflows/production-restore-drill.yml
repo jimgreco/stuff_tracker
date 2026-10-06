@@ -34,8 +34,9 @@ jobs:
         if: steps.config.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          printf '%s' "$EC2_SSH_KEY" > key.pem
+          printf '%s\n' "$EC2_SSH_KEY" > key.pem
           chmod 600 key.pem
+          ssh-keygen -y -P '' -f key.pem > /dev/null
           printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
           chmod 600 known_hosts
           test -s known_hosts
