@@ -11,19 +11,26 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-test('TestFlight workflow keeps legacy OpenSSL P12 verification fallback', () => {
+test('TestFlight verifies the existing signing identity and pinned profiles before archiving', () => {
   const workflow = readRepoFile('.github/workflows/testflight.yml');
+  const policy = JSON.parse(readRepoFile('.github/scripts/release-policy.json'));
+  const signingStep = workflow.split('    - name: Import existing signing identity and verify pinned profiles\n')[1]
+    ?.split('    - name: Archive iOS using only verified existing profiles\n')[0];
+  assert.ok(signingStep, 'Signing verification must precede archive');
 
-  assert.match(workflow, /openssl pkcs12 -in "\$RUNNER_TEMP\/cert\.p12" -noout -passin pass:"\$CERT_PWD"/);
-  assert.match(workflow, /openssl pkcs12 -legacy -in "\$RUNNER_TEMP\/cert\.p12" -noout -passin pass:"\$CERT_PWD"/);
-  assert.match(workflow, /openssl pkcs12 verification: OK \(legacy provider\)/);
+  assert.ok(signingStep.includes('set -euo pipefail'));
+  assert.ok(signingStep.includes('security import "$RELEASE_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CERT_PWD"'));
+  assert.ok(signingStep.includes(`security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -Fq '${policy.certificateSha1}'`));
+  assert.ok(signingStep.includes('openssl x509 -in "$RELEASE_TEMP/certificate.pem" -outform DER -out "$RELEASE_TEMP/certificate.der"'));
+  assert.ok(signingStep.includes('python3 .github/scripts/verify-release.py profiles --directory "$RELEASE_TEMP/profiles" --certificate-der "$RELEASE_TEMP/certificate.der"'));
 });
 
-test('TestFlight workflow installs the iOS platform before archiving when needed', () => {
+test('TestFlight workflow installs a missing matching iOS simulator runtime before testing', () => {
   const workflow = readRepoFile('.github/workflows/testflight.yml');
 
-  assert.match(workflow, /xcodebuild -showsdks \| grep -q -- '-sdk iphoneos'/);
-  assert.match(workflow, /xcodebuild -downloadPlatform iOS/);
+  assert.ok(workflow.includes('simulator_sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)'));
+  assert.ok(workflow.includes('if ! xcrun simctl list runtimes | grep -q "iOS $simulator_sdk_version"; then'));
+  assert.ok(workflow.includes('sudo xcodebuild -downloadPlatform iOS'));
 });
 
 test('iOS workflows select the newest available Xcode 26 installation', () => {
