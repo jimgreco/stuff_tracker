@@ -1,7 +1,11 @@
 name: Notify Operations
-description: Post a GitHub workflow alert to the configured operations webhook.
+description: Report the selected GitHub failure-email policy or send an explicitly selected webhook.
 
 inputs:
+  mode:
+    description: Explicit transport policy; github-email delegates failure notifications to GitHub.
+    required: false
+    default: github-email
   webhook-url:
     description: Webhook URL to post the alert to.
     required: false
@@ -19,9 +23,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Post alert
+    - name: Apply workflow-failure notification policy
       shell: bash
       env:
+        OPERATIONS_ALERT_MODE: ${{ inputs.mode }}
         WEBHOOK_URL: ${{ inputs.webhook-url }}
         ALERT_TITLE: ${{ inputs.title }}
         ALERT_SUMMARY: ${{ inputs.summary }}

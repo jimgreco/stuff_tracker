@@ -149,9 +149,11 @@ The web account sheet only exposes backend API URL settings to signed-in admin e
 
 ## Production Health Monitoring
 
-The `Production Health` GitHub Actions workflow checks `/health/live` and `/health` on an hourly schedule. Set the `PRODUCTION_BASE_URL` repository secret to the public backend origin, with no trailing slash, to enable the check.
+The `Production Health` workflow probes `/health/live` and `/health` independently on its hourly schedule. Set the repository variable `PRODUCTION_BASE_URL=https://cubbylog.com`; the existing same-name secret remains a compatible fallback. The origin must be HTTPS without credentials, a non-root path, query or fragment.
 
-If `PRODUCTION_BASE_URL` is unset, the workflow exits successfully with a notice so the workflow can be merged before the secret is configured. When enabled, the check fails if either health endpoint is unreachable, if `ok` is not `true`, or if `/health` does not report `db: true`.
+Missing URL is a failed check. Each request has a 15-second timeout and rejects redirects. A probe fails if unreachable, `ok` is not `true`, or `/health` does not report `db: true`; response bodies and raw errors are never logged. PR runs use synthetic tests only. Main-branch scheduled/manual runs perform the actual public probes.
+
+The tracked workflow selects `OPERATIONS_ALERT_MODE: github-email`. GitHub manages failure email using the existing account settings; the local notification helper sends nothing and does not verify receipt. No webhook secret or new mode repository variable is required. This is executed-workflow failure coverage only: delayed/dropped schedules and backend-runtime events remain outside it.
 
 Treat a failing scheduled health run as an availability incident and follow the incident response runbook above.
 
@@ -183,8 +185,9 @@ Scheduled runs retain normal cleanup behavior. A manual run with
 Both hardening checks run even if one fails; any failed check prevents cleanup.
 Successful workflow status alone does not prove checks ran: verify the SSH and
 remote check steps executed, since missing SSH configuration skips them.
-Health probes and alert delivery also remain unverified when
-`PRODUCTION_BASE_URL` or `OPERATIONS_ALERT_WEBHOOK_URL` is unset.
+Health probes remain unverified until `PRODUCTION_BASE_URL` is configured and
+an actual probe step passes. Workflow notification policy is documented below;
+a successful policy step does not prove email delivery.
 
 Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
 
@@ -200,7 +203,11 @@ Set `OPERATIONS_ALERT_WEBHOOK_URL` to post unhandled production backend errors t
 
 The backend also posts `http_error_rate` alerts when production 5xx responses cross the rolling threshold. Defaults are `ERROR_RATE_ALERT_WINDOW_MS=300000`, `ERROR_RATE_ALERT_MIN_REQUESTS=20`, `ERROR_RATE_ALERT_MIN_5XX=5`, `ERROR_RATE_ALERT_5XX_PERCENT=20`, and `ERROR_RATE_ALERT_COOLDOWN_MS=900000`. Tune these values if normal low-traffic behavior creates noise.
 
-The same `OPERATIONS_ALERT_WEBHOOK_URL` GitHub secret enables workflow failure alerts for deploy, production health, production backup, production ops checks, and restore drills. The shared notification action now fails explicitly when the destination is absent or delivery fails. Sends require HTTPS, reject redirects, time out after 10 seconds, and never print the URL, provider body, or raw exception. No automatic retry is used because the destination may not deduplicate alerts.
+Workflow failure notifications are separate from that backend runtime configuration. The shared action explicitly defaults to `github-email` for deploy, health, backup, ops checks and restore drills. It preserves the original failed job/workflow, makes zero provider requests, and records that receipt is not verified. The helper rejects missing or unknown mode values; the action supplies its explicit default, with no automatic fallback. Existing GitHub mail received for the October 6 17:25:16 UTC Production Ops Checks failure confirms the current owner account route has worked, without inducing a failure or sending a test alert. It does not prove future receipt, missing-run detection or runtime coverage.
+
+Keep the existing account failure-email settings and schedule ownership. GitHub documents [who receives scheduled workflow notifications](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs): the creator, last cron editor or person who re-enables the schedule. Changing those can change the recipient. An explicitly reviewed future `webhook` mode would require an approved HTTPS destination in `OPERATIONS_ALERT_WEBHOOK_URL`; it rejects redirects, has a 10-second timeout, does not retry, and reports fixed errors without URL/provider-body leakage. `--check` validates configuration without sending in either mode.
+
+Publication still needs coordinator approval. Configure only the public-origin variable, pass PR validation, and use the established `[skip ci]` merge message for a monitoring-only merge: the TestFlight workflow otherwise uploads on every main push, even without native changes. A scheduled or separately approved manual health run can verify probes afterward. Do not dispatch a deployment or create a failing run solely to test email.
 
 ## Credential Rotation
 
@@ -444,28 +451,25 @@ names confirm both `PRODUCTION_BASE_URL` and `OPERATIONS_ALERT_WEBHOOK_URL` were
 This monitoring-only change removes that false success. Both endpoints are
 checked independently; `/health` must report both `ok=true` and `db=true`.
 Set repository variable `PRODUCTION_BASE_URL=https://cubbylog.com`; the existing
-secret name is accepted as a fallback for compatible installations. Missing or
-invalid configuration fails. A separate always-run coverage step reports a
-missing webhook even if probes pass. PRs run synthetic tests without production
-secrets; live probes execute only for this repository's main branch. A failed
-probe or missing coverage does not trigger an application restart or cleanup.
+secret name is accepted as a fallback. Missing or invalid URL fails. The
+always-run policy step confirms the explicit `github-email` choice, without
+sending or implying receipt. PRs run synthetic tests; actual probes execute
+only for this repository's main branch. Failure triggers no app restart or cleanup.
 
-Before publication, the parent must select/approve the alert destination and
-secure secret entry, authorize configuration of the URL variable, and approve
-one controlled test notification and its recipient confirmation. Until then,
-alert delivery is unverified. Publishing without the configuration will
-intentionally leave scheduled monitoring red. GitHub configuration does not
-configure the backend runtime alert variable; that is a separate host change
-owned by the app lane. No server environment or native code changes are included.
+Existing account failure-email delivery was confirmed from the October 6
+Production Ops Checks failure receipt. This supersedes the initial webhook
+proposal: no new webhook credential, destination setup or induced failure/test
+send is required. Future exact-run receipt, missing-run detection and runtime
+alerting are not claimed. Runtime configuration remains with the app lane.
 
+Publication and the public URL variable await the parent's bundled approval.
 Release as a reviewed workflow-only PR based on `5854a24`, preserving the native
-lane. Follow the established merge `[skip ci]` convention and inspect current
-workflow triggers to avoid accidental native upload; then dispatch only
-`production-health.yml` on the exact merged SHA after alert authorization.
-The sender is shared by existing operational workflows, so failures in those
-workflows will also expose a missing destination instead of a skipped send.
-No backup, cleanup, DB-hardening, restore, or deploy workflow dispatch is included.
+lane. Use the established merge `[skip ci]` convention to avoid TestFlight's
+main-push upload; then allow a scheduled or separately approved manual
+`production-health.yml` run. Existing deploy, backup, restore and ops notification
+callers inherit the shared action's explicit email default. No backup, cleanup,
+DB-hardening, restore, native upload or deployment dispatch is included.
 
-Validation: eight synthetic monitoring/sender tests; backend suite 88 passed,
-four pre-existing database integration skips; TypeScript build; actionlint.
-No real alert was sent.
+Validation: eleven synthetic monitoring/policy tests; prior backend suite 88
+passed, four existing database integration skips; TypeScript build; actionlint.
+No real alert was sent and no production failure was induced.

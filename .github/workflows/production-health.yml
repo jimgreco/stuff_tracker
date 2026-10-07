@@ -22,6 +22,10 @@ on:
 permissions:
   contents: read
 
+# Selected policy uses GitHub's existing failure-email route; no new credential.
+env:
+  OPERATIONS_ALERT_MODE: github-email
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -40,15 +44,11 @@ jobs:
       - uses: actions/checkout@v5
       - name: Check production health endpoints
         run: node .github/scripts/check-production-health.cjs
-      - name: Verify alert coverage is configured
+      - name: Verify the explicit workflow-failure notification policy
         if: always()
         env:
           WEBHOOK_URL: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
-        run: |
-          if [ -z "${WEBHOOK_URL:-}" ]; then
-            echo "::error::OPERATIONS_ALERT_WEBHOOK_URL is missing; alert delivery is not configured."
-            exit 1
-          fi
+        run: node .github/scripts/notify-operations.cjs --check
 
   notify-failure:
     if: ${{ always() && (needs.health.result == 'failure' || needs.health.result == 'cancelled') }}
@@ -60,6 +60,7 @@ jobs:
       - name: Notify operations
         uses: ./.github/actions/notify-operations
         with:
+          mode: ${{ env.OPERATIONS_ALERT_MODE }}
           webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
           title: Production health check failed
           summary: health=${{ needs.health.result }}
