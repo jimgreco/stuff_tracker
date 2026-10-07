@@ -42,6 +42,7 @@
 		T003 /* ModelBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T103 /* ModelBehaviorTests.swift */; };
 		T004 /* LocationTreePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T104 /* LocationTreePresentationTests.swift */; };
 		T005 /* AccountBuildInfoPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T105 /* AccountBuildInfoPresentationTests.swift */; };
+		T006 /* ShippedStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = T106 /* ShippedStoreMigrationTests.swift */; };
 		U001 /* StuffTrackerScreenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = U101 /* StuffTrackerScreenshots.swift */; };
 		U002 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = U102 /* SnapshotHelper.swift */; };
 /* End PBXBuildFile section */
@@ -101,6 +102,7 @@
 		T103 /* ModelBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelBehaviorTests.swift; sourceTree = "<group>"; };
 		T104 /* LocationTreePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTreePresentationTests.swift; sourceTree = "<group>"; };
 		T105 /* AccountBuildInfoPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountBuildInfoPresentationTests.swift; sourceTree = "<group>"; };
+		T106 /* ShippedStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippedStoreMigrationTests.swift; sourceTree = "<group>"; };
 		TAPP /* StuffTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StuffTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		U101 /* StuffTrackerScreenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StuffTrackerScreenshots.swift; sourceTree = "<group>"; };
 		U102 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
@@ -253,6 +255,7 @@
 				T103 /* ModelBehaviorTests.swift */,
 				T104 /* LocationTreePresentationTests.swift */,
 				T105 /* AccountBuildInfoPresentationTests.swift */,
+		T106 /* ShippedStoreMigrationTests.swift */,
 			);
 			path = StuffTrackerTests;
 			sourceTree = "<group>";
@@ -477,6 +480,7 @@
 				T003 /* ModelBehaviorTests.swift in Sources */,
 				T004 /* LocationTreePresentationTests.swift in Sources */,
 				T005 /* AccountBuildInfoPresentationTests.swift in Sources */,
+		T006 /* ShippedStoreMigrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

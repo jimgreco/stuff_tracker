@@ -86,7 +86,7 @@ struct InventoryArchive: Codable, Equatable {
             isFlagged = model.isFlagged
             sortOrder = model.sortOrder
             needsSync = model.needsSync
-            isDeleted = model.isDeleted
+            isDeleted = model.isTombstone
             createdAt = model.createdAt
             updatedAt = model.updatedAt
         }
@@ -101,7 +101,7 @@ struct InventoryArchive: Codable, Equatable {
             model.isFlagged = isFlagged
             model.sortOrder = sortOrder
             model.needsSync = needsSync
-            model.isDeleted = isDeleted
+            model.isTombstone = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
             model.clientCreateID = clientCreateID
@@ -136,7 +136,7 @@ struct InventoryArchive: Codable, Equatable {
             icon = model.icon
             isFlagged = model.isFlagged
             needsSync = model.needsSync
-            isDeleted = model.isDeleted
+            isDeleted = model.isTombstone
             createdAt = model.createdAt
             updatedAt = model.updatedAt
             relationshipHomeID = model.home?.id
@@ -153,7 +153,7 @@ struct InventoryArchive: Codable, Equatable {
             model.icon = icon
             model.isFlagged = isFlagged
             model.needsSync = needsSync
-            model.isDeleted = isDeleted
+            model.isTombstone = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
             model.clientCreateID = clientCreateID
@@ -208,7 +208,7 @@ struct InventoryArchive: Codable, Equatable {
             sortOrder = model.sortOrder
             createdBy = model.createdBy
             needsSync = model.needsSync
-            isDeleted = model.isDeleted
+            isDeleted = model.isTombstone
             createdAt = model.createdAt
             updatedAt = model.updatedAt
             relationshipHomeID = model.home?.id
@@ -235,7 +235,7 @@ struct InventoryArchive: Codable, Equatable {
             model.sortOrder = sortOrder
             model.createdBy = createdBy
             model.needsSync = needsSync
-            model.isDeleted = isDeleted
+            model.isTombstone = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
             model.clientCreateID = clientCreateID

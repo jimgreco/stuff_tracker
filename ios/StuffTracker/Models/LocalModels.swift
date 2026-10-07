@@ -3,6 +3,10 @@ import SwiftData
 
 // MARK: - Local SwiftData Models
 
+// SwiftData's PersistentModel.isDeleted conflicts with the old stored field:
+// its getter can reset after save while a predicate still sees a persisted true.
+// Preserve that attribute through originalName, but use a distinct Swift name.
+
 @Model
 final class LocalHome {
     // Nil means this record predates the durable-create contract (or came from
@@ -16,7 +20,7 @@ final class LocalHome {
     var isFlagged: Bool = false
     var sortOrder: Int = 0
     var needsSync: Bool
-    var isDeleted: Bool
+    @Attribute(originalName: "isDeleted") var isTombstone: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -43,7 +47,7 @@ final class LocalHome {
         self.isFlagged = isFlagged
         self.sortOrder = sortOrder
         self.needsSync = needsSync
-        self.isDeleted = isDeleted
+        self.isTombstone = isDeleted
         self.createdAt = Date()
         self.updatedAt = Date()
         self.locations = []
@@ -64,8 +68,8 @@ final class LocalHome {
             role: role,
             icon: icon,
             isFlagged: isFlagged,
-            locations: locations.filter { !$0.isDeleted }.map { $0.toLocation() },
-            items: items.filter { !$0.isDeleted }.map { $0.toItem() }
+            locations: locations.filter { !$0.isTombstone }.map { $0.toLocation() },
+            items: items.filter { !$0.isTombstone }.map { $0.toItem() }
         )
     }
 
@@ -95,7 +99,7 @@ final class LocalLocation {
     var icon: String?
     var isFlagged: Bool = false
     var needsSync: Bool
-    var isDeleted: Bool
+    @Attribute(originalName: "isDeleted") var isTombstone: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -120,7 +124,7 @@ final class LocalLocation {
         self.icon = icon
         self.isFlagged = isFlagged
         self.needsSync = needsSync
-        self.isDeleted = isDeleted
+        self.isTombstone = isDeleted
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -175,7 +179,7 @@ final class LocalItem {
     var sortOrder: Int = 0
     var createdBy: String?
     var needsSync: Bool
-    var isDeleted: Bool
+    @Attribute(originalName: "isDeleted") var isTombstone: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -220,7 +224,7 @@ final class LocalItem {
         self.sortOrder = sortOrder
         self.createdBy = createdBy
         self.needsSync = needsSync
-        self.isDeleted = isDeleted
+        self.isTombstone = isDeleted
         self.createdAt = Date()
         self.updatedAt = Date()
     }

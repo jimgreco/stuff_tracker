@@ -196,7 +196,7 @@ final class LocalDataManager: ObservableObject {
         guard let context = modelContext else { return [] }
         
         let descriptor = FetchDescriptor<LocalHome>(
-            predicate: #Predicate { !$0.isDeleted },
+            predicate: #Predicate { !$0.isTombstone },
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]
         )
         
@@ -207,7 +207,7 @@ final class LocalDataManager: ObservableObject {
         guard let context = modelContext else { return nil }
         
         let descriptor = FetchDescriptor<LocalHome>(
-            predicate: #Predicate { $0.id == id && !$0.isDeleted }
+            predicate: #Predicate { $0.id == id && !$0.isTombstone }
         )
         
         return try? context.fetch(descriptor).first
@@ -233,7 +233,7 @@ final class LocalDataManager: ObservableObject {
     }
     
     func deleteHome(_ home: LocalHome) {
-        home.isDeleted = true
+        home.isTombstone = true
         home.updatedAt = Date()
         home.needsSync = true
         save()
@@ -244,7 +244,7 @@ final class LocalDataManager: ObservableObject {
     func fetchLocation(id: String) -> LocalLocation? {
         guard let context = modelContext else { return nil }
         let descriptor = FetchDescriptor<LocalLocation>(
-            predicate: #Predicate { $0.id == id && !$0.isDeleted }
+            predicate: #Predicate { $0.id == id && !$0.isTombstone }
         )
         return try? context.fetch(descriptor).first
     }
@@ -276,7 +276,7 @@ final class LocalDataManager: ObservableObject {
     }
     
     func deleteLocation(_ location: LocalLocation) {
-        location.isDeleted = true
+        location.isTombstone = true
         location.updatedAt = Date()
         location.needsSync = true
         save()
@@ -287,7 +287,7 @@ final class LocalDataManager: ObservableObject {
     func fetchItem(id: String) -> LocalItem? {
         guard let context = modelContext else { return nil }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.id == id && !$0.isDeleted }
+            predicate: #Predicate { $0.id == id && !$0.isTombstone }
         )
         return try? context.fetch(descriptor).first
     }
@@ -295,7 +295,7 @@ final class LocalDataManager: ObservableObject {
     func fetchDeletedItem(id: String) -> LocalItem? {
         guard let context = modelContext else { return nil }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.id == id && $0.isDeleted }
+            predicate: #Predicate { $0.id == id && $0.isTombstone }
         )
         return try? context.fetch(descriptor).first
     }
@@ -326,14 +326,14 @@ final class LocalDataManager: ObservableObject {
     }
     
     func deleteItem(_ item: LocalItem) {
-        item.isDeleted = true
+        item.isTombstone = true
         item.updatedAt = Date()
         item.needsSync = true
         save()
     }
 
     func restoreItem(_ item: LocalItem) {
-        item.isDeleted = false
+        item.isTombstone = false
         item.updatedAt = Date()
         item.needsSync = true
         save()
@@ -344,7 +344,7 @@ final class LocalDataManager: ObservableObject {
     func fetchPendingLocations() -> [LocalLocation] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalLocation>(
-            predicate: #Predicate { $0.needsSync && !$0.isDeleted }
+            predicate: #Predicate { $0.needsSync && !$0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -352,7 +352,7 @@ final class LocalDataManager: ObservableObject {
     func fetchPendingItems() -> [LocalItem] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.needsSync && !$0.isDeleted }
+            predicate: #Predicate { $0.needsSync && !$0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -360,7 +360,7 @@ final class LocalDataManager: ObservableObject {
     func fetchLocations(homeId: String) -> [LocalLocation] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalLocation>(
-            predicate: #Predicate { $0.homeId == homeId && !$0.isDeleted }
+            predicate: #Predicate { $0.homeId == homeId && !$0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -368,7 +368,7 @@ final class LocalDataManager: ObservableObject {
     func fetchItems(homeId: String) -> [LocalItem] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.homeId == homeId && !$0.isDeleted }
+            predicate: #Predicate { $0.homeId == homeId && !$0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -376,7 +376,7 @@ final class LocalDataManager: ObservableObject {
     func fetchItems(locationId: String) -> [LocalItem] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.locationId == locationId && !$0.isDeleted }
+            predicate: #Predicate { $0.locationId == locationId && !$0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -384,7 +384,7 @@ final class LocalDataManager: ObservableObject {
     func fetchDeletedHomes() -> [LocalHome] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalHome>(
-            predicate: #Predicate { $0.isDeleted }
+            predicate: #Predicate { $0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -392,7 +392,7 @@ final class LocalDataManager: ObservableObject {
     func fetchDeletedLocations() -> [LocalLocation] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalLocation>(
-            predicate: #Predicate { $0.isDeleted }
+            predicate: #Predicate { $0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -400,7 +400,7 @@ final class LocalDataManager: ObservableObject {
     func fetchDeletedItems() -> [LocalItem] {
         guard let context = modelContext else { return [] }
         let descriptor = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { $0.isDeleted }
+            predicate: #Predicate { $0.isTombstone }
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -414,7 +414,7 @@ final class LocalDataManager: ObservableObject {
 
         while true {
             let descriptor = FetchDescriptor<LocalLocation>(
-                predicate: #Predicate { !$0.isDeleted }
+                predicate: #Predicate { !$0.isTombstone }
             )
             guard let activeLocs = try? context.fetch(descriptor) else { return }
             let validIds = Set(activeLocs.map { $0.id })
@@ -422,7 +422,7 @@ final class LocalDataManager: ObservableObject {
             var foundOrphan = false
             for loc in activeLocs {
                 if let parentId = loc.parentId, !validIds.contains(parentId) {
-                    loc.isDeleted = true
+                    loc.isTombstone = true
                     loc.updatedAt = Date()
                     loc.needsSync = true
                     foundOrphan = true
@@ -434,13 +434,13 @@ final class LocalDataManager: ObservableObject {
 
         // Fix items whose locationId points to a missing/deleted location
         let locDesc = FetchDescriptor<LocalLocation>(
-            predicate: #Predicate { !$0.isDeleted }
+            predicate: #Predicate { !$0.isTombstone }
         )
         guard let activeLocs = try? context.fetch(locDesc) else { return }
         let validLocIds = Set(activeLocs.map { $0.id })
 
         let itemDesc = FetchDescriptor<LocalItem>(
-            predicate: #Predicate { !$0.isDeleted }
+            predicate: #Predicate { !$0.isTombstone }
         )
         guard let activeItems = try? context.fetch(itemDesc) else { return }
 
@@ -538,7 +538,7 @@ final class LocalDataManager: ObservableObject {
         let descriptor = FetchDescriptor<LocalItem>(
             predicate: #Predicate { item in
                 item.homeId == homeId &&
-                !item.isDeleted &&
+                !item.isTombstone &&
                 (
                     item.name.localizedStandardContains(lowercaseQuery) ||
                     (item.notes ?? "").localizedStandardContains(lowercaseQuery) ||
@@ -560,7 +560,7 @@ final class LocalDataManager: ObservableObject {
             if let existingHome = fetchHome(id: home.id) {
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existingHome.needsSync,
-                    isDeleted: existingHome.isDeleted
+                    isDeleted: existingHome.isTombstone
                 ) else {
                     result.deferred += 1
                     continue
@@ -596,7 +596,7 @@ final class LocalDataManager: ObservableObject {
         guard let home = fetchHome(id: homeDetail.id) else { return result }
 
         // Update home
-        if ServerMergePolicy.shouldApplyServerRecord(needsSync: home.needsSync, isDeleted: home.isDeleted) {
+        if ServerMergePolicy.shouldApplyServerRecord(needsSync: home.needsSync, isDeleted: home.isTombstone) {
             home.name = homeDetail.name
             home.ownerId = homeDetail.ownerId
             home.role = homeDetail.role
@@ -614,7 +614,7 @@ final class LocalDataManager: ObservableObject {
                 // Don't update locally-deleted locations
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existing.needsSync,
-                    isDeleted: existing.isDeleted
+                    isDeleted: existing.isTombstone
                 ) else {
                     result.deferred += 1
                     continue
@@ -623,7 +623,7 @@ final class LocalDataManager: ObservableObject {
                 result.applied += 1
             } else {
                 // Don't re-insert if locally deleted
-                if home.locations.contains(where: { $0.id == location.id && $0.isDeleted }) {
+                if home.locations.contains(where: { $0.id == location.id && $0.isTombstone }) {
                     result.deferred += 1
                     continue
                 }
@@ -650,7 +650,7 @@ final class LocalDataManager: ObservableObject {
                 // Don't update locally-deleted items
                 guard ServerMergePolicy.shouldApplyServerRecord(
                     needsSync: existing.needsSync,
-                    isDeleted: existing.isDeleted
+                    isDeleted: existing.isTombstone
                 ) else {
                     result.deferred += 1
                     continue
@@ -659,7 +659,7 @@ final class LocalDataManager: ObservableObject {
                 result.applied += 1
             } else {
                 // Don't re-insert if locally deleted
-                if home.items.contains(where: { $0.id == item.id && $0.isDeleted }) {
+                if home.items.contains(where: { $0.id == item.id && $0.isTombstone }) {
                     result.deferred += 1
                     continue
                 }

@@ -165,7 +165,7 @@ final class SyncManager: ObservableObject {
 
     private func pushHome(_ home: LocalHome) async {
         do {
-            if home.isDeleted {
+            if home.isTombstone {
                 try await api.deleteHome(home.id, clientID: home.clientCreateID, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
                 try requireSyncSession()
                 local.hardDelete(home: home)
@@ -197,7 +197,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func pushLocation(_ loc: LocalLocation) async {
-        guard !loc.isDeleted else { return }
+        guard !loc.isTombstone else { return }
         do {
             try await upsertLocation(loc)
             try requireSyncSession()
@@ -208,7 +208,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func pushItem(_ item: LocalItem) async {
-        guard !item.isDeleted else { return }
+        guard !item.isTombstone else { return }
         do {
             try await upsertItem(item)
             try requireSyncSession()
@@ -360,13 +360,13 @@ final class SyncManager: ObservableObject {
                     parentId: $0.parentId,
                     name: $0.name,
                     needsSync: $0.needsSync,
-                    isDeleted: $0.isDeleted
+                    isDeleted: $0.isTombstone
                 )
             }
         )
 
         for locationId in orderedLocationIds {
-            guard let location = local.fetchLocation(id: locationId), !location.isDeleted else {
+            guard let location = local.fetchLocation(id: locationId), !location.isTombstone else {
                 continue
             }
             try await upsertLocation(location)
@@ -377,7 +377,7 @@ final class SyncManager: ObservableObject {
     private func upsertLocation(_ loc: LocalLocation) async throws {
         try requireSyncSession()
         if let parentId = loc.parentId {
-            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isTombstone else {
                 throw SyncUploadError.missingParent(locationName: loc.name)
             }
             try await ensureLocationUploaded(parent, visiting: [loc.id])
@@ -433,7 +433,7 @@ final class SyncManager: ObservableObject {
         nextVisiting.insert(loc.id)
 
         if let parentId = loc.parentId {
-            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isTombstone else {
                 throw SyncUploadError.missingParent(locationName: loc.name)
             }
             try await ensureLocationUploaded(parent, visiting: nextVisiting)
@@ -446,7 +446,7 @@ final class SyncManager: ObservableObject {
 
     private func pushPendingItems(homeId: String) async throws {
         try requireSyncSession()
-        let items = local.fetchItems(homeId: homeId).filter { $0.needsSync && !$0.isDeleted }
+        let items = local.fetchItems(homeId: homeId).filter { $0.needsSync && !$0.isTombstone }
 
         for item in items {
             do {
@@ -533,7 +533,7 @@ final class SyncManager: ObservableObject {
         try requireSyncSession()
         let currentItem = refreshedItem(item)
         guard let locationId = currentItem.locationId else { return }
-        guard let location = local.fetchLocation(id: locationId), !location.isDeleted else {
+        guard let location = local.fetchLocation(id: locationId), !location.isTombstone else {
             throw SyncUploadError.missingItemLocation(itemName: currentItem.name)
         }
 
@@ -547,7 +547,7 @@ final class SyncManager: ObservableObject {
             return
         }
 
-        if let repairedLocation = local.fetchLocation(id: syncedLocationId), !repairedLocation.isDeleted {
+        if let repairedLocation = local.fetchLocation(id: syncedLocationId), !repairedLocation.isTombstone {
             repairedLocation.needsSync = true
             try await ensureLocationUploaded(repairedLocation)
             try requireSyncSession()
@@ -595,7 +595,7 @@ final class SyncManager: ObservableObject {
         nextVisiting.insert(location.id)
 
         if let parentId = location.parentId {
-            guard let parent = local.fetchLocation(id: parentId), !parent.isDeleted else {
+            guard let parent = local.fetchLocation(id: parentId), !parent.isTombstone else {
                 throw SyncUploadError.missingParent(locationName: location.name)
             }
             try alignLocationChain(parent, toHomeId: homeId, visiting: nextVisiting)
