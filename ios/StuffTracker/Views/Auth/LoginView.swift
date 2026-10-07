@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AuthenticationServices
 import GoogleSignIn
 
@@ -62,12 +63,12 @@ struct LoginView: View {
                             CubbyBrandMark(size: 72)
 
                             VStack(spacing: 7) {
-                                Text(mode.title)
+                                Text(authStore.pendingInventoryClaim == nil ? mode.title : "Saved inventory")
                                     .font(.system(.largeTitle, design: .rounded, weight: .bold))
                                     .foregroundStyle(.white)
                                     .multilineTextAlignment(.center)
 
-                                Text(mode == .initial ? "A place for everything." : "Reconnect your CubbyLog")
+                                Text(authStore.pendingInventoryClaim == nil ? (mode == .initial ? "A place for everything." : "Reconnect your CubbyLog") : "Choose how to continue")
                                     .font(.headline.weight(.medium))
                                     .foregroundStyle(.white.opacity(0.82))
                                     .multilineTextAlignment(.center)
@@ -76,6 +77,7 @@ struct LoginView: View {
                         .accessibilityElement(children: .combine)
 
                         VStack(alignment: .leading, spacing: 18) {
+                            if authStore.pendingInventoryClaim == nil {
                             VStack(alignment: .leading, spacing: 7) {
                                 Label(
                                     mode == .initial ? "Start organizing" : "Your account is ready",
@@ -109,20 +111,10 @@ struct LoginView: View {
                                 #endif
                             }
 
+                            }
+
                             if let user = authStore.pendingInventoryClaim {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Claim saved inventory")
-                                        .font(.headline)
-                                    Text("This device has inventory from an older version or from local use. Only continue if all of it belongs to \(user.email). Continuing allows its saved changes to sync to this account.")
-                                        .font(.subheadline)
-                                    Button("This is my inventory — continue") {
-                                        authStore.confirmInventoryClaim()
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    Button("Cancel and keep inventory saved") {
-                                        authStore.signOut()
-                                    }
-                                }
+                                InventoryRecoveryView(user: user).environmentObject(authStore)
                             }
 
                             if let error = authStore.errorMessage {
@@ -332,5 +324,48 @@ private struct AuthProviderButtonChrome: ViewModifier {
 private extension View {
     func authProviderButtonChrome(background: Color = CubbyTheme.paper) -> some View {
         modifier(AuthProviderButtonChrome(background: background))
+    }
+}
+
+
+private struct InventoryRecoveryDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    var data: Data
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
+
+struct InventoryRecoveryView: View {
+    let user: User
+    @EnvironmentObject var authStore: AuthStore
+    @State private var exportDocument: InventoryRecoveryDocument?
+    @State private var showExporter = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recover saved inventory").font(.headline)
+            Text("Only claim this older inventory if every saved record belongs to \(user.email). Its unsynced changes and pending deletions will then sync to this account. If it contains another account’s records, export a recovery copy for review first.")
+                .font(.subheadline)
+            Button("All saved inventory is mine — recover") { authStore.confirmInventoryClaim() }
+                .buttonStyle(.borderedProminent)
+            Button("Export recovery copy") {
+                do {
+                    exportDocument = InventoryRecoveryDocument(data: try authStore.inventoryRecoveryData())
+                    showExporter = true
+                } catch { authStore.errorMessage = "The recovery copy could not be read. Saved data is unchanged." }
+            }
+            Text("The export includes inventory details, media links and pending work. Save it somewhere private.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Continue without importing") { authStore.continueWithoutLegacyInventory() }
+            Text("The original inventory stays saved. You can return to recovery from Account.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Cancel and keep inventory saved") { authStore.signOut() }
+        }
+        .fileExporter(isPresented: $showExporter, document: exportDocument, contentType: .json,
+                      defaultFilename: "CubbyLog-recovery") { result in
+            if case .failure = result { authStore.errorMessage = "Export did not complete. The original inventory is still saved." }
+            exportDocument = nil
+        }
     }
 }

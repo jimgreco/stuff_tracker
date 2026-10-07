@@ -30,7 +30,7 @@ final class APIClient {
     private var generation = UUID()
     private var verifiedUserID: String?
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = URLSession(configuration: .ephemeral)) {
         self.session = session
         SecureTokenStore.migrateLegacyTokenIfNeeded()
     }
@@ -89,6 +89,13 @@ final class APIClient {
             verifiedUserID = nil
             self.token = token
             self.refreshToken = refreshToken
+        }
+    }
+
+    func beginAccountTransition() {
+        sessionLock.withLock {
+            generation = UUID()
+            verifiedUserID = nil
         }
     }
 

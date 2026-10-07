@@ -1,5 +1,6 @@
 import Foundation
 import StoreKit
+import Combine
 
 @MainActor
 final class SubscriptionStore: ObservableObject {
@@ -10,15 +11,22 @@ final class SubscriptionStore: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    private let api = APIClient.shared
+    private let api: APIClient
+    private var accountObserver: AnyCancellable?
     private let fallbackProductIds = [
         "com.jimgreco.stufftracker.pro.monthly",
         "com.jimgreco.stufftracker.pro.yearly"
     ]
     private var transactionUpdatesTask: Task<Void, Never>?
 
-    private init() {
-        transactionUpdatesTask = Task { await listenForTransactionUpdates() }
+    init(api: APIClient = .shared, local: LocalDataManager? = nil, listenForUpdates: Bool = true) {
+        self.api = api
+        accountObserver = (local ?? .shared).$storeGeneration.sink { [weak self] _ in
+            self?.plan = nil
+            self?.errorMessage = nil
+            self?.isLoading = false
+        }
+        if listenForUpdates { transactionUpdatesTask = Task { await listenForTransactionUpdates() } }
     }
 
     deinit {
@@ -26,36 +34,46 @@ final class SubscriptionStore: ObservableObject {
     }
 
     func refresh() async {
-        guard api.hasToken else {
+        guard api.hasToken, api.localAccountID != nil else {
             plan = nil
             products = []
             return
         }
 
+        let generation = api.sessionGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if (try? api.requireCurrentSession(generation)) != nil { isLoading = false } }
 
         do {
             errorMessage = nil
-            plan = try await api.getAccountPlan()
+            let nextPlan = try await api.getAccountPlan()
+            try api.requireCurrentSession(generation)
+            plan = nextPlan
             try await loadProducts()
+            try api.requireCurrentSession(generation)
             await syncCurrentEntitlements()
         } catch {
+            guard (try? api.requireCurrentSession(generation)) != nil else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     func purchase(_ product: Product, userId: String) async {
+        guard api.localAccountID == userId else { return }
+        let generation = api.sessionGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if (try? api.requireCurrentSession(generation)) != nil { isLoading = false } }
 
         do {
             errorMessage = nil
             let result = try await product.purchase(options: purchaseOptions(userId: userId))
+            try api.requireCurrentSession(generation)
             switch result {
             case .success(let verification):
                 let transaction = try verifiedTransaction(from: verification)
-                plan = try await api.syncAppStoreTransaction(signedTransactionInfo: verification.jwsRepresentation)
+                let nextPlan = try await api.syncAppStoreTransaction(signedTransactionInfo: verification.jwsRepresentation)
+                try api.requireCurrentSession(generation)
+                plan = nextPlan
                 await transaction.finish()
             case .pending, .userCancelled:
                 return
@@ -63,53 +81,70 @@ final class SubscriptionStore: ObservableObject {
                 return
             }
         } catch {
+            guard (try? api.requireCurrentSession(generation)) != nil else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     func restorePurchases() async {
+        guard api.localAccountID != nil else { return }
+        let generation = api.sessionGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if (try? api.requireCurrentSession(generation)) != nil { isLoading = false } }
 
         do {
             errorMessage = nil
             try await AppStore.sync()
+            try api.requireCurrentSession(generation)
             await syncCurrentEntitlements()
-            plan = try await api.getAccountPlan()
+            try api.requireCurrentSession(generation)
+            let nextPlan = try await api.getAccountPlan()
+            try api.requireCurrentSession(generation)
+            plan = nextPlan
         } catch {
+            guard (try? api.requireCurrentSession(generation)) != nil else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     private func loadProducts() async throws {
+        let generation = api.sessionGeneration
         let productIds: [String]
         do {
             productIds = try await api.getSubscriptionProductIds()
         } catch {
+            try api.requireCurrentSession(generation)
             productIds = fallbackProductIds
         }
 
-        products = try await Product.products(for: productIds)
+        let nextProducts = try await Product.products(for: productIds)
             .sorted { lhs, rhs in
                 if lhs.subscription?.subscriptionPeriod.unit == rhs.subscription?.subscriptionPeriod.unit {
                     return lhs.price < rhs.price
                 }
                 return subscriptionSortRank(lhs) < subscriptionSortRank(rhs)
             }
+        try api.requireCurrentSession(generation)
+        products = nextProducts
     }
 
     private func syncCurrentEntitlements() async {
-        guard api.hasToken else { return }
+        guard api.hasToken, api.localAccountID != nil else { return }
 
+        let generation = api.sessionGeneration
         do {
             for await result in Transaction.currentEntitlements {
+                try api.requireCurrentSession(generation)
                 guard case .verified(let transaction) = result,
                       productIdsForSync.contains(transaction.productID) else {
                     continue
                 }
-                plan = try await api.syncAppStoreTransaction(signedTransactionInfo: result.jwsRepresentation)
+                let nextPlan = try await api.syncAppStoreTransaction(signedTransactionInfo: result.jwsRepresentation)
+                try api.requireCurrentSession(generation)
+                plan = nextPlan
             }
         } catch {
+            guard (try? api.requireCurrentSession(generation)) != nil else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -118,14 +153,18 @@ final class SubscriptionStore: ObservableObject {
         for await result in Transaction.updates {
             guard case .verified(let transaction) = result,
                   productIdsForSync.contains(transaction.productID),
-                  api.hasToken else {
+                  api.hasToken, api.localAccountID != nil else {
                 continue
             }
 
+            let generation = api.sessionGeneration
             do {
-                plan = try await api.syncAppStoreTransaction(signedTransactionInfo: result.jwsRepresentation)
+                let nextPlan = try await api.syncAppStoreTransaction(signedTransactionInfo: result.jwsRepresentation)
+                try api.requireCurrentSession(generation)
+                plan = nextPlan
                 await transaction.finish()
             } catch {
+                guard (try? api.requireCurrentSession(generation)) != nil else { continue }
                 errorMessage = error.localizedDescription
             }
         }

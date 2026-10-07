@@ -184,7 +184,7 @@ final class NativeAccountBoundaryTests: XCTestCase {
     }
 
     @MainActor
-    func testSignOutPreservesInventoryAndRejectsDifferentAccount() throws {
+    func testSignOutLocksInventoryAndSwitchesAccountsWithoutLosingPendingChanges() throws {
         let f = Fixture(); defer { f.cleanup() }
         try f.signIn(f.accountA)
         let home = f.local.createHome(name: "Unsynced private inventory")
@@ -192,13 +192,14 @@ final class NativeAccountBoundaryTests: XCTestCase {
         XCTAssertNil(f.api.localAccountID)
         XCTAssertTrue(f.auth.requiresSignIn)
         try f.signIn(f.accountB)
-        XCTAssertFalse(f.auth.isAuthenticated)
-        XCTAssertFalse(f.api.hasToken)
-        XCTAssertEqual(f.local.boundAccountID, f.accountA.id)
-        XCTAssertEqual(f.local.fetchHomes().first?.id, home.id)
-        XCTAssertTrue(home.needsSync)
+        XCTAssertTrue(f.auth.isAuthenticated)
+        XCTAssertEqual(f.local.boundAccountID, f.accountB.id)
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
+        _ = f.local.createHome(name: "B inventory")
         try f.signIn(f.accountA)
         XCTAssertEqual(f.auth.currentUser?.id, f.accountA.id)
+        XCTAssertEqual(f.local.fetchHomes().first?.id, home.id)
+        XCTAssertTrue(f.local.fetchHomes().first!.needsSync)
     }
 
     @MainActor
@@ -213,8 +214,9 @@ final class NativeAccountBoundaryTests: XCTestCase {
         f.auth.signOut()
         f.auth.confirmInventoryClaim() // stale confirmation does nothing
         XCTAssertNil(f.local.boundAccountID)
-        XCTAssertEqual(f.local.fetchHomes().first?.id, home.id)
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
         try f.signIn(f.accountA)
+        XCTAssertEqual(try JSONDecoder().decode(InventoryArchive.self, from: f.auth.inventoryRecoveryData()).homes.first?.id, home.id)
         f.auth.confirmInventoryClaim()
         XCTAssertEqual(f.local.boundAccountID, f.accountA.id)
         XCTAssertEqual(f.api.localAccountID, f.accountA.id)
@@ -222,17 +224,19 @@ final class NativeAccountBoundaryTests: XCTestCase {
     }
 
     @MainActor
-    func testTombstonesAndLegacyQueuePreventAccountReassignment() throws {
+    func testTombstonesAndLegacyQueueStayWithTheirAccount() throws {
         let f = Fixture(); defer { f.cleanup() }
         try f.signIn(f.accountA)
         let home = f.local.createHome(name: "Deleted offline")
         f.local.deleteHome(home)
-        XCTAssertTrue(f.local.fetchHomes().isEmpty)
-        XCTAssertEqual(try f.local.bindAccount(userID: f.accountB.id), .differentAccount)
-        f.local.hardDelete(home: home)
         f.local.context!.insert(SyncOperation(entityType: "home", entityId: "synthetic", operation: "delete"))
         f.local.save()
-        XCTAssertEqual(try f.local.bindAccount(userID: f.accountB.id), .differentAccount)
+        try f.signIn(f.accountB)
+        XCTAssertTrue(f.local.fetchDeletedHomes().isEmpty)
+        XCTAssertEqual(try f.local.context!.fetchCount(FetchDescriptor<SyncOperation>()), 0)
+        try f.signIn(f.accountA)
+        XCTAssertEqual(f.local.fetchDeletedHomes().map(\.id), [home.id])
+        XCTAssertEqual(try f.local.context!.fetchCount(FetchDescriptor<SyncOperation>()), 1)
     }
 
     @MainActor
@@ -314,9 +318,11 @@ final class NativeAccountBoundaryTests: XCTestCase {
         }
         await f.sync.performFullSync()
         XCTAssertEqual(count, 1)
-        XCTAssertEqual(f.local.fetchHomes().map(\.id), [home.id])
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
         XCTAssertNil(f.api.localAccountID)
         XCTAssertFalse(f.auth.isAuthenticated)
+        try f.signIn(f.accountA)
+        XCTAssertEqual(f.local.fetchHomes().map(\.id), [home.id])
     }
 
     @MainActor
@@ -381,5 +387,277 @@ final class NativeAccountBoundaryTests: XCTestCase {
         catch { XCTFail("Expected cancellation, received \(error)") }
         XCTAssertEqual(SecureTokenStore.token, "synthetic-account-b")
         XCTAssertEqual(f.api.localAccountID, f.accountB.id)
+    }
+    @MainActor
+    func testSkipAndLaterRecoverKeepsIndependentAccountData() throws {
+        let f = Fixture(); defer { f.cleanup() }
+        let legacy = f.local.createHome(name: "Older offline home")
+        try f.signIn(f.accountA)
+        let recoveryData = try f.auth.inventoryRecoveryData()
+        f.auth.continueWithoutLegacyInventory()
+        XCTAssertTrue(f.auth.isAuthenticated)
+        XCTAssertTrue(f.auth.hasLegacyRecovery)
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
+        let newer = f.local.createHome(name: "New account home")
+        f.auth.beginInventoryRecovery()
+        XCTAssertEqual(try f.auth.inventoryRecoveryData(), recoveryData)
+        f.auth.confirmInventoryClaim()
+        XCTAssertEqual(Set(f.local.fetchHomes().map(\.id)), Set([legacy.id, newer.id]))
+        XCTAssertFalse(f.auth.hasLegacyRecovery)
+        f.auth.signOut()
+        try f.signIn(f.accountB)
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
+        try f.signIn(f.accountA)
+        XCTAssertEqual(f.local.fetchHomes().count, 2) // no duplicate import
+    }
+
+    @MainActor
+    func testLegacyRecoveryConflictsPreserveBothStoresAndAllowExport() throws {
+        let f = Fixture(); defer { f.cleanup() }
+        let legacy = f.local.createHome(name: "Original")
+        try f.signIn(f.accountA)
+        f.auth.continueWithoutLegacyInventory()
+        let collision = LocalHome(id: legacy.id, name: "Independent account version")
+        f.local.context!.insert(collision)
+        f.local.save()
+        f.auth.beginInventoryRecovery()
+        let original = try f.auth.inventoryRecoveryData()
+        f.auth.confirmInventoryClaim()
+        XCTAssertFalse(f.auth.isAuthenticated)
+        XCTAssertNotNil(f.auth.errorMessage)
+        XCTAssertEqual(try f.auth.inventoryRecoveryData(), original)
+        f.auth.continueWithoutLegacyInventory()
+        XCTAssertEqual(f.local.fetchHomes().map(\.name), ["Independent account version"])
+    }
+
+    @MainActor
+    func testMidSyncSwitchAllowsNewAccountSyncAndDiscardsOldResponse() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.signIn(f.accountA)
+        let oldHome = f.local.createHome(name: "A pending")
+        let started = expectation(description: "A request started")
+        var held: AccountBoundaryURLProtocol?
+        AccountBoundaryURLProtocol.handler = { request in
+            if request.request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-account-a" {
+                held = request
+                started.fulfill()
+            } else { request.respond(200, "[]") }
+        }
+        let oldSync = Task { await f.sync.performFullSync() }
+        await fulfillment(of: [started], timeout: 3)
+        f.auth.signOut()
+        try f.signIn(f.accountB)
+        await f.sync.performFullSync()
+        XCTAssertNotNil(f.sync.lastSyncDate)
+        let newDate = f.sync.lastSyncDate
+        held?.respond(200, "[]")
+        await oldSync.value
+        XCTAssertTrue(f.local.fetchHomes().isEmpty)
+        XCTAssertNil(f.sync.syncError)
+        XCTAssertEqual(f.sync.lastSyncDate, newDate)
+        try f.signIn(f.accountA)
+        XCTAssertEqual(f.local.fetchHomes().map(\.id), [oldHome.id])
+        XCTAssertTrue(f.local.fetchHomes().first!.needsSync)
+    }
+
+    @MainActor
+    func testLateDeleteAfterAccountSwitchCannotDeleteMatchingRecord() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.signIn(f.accountA)
+        let old = f.local.createHome(name: "Delete in A")
+        f.local.deleteHome(old)
+        AccountBoundaryURLProtocol.handler = { request in
+            Task { @MainActor in
+                f.auth.signOut()
+                try f.signIn(f.accountB)
+                f.local.context!.insert(LocalHome(id: old.id, name: "Same shared home in B"))
+                f.local.save()
+                request.respond(204)
+            }
+        }
+        await f.sync.syncPendingChanges()
+        XCTAssertEqual(f.local.fetchHomes().map(\.id), [old.id])
+        XCTAssertNil(f.sync.syncError)
+        try f.signIn(f.accountA)
+        XCTAssertEqual(f.local.fetchDeletedHomes().map(\.id), [old.id])
+    }
+
+    @MainActor
+    func testLateSubscriptionResponseDoesNotExposePriorPlanOrError() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        let subscription = SubscriptionStore(api: f.api, local: f.local, listenForUpdates: false)
+        try f.signIn(f.accountA)
+        var calls = 0
+        AccountBoundaryURLProtocol.handler = { request in
+            calls += 1
+            Task { @MainActor in
+                f.auth.signOut()
+                try f.signIn(f.accountB)
+                request.respond(200, "{\"tier\":\"pro\",\"is_paid\":true,\"limits\":{\"homes\":10,\"total_containers_and_items\":10,\"images\":10,\"documents\":10},\"usage\":{\"homes\":1,\"containers\":1,\"items\":1,\"total_containers_and_items\":2,\"images\":1,\"documents\":1},\"remaining\":{}}")
+            }
+        }
+        await subscription.refresh()
+        XCTAssertEqual(calls, 1)
+        XCTAssertNil(subscription.plan)
+        XCTAssertNil(subscription.errorMessage)
+        XCTAssertFalse(subscription.isLoading)
+    }
+
+}
+
+
+final class AccountStoreMigrationTests: XCTestCase {
+    @MainActor
+    private func withDiskFixture(_ test: (URL, URL, UserDefaults) throws -> Void) throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cubby-migration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let defaultsName = "cubby-migration-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsName)!
+        defer {
+            defaults.removePersistentDomain(forName: defaultsName)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try test(root.appendingPathComponent("accounts"), root.appendingPathComponent("default.store"), defaults)
+    }
+
+    @MainActor
+    private func seed(_ local: LocalDataManager) throws -> InventoryArchive {
+        let home = local.createHome(name: "Offline home")
+        home.icon = "archivebox"
+        home.createdAt = Date(timeIntervalSince1970: 123456)
+        home.sortOrder = 9
+        let location = local.createLocation(homeId: home.id, name: "Deleted shelf", parentId: nil, type: "container")!
+        local.deleteLocation(location)
+        let item = local.createItem(homeId: home.id, name: "Unsynced item", locationId: location.id)!
+        item.documentsData = Data("malformed-but-preserved-payload".utf8)
+        item.propertiesData = Data([0, 1, 254])
+        item.photoUrls = ["homes/legacy/items/photos/example.jpg"]
+        item.notes = "Private synthetic note"
+        item.quantity = 7
+        item.sortOrder = 12
+        item.estimatedValueCents = 456
+        item.serialNumber = "SYNTHETIC"
+        item.isFlagged = true
+        local.deleteItem(item)
+        let operation = SyncOperation(entityType: "item", entityId: item.id, operation: "delete", payload: Data([0, 255]))
+        operation.failureCount = 3
+        operation.lastError = "Synthetic retry"
+        local.context!.insert(operation)
+        // A relationship-free row must not disappear in an API-shaped export.
+        local.context!.insert(LocalItem(homeId: "orphan", name: "Unlinked pending item"))
+        try local.context!.save()
+        return try InventoryArchive(context: local.context!)
+    }
+
+    @MainActor
+    func testDiskMigrationPreservesEveryFieldAndKnownOwnerAcrossOtherAccountFirst() throws {
+        try withDiskFixture { root, legacy, defaults in
+            var local: LocalDataManager? = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+            let expected = try seed(local!)
+            defaults.set("owner-a", forKey: LocalDataManager.accountOwnerKey)
+            XCTAssertEqual(try local!.bindAccount(userID: "owner-b"), .allowed)
+            XCTAssertTrue(local!.fetchHomes().isEmpty)
+            XCTAssertFalse(try local!.hasLegacyRecovery(for: "owner-b"))
+            XCTAssertThrowsError(try local!.recoveryData(for: "owner-b"))
+            local = nil
+            local = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+            XCTAssertEqual(try local!.bindAccount(userID: "owner-a"), .allowed)
+            XCTAssertEqual(try InventoryArchive(context: local!.context!), expected)
+            XCTAssertEqual(try JSONDecoder().decode(InventoryArchive.self, from: Data(contentsOf: root.appendingPathComponent("legacy-recovery.json"))), expected)
+            local = nil
+            local = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+            XCTAssertEqual(try local!.bindAccount(userID: "owner-a"), .allowed)
+            XCTAssertEqual(try InventoryArchive(context: local!.context!), expected)
+        }
+    }
+
+    @MainActor
+    func testCrashRecoveryBeforeAndAfterAtomicPublicationNeverReplaysOrLosesData() throws {
+        for checkpoint in [LocalDataManager.MigrationCheckpoint.archived, .imported, .published] {
+            try withDiskFixture { root, legacy, defaults in
+                var local: LocalDataManager? = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+                let expected = try seed(local!)
+                local!.migrationCheckpoint = { if $0 == checkpoint { throw CocoaError(.fileWriteUnknown) } }
+                XCTAssertThrowsError(try local!.bindAccount(userID: "owner-a", claimLegacy: true))
+                XCTAssertNil(local!.boundAccountID)
+                local = nil
+                local = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+                let access = try local!.bindAccount(userID: "owner-a")
+                if access == .claimRequired { XCTAssertEqual(try local!.bindAccount(userID: "owner-a", claimLegacy: true), .allowed) }
+                XCTAssertEqual(try InventoryArchive(context: local!.context!), expected)
+                XCTAssertEqual(try local!.bindAccount(userID: "owner-b"), .allowed)
+                XCTAssertTrue(local!.fetchHomes().isEmpty)
+                XCTAssertEqual(try local!.bindAccount(userID: "owner-a"), .allowed)
+                XCTAssertEqual(try InventoryArchive(context: local!.context!), expected)
+            }
+        }
+    }
+
+    @MainActor
+    func testCorruptCatalogFailsClosedWithoutCreatingOrClaimingStore() throws {
+        try withDiskFixture { root, legacy, defaults in
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try Data("broken".utf8).write(to: root.appendingPathComponent("catalog.json"))
+            let local = LocalDataManager(accountDefaults: defaults, storageRoot: root, legacyURL: legacy)
+            XCTAssertThrowsError(try local.bindAccount(userID: "owner-a", claimLegacy: true))
+            XCTAssertNil(local.context)
+            XCTAssertNil(local.boundAccountID)
+        }
+    }
+}
+
+
+final class AccountMediaCacheTests: XCTestCase {
+    @MainActor
+    func testMediaCacheSeparatesAccountsOnDiskAndReopensOriginalAccount() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cubby-media-\(UUID().uuidString)")
+        let api = APIClient()
+        defer { api.clearAuthTokens(); try? FileManager.default.removeItem(at: root) }
+        var reads = 0
+        let cache = RemotePhotoCache(root: root, fetch: { _ in
+            reads += 1
+            return Data([UInt8(reads)])
+        })
+        let url = URL(string: "https://synthetic.invalid/photo.jpg")!
+        api.setAuthTokens(token: "synthetic-a", refreshToken: nil)
+        try api.verifyLocalAccount("a", generation: api.sessionGeneration)
+        let a = try await cache.data(for: url, scope: MediaAccountScope(api: api))
+        api.setAuthTokens(token: "synthetic-b", refreshToken: nil)
+        try api.verifyLocalAccount("b", generation: api.sessionGeneration)
+        let b = try await cache.data(for: url, scope: MediaAccountScope(api: api))
+        XCTAssertEqual(a, Data([1]))
+        XCTAssertEqual(b, Data([2]))
+        let reopened = RemotePhotoCache(root: root, fetch: { _ in XCTFail("Must use A's persisted cache"); return Data() })
+        api.setAuthTokens(token: "synthetic-a2", refreshToken: nil)
+        try api.verifyLocalAccount("a", generation: api.sessionGeneration)
+        let restored = try await reopened.data(for: url, scope: MediaAccountScope(api: api))
+        XCTAssertEqual(restored, a)
+        XCTAssertEqual(reads, 2)
+    }
+
+    @MainActor
+    func testLateMediaDownloadCannotPublishOrCacheAfterSwitch() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cubby-media-late-\(UUID().uuidString)")
+        let api = APIClient()
+        defer { api.clearAuthTokens(); try? FileManager.default.removeItem(at: root) }
+        let started = expectation(description: "download started")
+        var response: CheckedContinuation<Data, Error>?
+        let cache = RemotePhotoCache(root: root, fetch: { _ in
+            try await withCheckedThrowingContinuation { continuation in
+                response = continuation
+                started.fulfill()
+            }
+        })
+        api.setAuthTokens(token: "synthetic-a", refreshToken: nil)
+        try api.verifyLocalAccount("a", generation: api.sessionGeneration)
+        let scope = MediaAccountScope(api: api)
+        let request = Task { try await cache.data(for: URL(string: "https://synthetic.invalid/late.jpg")!, scope: scope) }
+        await fulfillment(of: [started], timeout: 3)
+        api.setAuthTokens(token: "synthetic-b", refreshToken: nil)
+        try api.verifyLocalAccount("b", generation: api.sessionGeneration)
+        response?.resume(returning: Data([1]))
+        do { _ = try await request.value; XCTFail("Expected cancellation") }
+        catch is CancellationError { }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
 }

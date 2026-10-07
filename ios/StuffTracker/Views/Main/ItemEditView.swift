@@ -1112,8 +1112,14 @@ struct ItemEditView: View {
         isSaving = true
         attachmentError = nil
         let canUploadAttachments = homeStore.isAuthenticated
+        let generation = APIClient.shared.sessionGeneration
+        let storeGeneration = LocalDataManager.shared.storeGeneration
+        let mediaScope = MediaAccountScope(api: .shared)
         Task {
+          await APIClient.shared.withSessionScope {
             do {
+                try APIClient.shared.requireCurrentSession(generation)
+                guard LocalDataManager.shared.storeGeneration == storeGeneration else { throw CancellationError() }
                 var nextPhotoUrls: [String] = []
                 for attachment in photoAttachments {
                     if let remoteURL = attachment.remoteURL {
@@ -1128,7 +1134,7 @@ struct ItemEditView: View {
                             data: photo.data
                         )
                         if let uploadedURL = URL(string: upload.fileUrl) {
-                            await RemotePhotoCache.shared.store(photo.data, for: uploadedURL)
+                            try await RemotePhotoCache.shared.store(photo.data, for: uploadedURL, scope: mediaScope)
                         }
                         nextPhotoUrls.append(upload.fileUrl)
                     }
@@ -1177,9 +1183,14 @@ struct ItemEditView: View {
                     sortOrder: item.sortOrder
                 )
 
+                try APIClient.shared.requireCurrentSession(generation)
+                guard LocalDataManager.shared.storeGeneration == storeGeneration else { throw CancellationError() }
                 homeStore.updateItem(homeId: homeId, itemId: item.id, body: body)
                 dismiss()
+            } catch is CancellationError {
+                // The original edit remains unsaved in its original screen; never apply it to another account.
             } catch {
+                guard (try? APIClient.shared.requireCurrentSession(generation)) != nil else { return }
                 if isSubscriptionRequired(error) {
                     presentSubscriptionGate()
                 } else {
@@ -1187,6 +1198,7 @@ struct ItemEditView: View {
                 }
                 isSaving = false
             }
+          }
         }
     }
 
@@ -1335,7 +1347,9 @@ private struct RemotePhotoImage: View {
         didFail = false
 
         do {
-            let data = try await RemotePhotoCache.shared.data(for: url)
+            let scope = MediaAccountScope(api: .shared)
+            let data = try await RemotePhotoCache.shared.data(for: url, scope: scope)
+            try scope.requireCurrent()
             guard let loadedImage = UIImage(data: data) else {
                 throw RemotePhotoCacheError.invalidImageData
             }
@@ -1352,21 +1366,39 @@ private enum RemotePhotoCacheError: Error {
     case requestFailed
 }
 
-private actor RemotePhotoCache {
+struct MediaAccountScope {
+    let accountID: String?
+    let generation: UUID
+    let api: APIClient
+    init(api: APIClient) {
+        self.api = api
+        generation = api.sessionGeneration
+        accountID = api.localAccountID
+    }
+    func requireCurrent() throws {
+        try api.requireCurrentSession(generation)
+        guard accountID == api.localAccountID else { throw CancellationError() }
+    }
+}
+
+actor RemotePhotoCache {
     static let shared = RemotePhotoCache()
 
     private let memoryCache = NSCache<NSString, NSData>()
     private let cacheDirectory: URL
     private var inFlight: [String: Task<Data, Error>] = [:]
+    private let fetch: (URL) async throws -> Data
 
-    init() {
-        let baseDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+    init(root: URL? = nil, fetch: ((URL) async throws -> Data)? = nil) {
+        self.fetch = fetch ?? Self.fetchData
+        let baseDirectory = root ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        cacheDirectory = baseDirectory.appendingPathComponent("RemotePhotoCache", isDirectory: true)
+        cacheDirectory = baseDirectory.appendingPathComponent("AccountPhotoCache-v1", isDirectory: true)
     }
 
-    func data(for url: URL) async throws -> Data {
-        let key = Self.cacheKey(for: url)
+    func data(for url: URL, scope: MediaAccountScope) async throws -> Data {
+        try scope.requireCurrent()
+        let key = Self.cacheKey(for: url, accountID: scope.accountID)
         if let cachedData = memoryCache.object(forKey: key as NSString) {
             return cachedData as Data
         }
@@ -1377,16 +1409,19 @@ private actor RemotePhotoCache {
         }
 
         if let task = inFlight[key] {
-            return try await task.value
+            let data = try await task.value
+            try scope.requireCurrent()
+            return data
         }
 
         let task = Task<Data, Error> {
-            try await Self.fetchData(from: url)
+            try await fetch(url)
         }
         inFlight[key] = task
 
         do {
             let data = try await task.value
+            try scope.requireCurrent()
             inFlight[key] = nil
             cache(data, forKey: key)
             return data
@@ -1396,8 +1431,9 @@ private actor RemotePhotoCache {
         }
     }
 
-    func store(_ data: Data, for url: URL) {
-        let key = Self.cacheKey(for: url)
+    func store(_ data: Data, for url: URL, scope: MediaAccountScope) throws {
+        try scope.requireCurrent()
+        let key = Self.cacheKey(for: url, accountID: scope.accountID)
         inFlight[key]?.cancel()
         inFlight[key] = nil
         cache(data, forKey: key)
@@ -1406,8 +1442,8 @@ private actor RemotePhotoCache {
     private func cache(_ data: Data, forKey key: String) {
         guard !data.isEmpty else { return }
         memoryCache.setObject(data as NSData, forKey: key as NSString)
-        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        try? data.write(to: fileURL(forKey: key), options: .atomic)
+        try? FileManager.default.createDirectory(at: fileURL(forKey: key).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: fileURL(forKey: key), options: [.atomic, .completeFileProtection])
     }
 
     private func fileURL(forKey key: String) -> URL {
@@ -1415,7 +1451,11 @@ private actor RemotePhotoCache {
     }
 
     private static func fetchData(from url: URL) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(from: url)
         if let httpResponse = response as? HTTPURLResponse,
            !(200..<300).contains(httpResponse.statusCode) {
             throw RemotePhotoCacheError.requestFailed
@@ -1423,10 +1463,12 @@ private actor RemotePhotoCache {
         return data
     }
 
-    private static func cacheKey(for url: URL) -> String {
+    private static func cacheKey(for url: URL, accountID: String?) -> String {
         let stableIdentity = stableIdentity(for: url)
         let digest = SHA256.hash(data: Data(stableIdentity.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
+        let account = SHA256.hash(data: Data((accountID.map { "account:\($0)" } ?? "guest").utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return account + "/" + digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private static func stableIdentity(for url: URL) -> String {

@@ -1,61 +1,188 @@
 import Foundation
 import SwiftData
+import Combine
 
 @MainActor
-final class LocalDataManager {
+final class LocalDataManager: ObservableObject {
     static let shared = LocalDataManager()
-    
+
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
-    
+    private var legacyContainer: ModelContainer?
+    private var memoryStores: [String: ModelContainer] = [:]
     private let accountDefaults: UserDefaults
+    private let inMemory: Bool
+    private let storageRoot: URL
+    private let legacyURL: URL?
+    private var startupError: Error?
+    private(set) var boundAccountID: String?
+    @Published private(set) var storeGeneration = UUID()
     static let accountOwnerKey = "local_inventory_owner_user_id_v1"
 
-    init(inMemory: Bool = false, accountDefaults: UserDefaults = .standard) {
+    // One atomic catalog publishes both the verified store and legacy ownership.
+    // Unpublished attempt directories are never reused or removed automatically.
+    private struct Catalog: Codable {
+        var version = 1
+        var accounts: [String: String] = [:]
+        var legacyClaimedBy: String?
+    }
+    private var catalog = Catalog()
+    enum MigrationCheckpoint { case archived, imported, published }
+    var migrationCheckpoint: ((MigrationCheckpoint) throws -> Void)?
+    enum AccountAccess: Equatable { case allowed, claimRequired }
+
+    init(inMemory: Bool = false, accountDefaults: UserDefaults = .standard,
+         storageRoot: URL? = nil, legacyURL: URL? = nil) {
         self.accountDefaults = accountDefaults
-        setupContainer(inMemory: inMemory)
+        self.inMemory = inMemory
+        self.storageRoot = storageRoot ?? (inMemory
+            ? FileManager.default.temporaryDirectory.appendingPathComponent("cubby-test-\(UUID().uuidString)")
+            : URL.applicationSupportDirectory.appendingPathComponent("CubbyAccounts", isDirectory: true))
+        self.legacyURL = legacyURL
+        do {
+            if !inMemory, FileManager.default.fileExists(atPath: catalogURL.path) {
+                catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: catalogURL))
+                guard catalog.version == 1 else { throw CocoaError(.fileReadCorruptFile) }
+            }
+            // Existing installations stay locked until their server identity is verified.
+            if inMemory || (!accountDefaults.bool(forKey: AuthStore.completedAuthenticationDefaultsKey)
+                            && accountDefaults.string(forKey: Self.accountOwnerKey) == nil
+                            && catalog.accounts.isEmpty) {
+                let legacy = try openLegacy()
+                modelContainer = legacy
+                modelContext = ModelContext(legacy)
+                modelContext?.autosaveEnabled = false
+            }
+        } catch { startupError = error }
     }
 
-    var boundAccountID: String? { accountDefaults.string(forKey: Self.accountOwnerKey) }
+    private var catalogURL: URL { storageRoot.appendingPathComponent("catalog.json") }
+    private var archiveURL: URL { storageRoot.appendingPathComponent("legacy-recovery.json") }
+    private var schema: Schema { Schema([LocalHome.self, LocalLocation.self, LocalItem.self, SyncOperation.self]) }
 
-    enum AccountAccess: Equatable { case allowed, claimRequired, differentAccount }
+    private func makeContainer(url: URL?) throws -> ModelContainer {
+        let configuration: ModelConfiguration
+        if inMemory {
+            configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        } else if let url {
+            configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        } else {
+            // Keep the shipped default.store path exactly; never repurpose it.
+            configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+        }
+        return try ModelContainer(for: schema, configurations: [configuration])
+    }
 
-    // Count every entity, including tombstones and old queued operations. A failed
-    // read is not an empty store and must never permit reassignment.
-    func bindAccount(userID: String, claimLegacy: Bool = false) throws -> AccountAccess {
-        guard let context = modelContext else { throw CocoaError(.fileReadUnknown) }
-        let hasData = try context.fetchCount(FetchDescriptor<LocalHome>()) > 0
-            || context.fetchCount(FetchDescriptor<LocalLocation>()) > 0
-            || context.fetchCount(FetchDescriptor<LocalItem>()) > 0
-            || context.fetchCount(FetchDescriptor<SyncOperation>()) > 0
-        if let owner = boundAccountID, owner != userID, hasData { return .differentAccount }
-        if boundAccountID == nil, hasData, !claimLegacy { return .claimRequired }
-        accountDefaults.set(userID, forKey: Self.accountOwnerKey)
+    private func openLegacy() throws -> ModelContainer {
+        if let legacyContainer { return legacyContainer }
+        let container = try makeContainer(url: legacyURL)
+        legacyContainer = container
+        return container
+    }
+
+    func deactivateAccount() {
+        // Saves at every editing boundary already occurred. Disable autosave so a
+        // detached view/model cannot later persist into a different account.
+        modelContext?.autosaveEnabled = false
+        modelContext = nil
+        modelContainer = nil
+        boundAccountID = nil
+        storeGeneration = UUID()
+    }
+
+    private func legacyArchive() throws -> InventoryArchive {
+        if let startupError { throw startupError }
+        if let modelContext, boundAccountID == nil { try modelContext.save() }
+        let archive = try InventoryArchive(context: ModelContext(openLegacy()))
+        if !inMemory, FileManager.default.fileExists(atPath: archiveURL.path) {
+            let saved = try JSONDecoder().decode(InventoryArchive.self, from: Data(contentsOf: archiveURL))
+            // A changed source requires review, never silently overwrite its backup.
+            guard saved == archive else { throw CocoaError(.fileReadCorruptFile) }
+        }
+        return archive
+    }
+
+    func hasLegacyRecovery(for userID: String) throws -> Bool {
+        guard catalog.legacyClaimedBy == nil else { return false }
+        if let owner = accountDefaults.string(forKey: Self.accountOwnerKey), owner != userID { return false }
+        return try !legacyArchive().isEmpty
+    }
+
+    func recoveryData(for userID: String) throws -> Data {
+        guard try hasLegacyRecovery(for: userID) else { throw CocoaError(.fileReadNoPermission) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(legacyArchive())
+    }
+
+    // Bind only after /auth/me or provider sign-in has verified this stable user ID.
+    // Shared-home owner IDs and email addresses are never evidence of ownership.
+    func bindAccount(userID: String, claimLegacy: Bool = false, skipLegacy: Bool = false) throws -> AccountAccess {
+        if let startupError { throw startupError }
+        guard !userID.isEmpty else { throw CocoaError(.fileReadNoPermission) }
+        if let modelContext { try modelContext.save() }
+        deactivateAccount()
+        let pendingLegacy = try hasLegacyRecovery(for: userID)
+        let provenOwner = accountDefaults.string(forKey: Self.accountOwnerKey) == userID
+        let shouldImport = pendingLegacy && !skipLegacy && (provenOwner || claimLegacy)
+        if pendingLegacy && !skipLegacy && !shouldImport && catalog.accounts[userID] == nil { return .claimRequired }
+
+        let container: ModelContainer
+        if let slot = catalog.accounts[userID], !shouldImport {
+            container = try openAccount(slot: slot)
+        } else {
+            var archive: InventoryArchive?
+            if shouldImport {
+                let source = try legacyArchive()
+                if !inMemory {
+                    try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
+                    if !FileManager.default.fileExists(atPath: archiveURL.path) {
+                        try JSONEncoder().encode(source).write(to: archiveURL, options: [.atomic, .completeFileProtection])
+                    }
+                }
+                try migrationCheckpoint?(.archived)
+                archive = source
+                if let existing = catalog.accounts[userID] {
+                    archive = try source.merging(with: InventoryArchive(context: ModelContext(openAccount(slot: existing))))
+                }
+            }
+            let slot = UUID().uuidString
+            let directory = storageRoot.appendingPathComponent(slot, isDirectory: true)
+            if !inMemory { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+            container = try makeContainer(url: directory.appendingPathComponent("inventory.store"))
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            if let archive { try archive.restore(into: context) }
+            else { try context.save() }
+            try migrationCheckpoint?(.imported)
+            var next = catalog
+            next.accounts[userID] = slot
+            if shouldImport { next.legacyClaimedBy = userID }
+            if !inMemory { try JSONEncoder().encode(next).write(to: catalogURL, options: [.atomic, .completeFileProtection]) }
+            memoryStores[slot] = inMemory ? container : nil
+            catalog = next
+            try migrationCheckpoint?(.published)
+        }
+        modelContainer = container
+        modelContext = ModelContext(container)
+        modelContext?.autosaveEnabled = false
+        boundAccountID = userID
+        storeGeneration = UUID()
         return .allowed
     }
-    
-    private func setupContainer(inMemory: Bool) {
-        let schema = Schema([
-            LocalHome.self,
-            LocalLocation.self,
-            LocalItem.self,
-            SyncOperation.self
-        ])
-        
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
-        
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            modelContext = ModelContext(modelContainer!)
-        } catch {
-            print("Failed to create ModelContainer: \(error)")
+
+    private func openAccount(slot: String) throws -> ModelContainer {
+        guard UUID(uuidString: slot) != nil else { throw CocoaError(.fileReadCorruptFile) }
+        if let container = memoryStores[slot] { return container }
+        let url = storageRoot.appendingPathComponent(slot).appendingPathComponent("inventory.store")
+        guard !inMemory, FileManager.default.fileExists(atPath: url.path) else {
+            throw CocoaError(.fileNoSuchFile) // Never replace a missing/corrupt account with an empty store.
         }
+        return try makeContainer(url: url)
     }
-    
-    var context: ModelContext? {
-        modelContext
-    }
-    
+
+    var context: ModelContext? { modelContext }
+
     // MARK: - Homes
     
     func fetchHomes() -> [LocalHome] {

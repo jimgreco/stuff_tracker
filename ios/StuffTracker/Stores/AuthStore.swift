@@ -128,6 +128,7 @@ final class AuthStore: ObservableObject {
 
     func signOut() {
         api.clearAuthTokens()
+        local.deactivateAccount()
         currentUser = nil
         pendingInventoryClaim = nil
         pendingResponse = nil
@@ -153,6 +154,7 @@ final class AuthStore: ObservableObject {
     func acceptVerifiedUser(_ user: User, response: AuthResponse? = nil) throws {
         Self.markAuthenticationCompleted()
         hasCompletedAuthentication = true
+        api.beginAccountTransition()
         currentUser = nil
         pendingInventoryClaim = nil
         pendingResponse = nil
@@ -164,17 +166,22 @@ final class AuthStore: ObservableObject {
             pendingInventoryClaim = user
             pendingResponse = response
             pendingGeneration = api.sessionGeneration
-        case .differentAccount:
-            api.clearAuthTokens()
-            errorMessage = "This device has inventory saved for another account. Sign in with that account to access it. Your saved inventory and unsynced changes have been preserved."
         }
     }
 
     func confirmInventoryClaim() {
+        finishInventoryRecovery(claim: true)
+    }
+
+    func continueWithoutLegacyInventory() {
+        finishInventoryRecovery(claim: false)
+    }
+
+    private func finishInventoryRecovery(claim: Bool) {
         guard let user = pendingInventoryClaim, let generation = pendingGeneration else { return }
         do {
             try api.requireCurrentSession(generation)
-            guard try local.bindAccount(userID: user.id, claimLegacy: true) == .allowed else {
+            guard try local.bindAccount(userID: user.id, claimLegacy: claim, skipLegacy: !claim) == .allowed else {
                 throw CocoaError(.fileReadNoPermission)
             }
             try activate(user, response: pendingResponse)
@@ -182,8 +189,29 @@ final class AuthStore: ObservableObject {
             pendingResponse = nil
             pendingGeneration = nil
         } catch {
-            errorMessage = "Could not open the saved inventory. Sign in again. Your local data is unchanged."
+            errorMessage = "Recovery could not complete. Saved inventory and account data are preserved. If records overlap, export the recovery copy for review; nothing is merged or overwritten."
         }
+    }
+
+    var hasLegacyRecovery: Bool {
+        guard let user = currentUser else { return false }
+        return (try? local.hasLegacyRecovery(for: user.id)) ?? false
+    }
+
+    func beginInventoryRecovery() {
+        guard let user = currentUser, hasLegacyRecovery else { return }
+        api.beginAccountTransition()
+        local.deactivateAccount()
+        currentUser = nil
+        pendingInventoryClaim = user
+        pendingGeneration = api.sessionGeneration
+        pendingResponse = nil
+    }
+
+    func inventoryRecoveryData() throws -> Data {
+        guard let user = pendingInventoryClaim, let generation = pendingGeneration else { throw CancellationError() }
+        try api.requireCurrentSession(generation)
+        return try local.recoveryData(for: user.id)
     }
 
     private func activate(_ user: User, response: AuthResponse?) throws {

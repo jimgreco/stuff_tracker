@@ -1,4 +1,9 @@
 import SwiftUI
+import Combine
+
+private enum LocalSyncScope {
+    @TaskLocal static var storeGeneration: UUID?
+}
 
 private enum SyncUploadError: LocalizedError {
     case missingParent(locationName: String)
@@ -32,40 +37,55 @@ final class SyncManager: ObservableObject {
 
     private let api: APIClient
     private let local: LocalDataManager
-    private var isSyncInFlight = false
+    private var activeRun: UUID?
+    private var accountObserver: AnyCancellable?
 
     init(api: APIClient = .shared, local: LocalDataManager? = nil) {
         self.api = api
         self.local = local ?? .shared
         updatePendingSyncCount()
+        accountObserver = self.local.$storeGeneration.sink { [weak self] _ in
+            self?.activeRun = nil
+            self?.isSyncing = false
+            self?.syncError = nil
+            self?.lastSyncDate = nil
+            self?.pendingSyncCount = 0
+            self?.deferredServerChangeCount = 0
+        }
     }
 
     private func requireSyncSession() throws {
         try api.requireCurrentSession()
+        if let expected = LocalSyncScope.storeGeneration, expected != local.storeGeneration { throw CancellationError() }
         guard api.hasToken, let userID = api.localAccountID, userID == local.boundAccountID else {
             throw CancellationError()
         }
     }
 
     private func runSync(_ operation: () async throws -> Void) async {
-        guard !isSyncInFlight, (try? requireSyncSession()) != nil else { return }
-        isSyncInFlight = true
+        guard activeRun == nil, (try? requireSyncSession()) != nil else { return }
+        let run = UUID()
+        activeRun = run
         isSyncing = true
         syncError = nil
         defer {
-            isSyncing = false
-            isSyncInFlight = false
-            updatePendingSyncCount()
+            if activeRun == run {
+                isSyncing = false
+                activeRun = nil
+                updatePendingSyncCount()
+            }
         }
-        await api.withSessionScope {
-            do {
-                try await operation()
-                try requireSyncSession()
-                if syncError == nil { lastSyncDate = Date() }
-            } catch is CancellationError {
-                // Sign-out/account changes invalidate late results; preserve work.
-            } catch {
-                syncError = "Sync failed: \(error.localizedDescription)"
+        await LocalSyncScope.$storeGeneration.withValue(local.storeGeneration) {
+            await api.withSessionScope {
+                do {
+                    try await operation()
+                    try requireSyncSession()
+                    if syncError == nil { lastSyncDate = Date() }
+                } catch is CancellationError {
+                    // The original account keeps pending work; the new one may sync now.
+                } catch {
+                    if (try? requireSyncSession()) != nil { syncError = "Sync failed: \(error.localizedDescription)" }
+                }
             }
         }
     }
@@ -124,6 +144,7 @@ final class SyncManager: ObservableObject {
             do {
                 try await pushPendingLocations(homeId: homeId)
             } catch {
+                try requireSyncSession()
                 syncError = "Failed to sync locations: \(error.localizedDescription)"
             }
         }
@@ -166,6 +187,7 @@ final class SyncManager: ObservableObject {
                 local.save()
             }
         } catch {
+            guard (try? requireSyncSession()) != nil else { return }
             syncError = "Failed to sync home '\(home.name)': \(error.localizedDescription)"
         }
     }
@@ -176,6 +198,7 @@ final class SyncManager: ObservableObject {
             try await upsertLocation(loc)
             try requireSyncSession()
         } catch {
+            guard (try? requireSyncSession()) != nil else { return }
             syncError = "Failed to sync location '\(loc.name)': \(error.localizedDescription)"
         }
     }
@@ -186,6 +209,7 @@ final class SyncManager: ObservableObject {
             try await upsertItem(item)
             try requireSyncSession()
         } catch {
+            guard (try? requireSyncSession()) != nil else { return }
             syncError = "Failed to sync item '\(item.name)': \(error.localizedDescription) \(itemSyncContext(item))"
         }
     }
@@ -205,7 +229,7 @@ final class SyncManager: ObservableObject {
                 }
                 try requireSyncSession()
                 local.hardDelete(home: home)
-            } catch { syncError = "A deletion is still waiting to sync." }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
         }
         for loc in local.fetchDeletedLocations() {
             do {
@@ -214,7 +238,7 @@ final class SyncManager: ObservableObject {
                 }
                 try requireSyncSession()
                 local.hardDelete(location: loc)
-            } catch { syncError = "A deletion is still waiting to sync." }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
         }
         for item in local.fetchDeletedItems() {
             do {
@@ -223,7 +247,7 @@ final class SyncManager: ObservableObject {
                 }
                 try requireSyncSession()
                 local.hardDelete(item: item)
-            } catch { syncError = "A deletion is still waiting to sync." }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
         }
     }
 

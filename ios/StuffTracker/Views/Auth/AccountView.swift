@@ -288,6 +288,14 @@ struct AccountView: View {
 
         subscriptionSection
 
+        if authStore.hasLegacyRecovery {
+            Section("Saved inventory") {
+                Button("Review older inventory") { authStore.beginInventoryRecovery() }
+                Text("Recover or export inventory retained from an older version. Your current account store stays saved.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+
         Section("Sync") {
             HStack {
                 Text("Status")
@@ -426,9 +434,11 @@ struct AccountView: View {
         isDeletingAccount = true
         defer { isDeletingAccount = false }
         do {
+            let generation = APIClient.shared.sessionGeneration
             try await APIClient.shared.deleteAccount()
-            authStore.signOut()
+            try APIClient.shared.requireCurrentSession(generation)
             LocalDataManager.shared.clearAllData()
+            authStore.signOut()
             homeStore.reloadFromLocal()
             await subscriptionStore.refresh()
             dismiss()
