@@ -1,3 +1,4 @@
+import { AttachmentRetiredError } from './lib/attachmentGC';
 import 'express-async-errors';
 import * as fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -77,6 +78,10 @@ export function createApp() {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof AttachmentRetiredError) {
+      res.status(409).json({ error: err.message, code: 'attachment_retired' });
+      return;
+    }
     if (err instanceof ZodError) {
       res.status(400).json({ error: 'Validation error', details: err.errors });
       return;

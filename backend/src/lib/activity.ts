@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { AuthRequest } from '../middleware/auth';
 import { pool } from '../db/pool';
+import { lockAttachmentReferences } from './attachmentGC';
 
 const MUTATION_ID_HEADER = 'x-cubbylog-mutation-id';
 const OCCURRED_AT_HEADER = 'x-cubbylog-occurred-at';
@@ -11,7 +12,8 @@ export async function withActivityTransaction<T>(
 ): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+    await lockAttachmentReferences(client);
     await setActivityContext(client, req);
     const result = await work(client);
     await client.query('COMMIT');

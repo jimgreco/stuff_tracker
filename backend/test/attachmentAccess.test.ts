@@ -32,6 +32,8 @@ test('item writes cannot turn another home attachment URL into a fresh read gran
   let storedPhotos: string[] = [];
   let s3Reads = 0;
   let writes = 0;
+  let retired = false;
+  let locked = false;
   pool.query = (async (sql: string, values: unknown[] = []) => {
     if (sql === 'SELECT tokens_revoked_before FROM users WHERE id = $1') {
       assert.equal(values[0], 'synthetic-owner');
@@ -51,6 +53,12 @@ test('item writes cannot turn another home attachment URL into a fresh read gran
   }) as typeof pool.query;
   pool.connect = (async () => ({
     query: async (sql: string) => {
+      if (sql.startsWith('BEGIN')) locked = false;
+      if (sql.includes('pg_advisory_xact_lock')) locked = true;
+      if (sql.includes('FROM attachment_gc_tombstones')) {
+        assert.ok(locked);
+        return { rows: retired ? [{ object_key: 'synthetic-retired-key' }] : [] };
+      }
       if (sql.includes('INSERT INTO items') || sql.includes('UPDATE items')) {
         writes++;
         return { rows: [{ id: itemId, home_id: home, photo_urls: storedPhotos, documents: [] }] };
@@ -107,4 +115,13 @@ test('item writes cannot turn another home attachment URL into a fresh read gran
   assert.equal(response.status, 200);
   response = await write('PATCH', { photo_urls: [url(source, 'unrelated.jpg')] });
   assert.equal(response.status, 400);
+
+  retired = true;
+  const writesBeforeReservation = writes;
+  for (const method of ['POST', 'PATCH']) {
+    response = await write(method, { name: 'Late save', photo_urls: [url(home)] });
+    assert.equal(response.status, 409);
+    assert.equal(JSON.parse(response.text).code, 'attachment_retired');
+  }
+  assert.equal(writes, writesBeforeReservation);
 });

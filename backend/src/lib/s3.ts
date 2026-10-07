@@ -1,9 +1,11 @@
 import { randomUUID } from 'crypto';
-import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { PutObjectCommandInput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getIntegerEnv } from './env';
 import { pool } from '../db/pool';
+
+const { deleteUnreferenced } = require('../../scripts/lib/attachment-gc.cjs');
 
 const attachmentKeys = require('../../scripts/lib/attachment-keys.cjs') as {
   attachmentKeyFromUrl(value: string): string | undefined;
@@ -132,16 +134,8 @@ export async function deleteHomeAttachments(homeIds: string[]): Promise<void> {
         Prefix: `homes/${homeId}/`,
         ContinuationToken: continuationToken,
       }));
-      const objects = (page.Contents ?? []).flatMap(({ Key }) => Key && !referenced.has(Key) ? [{ Key }] : []);
-      if (objects.length) {
-        const result = await client().send(new DeleteObjectsCommand({
-          Bucket: bucket,
-          Delete: { Objects: objects, Quiet: true },
-        }));
-        if (result.Errors?.length) {
-          throw new Error(`Could not delete ${result.Errors.length} account attachment objects`);
-        }
-      }
+      const keys = (page.Contents ?? []).flatMap(({ Key }) => Key && !referenced.has(Key) ? [Key] : []);
+      await deleteUnreferenced({ pool, s3: client(), bucket, keys, onlyDeletedHomes: true });
       continuationToken = page.NextContinuationToken;
     } while (continuationToken);
   }

@@ -20,6 +20,7 @@ import {
   type QuotaDecision,
 } from '../lib/entitlements';
 import { withActivityTransaction } from '../lib/activity';
+import { assertAttachmentsAvailable } from '../lib/attachmentGC';
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -104,6 +105,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   }
 
   const item = await withActivityTransaction(req, async (client) => {
+    await assertAttachmentsAvailable(client, { photo_urls, documents });
     const { rows } = await client.query(
       `INSERT INTO items (
        home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
@@ -226,6 +228,7 @@ router.patch('/:itemId', async (req: AuthRequest, res: Response) => {
   values.push(itemId);
 
   const item = await withActivityTransaction(req, async (client) => {
+    await assertAttachmentsAvailable(client, { photo_urls: updates.photo_urls, documents: updates.documents });
     const { rows } = await client.query(
       `UPDATE items SET ${fields.join(', ')}
        WHERE id = $${i++} RETURNING *`,

@@ -1,5 +1,6 @@
-const { DeleteObjectsCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
+const { ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
+const { deleteUnreferenced } = require('./lib/attachment-gc.cjs');
 const { referencedAttachmentKeys } = require('./lib/attachment-keys.cjs');
 
 async function cleanupDeletedHomeAttachments({ s3, pool, bucket, minAgeHours = 24, now = Date.now() }) {
@@ -22,13 +23,7 @@ async function cleanupDeletedHomeAttachments({ s3, pool, bucket, minAgeHours = 2
       return homeId && !existingHomes.has(homeId) && !referenced.has(Key)
         && LastModified instanceof Date && LastModified.getTime() < cutoff ? [{ Key }] : [];
     });
-    if (objects.length) {
-      const result = await s3.send(new DeleteObjectsCommand({
-        Bucket: bucket, Delete: { Objects: objects, Quiet: true },
-      }));
-      if (result.Errors?.length) throw new Error(`Could not delete ${result.Errors.length} attachments from deleted homes`);
-      removed += objects.length;
-    }
+    removed += await deleteUnreferenced({ pool, s3, bucket, keys: objects.map(({ Key }) => Key), onlyDeletedHomes: true });
     continuationToken = page.NextContinuationToken;
   } while (continuationToken);
   return removed;

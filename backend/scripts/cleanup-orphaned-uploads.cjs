@@ -1,5 +1,6 @@
-const { DeleteObjectsCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
+const { ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
+const { deleteUnreferenced } = require('./lib/attachment-gc.cjs');
 const { referencedAttachmentKeys } = require('./lib/attachment-keys.cjs');
 
 async function cleanupOrphanedUploads({ s3, pool, bucket, dryRun = true, minAgeHours = 24, now = Date.now() }) {
@@ -19,18 +20,7 @@ async function cleanupOrphanedUploads({ s3, pool, bucket, dryRun = true, minAgeH
   } while (ContinuationToken);
   if (dryRun) return { candidates: orphaned.length, removed: 0 };
 
-  let removed = 0;
-  for (let i = 0; i < orphaned.length; i += 1000) {
-    // A previously orphaned upload may have been attached while listing S3.
-    const currentReferences = await readReferences();
-    const batch = orphaned.slice(i, i + 1000).filter((key) => !currentReferences.has(key));
-    if (!batch.length) continue;
-    const result = await s3.send(new DeleteObjectsCommand({
-      Bucket: bucket, Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
-    }));
-    if (result.Errors?.length) throw new Error(`Could not delete ${result.Errors.length} orphaned attachments`);
-    removed += batch.length;
-  }
+  const removed = await deleteUnreferenced({ pool, s3, bucket, keys: orphaned });
   return { candidates: orphaned.length, removed };
 }
 

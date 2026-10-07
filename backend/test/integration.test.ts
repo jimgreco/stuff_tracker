@@ -340,7 +340,64 @@ test('shared-home activity is transactional, scoped, stable, idempotent, and red
   assert.deepEqual(deletion.rows[0], { entity_name: 'Router', summary: 'Deleted Router' });
 });
 
+test('attachment adoption and cleanup serialize both race orders against real Postgres', { skip: !runDatabaseIntegrationTests }, async () => {
+  await resetDatabase();
+  const { lockAttachmentReferences, assertAttachmentsAvailable, deleteUnreferenced } = require('../scripts/lib/attachment-gc.cjs');
+  const user = (await pool.query("INSERT INTO users (email, name) VALUES ('gc-race@example.test', 'Synthetic GC') RETURNING id")).rows[0];
+  const home = (await pool.query("INSERT INTO homes (owner_id, name) VALUES ($1, 'GC race') RETURNING id", [user.id])).rows[0];
+  const adopted = `homes/${home.id}/items/photos/adopted.jpg`;
+  const retired = `homes/${home.id}/items/photos/retired.jpg`;
+  const writer = await pool.connect();
+  let deletes = 0;
+  try {
+    await writer.query('BEGIN');
+    await lockAttachmentReferences(writer);
+    await assertAttachmentsAvailable(writer, { photo_urls: [adopted] });
+    await writer.query("INSERT INTO items (home_id, name, photo_urls) VALUES ($1, 'Adopted first', $2)", [home.id, [adopted]]);
+    const collection = deleteUnreferenced({ pool, bucket: 'synthetic', keys: [adopted], s3: { send: async () => { deletes++; return {}; } } });
+    let waiting = false;
+    for (let tries = 0; tries < 100; tries++) {
+      waiting = (await pool.query("SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND classid = 724193 AND NOT granted")).rows.length > 0;
+      if (waiting) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(waiting, 'collector waits behind the writer transaction');
+    await writer.query('COMMIT');
+    assert.equal(await collection, 0);
+    assert.equal(deletes, 0, 'committed late references prevent deletion');
+
+    // S3 is deliberately held after the reservation commit. New adoption must
+    // already fail, including during a provider timeout/ambiguous outcome.
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    let finishS3!: (value: object) => void;
+    const pendingS3 = new Promise<object>((resolve) => { finishS3 = resolve; });
+    const deleting = deleteUnreferenced({ pool, bucket: 'synthetic', keys: [retired], s3: { send: async () => {
+      markStarted();
+      return pendingS3;
+    } } });
+    await started;
+    await writer.query('BEGIN');
+    await lockAttachmentReferences(writer);
+    await assert.rejects(assertAttachmentsAvailable(writer, { photo_urls: [retired] }), /no longer available/);
+    await writer.query('ROLLBACK');
+    finishS3({ Errors: [{ Code: 'SyntheticFailure' }] });
+    await assert.rejects(deleting, /Could not delete 1/);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM attachment_gc_tombstones WHERE object_key = $1', [retired])).rows[0].count, 1);
+    assert.equal(await deleteUnreferenced({ pool, bucket: 'synthetic', keys: [retired], s3: { send: async () => { deletes++; return {}; } } }), 1);
+    assert.equal(deletes, 1, 'retry completes the reserved deletion');
+    await assert.rejects(assertAttachmentsAvailable(writer, { documents: [{ url: retired }] }), /no longer available/);
+    assert.equal((await pool.query('SELECT photo_urls FROM items')).rows[0].photo_urls[0], adopted);
+  } finally {
+    await writer.query('ROLLBACK');
+    writer.release();
+  }
+});
+
 async function resetDatabase() {
+  const target = new URL(process.env.DATABASE_URL!);
+  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(target.hostname)
+    && target.pathname.endsWith('_test'), 'Database resets require a local explicitly named _test database');
   await pool.query('DROP SCHEMA public CASCADE');
   await pool.query('CREATE SCHEMA public');
 
