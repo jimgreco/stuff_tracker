@@ -200,7 +200,7 @@ Set `OPERATIONS_ALERT_WEBHOOK_URL` to post unhandled production backend errors t
 
 The backend also posts `http_error_rate` alerts when production 5xx responses cross the rolling threshold. Defaults are `ERROR_RATE_ALERT_WINDOW_MS=300000`, `ERROR_RATE_ALERT_MIN_REQUESTS=20`, `ERROR_RATE_ALERT_MIN_5XX=5`, `ERROR_RATE_ALERT_5XX_PERCENT=20`, and `ERROR_RATE_ALERT_COOLDOWN_MS=900000`. Tune these values if normal low-traffic behavior creates noise.
 
-The same `OPERATIONS_ALERT_WEBHOOK_URL` GitHub secret enables workflow failure alerts for deploy, production health, production backup, production ops checks, and restore drills. If the secret is unset, those workflows emit a notice and continue without sending an alert.
+The same `OPERATIONS_ALERT_WEBHOOK_URL` GitHub secret enables workflow failure alerts for deploy, production health, production backup, production ops checks, and restore drills. The shared notification action now fails explicitly when the destination is absent or delivery fails. Sends require HTTPS, reject redirects, time out after 10 seconds, and never print the URL, provider body, or raw exception. No automatic retry is used because the destination may not deduplicate alerts.
 
 ## Credential Rotation
 
@@ -432,3 +432,40 @@ Delete orphaned S3 uploads older than `ORPHANED_UPLOAD_MIN_AGE_HOURS` by setting
 ```sh
 DELETE_ORPHANED_UPLOADS=true npm run storage:cleanup
 ```
+
+## Monitoring release readiness — October 7, 2026
+
+The observed production app is healthy: independent read-only probes of
+`https://cubbylog.com/health/live` and `/health` passed on October 7. The successful
+[scheduled run 37586017232](https://github.com/jimgreco/stuff_tracker/actions/runs/37586017232)
+did **not** probe production: it emitted the missing-URL notice. GitHub secret
+names confirm both `PRODUCTION_BASE_URL` and `OPERATIONS_ALERT_WEBHOOK_URL` were absent.
+
+This monitoring-only change removes that false success. Both endpoints are
+checked independently; `/health` must report both `ok=true` and `db=true`.
+Set repository variable `PRODUCTION_BASE_URL=https://cubbylog.com`; the existing
+secret name is accepted as a fallback for compatible installations. Missing or
+invalid configuration fails. A separate always-run coverage step reports a
+missing webhook even if probes pass. PRs run synthetic tests without production
+secrets; live probes execute only for this repository's main branch. A failed
+probe or missing coverage does not trigger an application restart or cleanup.
+
+Before publication, the parent must select/approve the alert destination and
+secure secret entry, authorize configuration of the URL variable, and approve
+one controlled test notification and its recipient confirmation. Until then,
+alert delivery is unverified. Publishing without the configuration will
+intentionally leave scheduled monitoring red. GitHub configuration does not
+configure the backend runtime alert variable; that is a separate host change
+owned by the app lane. No server environment or native code changes are included.
+
+Release as a reviewed workflow-only PR based on `5854a24`, preserving the native
+lane. Follow the established merge `[skip ci]` convention and inspect current
+workflow triggers to avoid accidental native upload; then dispatch only
+`production-health.yml` on the exact merged SHA after alert authorization.
+The sender is shared by existing operational workflows, so failures in those
+workflows will also expose a missing destination instead of a skipped send.
+No backup, cleanup, DB-hardening, restore, or deploy workflow dispatch is included.
+
+Validation: eight synthetic monitoring/sender tests; backend suite 88 passed,
+four pre-existing database integration skips; TypeScript build; actionlint.
+No real alert was sent.

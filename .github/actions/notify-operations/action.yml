@@ -26,44 +26,4 @@ runs:
         ALERT_TITLE: ${{ inputs.title }}
         ALERT_SUMMARY: ${{ inputs.summary }}
         ALERT_LEVEL: ${{ inputs.level }}
-      run: |
-        set -euo pipefail
-        node <<'NODE'
-        async function main() {
-          const url = process.env.WEBHOOK_URL?.trim();
-          if (!url) {
-            console.log('::notice title=Operations alert skipped::Set OPERATIONS_ALERT_WEBHOOK_URL to enable workflow failure alerts.');
-            return;
-          }
-
-          const payload = {
-            timestamp: new Date().toISOString(),
-            service: 'stuff-tracker',
-            event: 'github_workflow_alert',
-            level: process.env.ALERT_LEVEL || 'error',
-            title: process.env.ALERT_TITLE,
-            summary: process.env.ALERT_SUMMARY,
-            repository: process.env.GITHUB_REPOSITORY,
-            workflow: process.env.GITHUB_WORKFLOW,
-            ref: process.env.GITHUB_REF_NAME,
-            sha: process.env.GITHUB_SHA,
-            run_id: process.env.GITHUB_RUN_ID,
-            run_url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
-          };
-
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            throw new Error(`operations webhook returned HTTP ${response.status}`);
-          }
-        }
-
-        main().catch((err) => {
-          console.error(err);
-          process.exit(1);
-        });
-        NODE
+      run: node "$GITHUB_ACTION_PATH/../../scripts/notify-operations.cjs"

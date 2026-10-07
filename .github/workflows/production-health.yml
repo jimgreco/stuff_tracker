@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - .github/workflows/production-health.yml
+      - .github/scripts/*production-health*
+      - .github/scripts/*operations*
+      - .github/actions/notify-operations/**
   pull_request:
     branches: [main]
     paths:
       - .github/workflows/production-health.yml
+      - .github/scripts/*production-health*
+      - .github/scripts/*operations*
+      - .github/actions/notify-operations/**
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -17,62 +23,40 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: node --test .github/scripts/production-health.test.cjs .github/scripts/operations.test.cjs
+
   health:
+    if: github.repository == 'jimgreco/stuff_tracker' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      PRODUCTION_BASE_URL: ${{ secrets.PRODUCTION_BASE_URL }}
-
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL || secrets.PRODUCTION_BASE_URL }}
     steps:
+      - uses: actions/checkout@v5
       - name: Check production health endpoints
+        run: node .github/scripts/check-production-health.cjs
+      - name: Verify alert coverage is configured
+        if: always()
+        env:
+          WEBHOOK_URL: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
         run: |
-          set -euo pipefail
-
-          if [ -z "${PRODUCTION_BASE_URL:-}" ]; then
-            echo "::notice title=Production health skipped::Set PRODUCTION_BASE_URL to enable scheduled production health checks."
-            exit 0
+          if [ -z "${WEBHOOK_URL:-}" ]; then
+            echo "::error::OPERATIONS_ALERT_WEBHOOK_URL is missing; alert delivery is not configured."
+            exit 1
           fi
-
-          base_url="${PRODUCTION_BASE_URL%/}"
-
-          check_json() {
-            path="$1"
-            expected_db="$2"
-            response_file="$RUNNER_TEMP/health-response.json"
-
-            echo "Checking ${path}"
-            curl --fail --silent --show-error \
-              --retry 2 \
-              --retry-delay 2 \
-              --connect-timeout 5 \
-              --max-time 15 \
-              "${base_url}${path}" \
-              --output "$response_file"
-
-            RESPONSE_FILE="$response_file" EXPECTED_DB="$expected_db" node <<'NODE'
-          const fs = require('node:fs');
-
-          const body = JSON.parse(fs.readFileSync(process.env.RESPONSE_FILE, 'utf8'));
-          if (body.ok !== true) {
-            throw new Error(`health payload did not include ok=true: ${JSON.stringify(body)}`);
-          }
-          if (process.env.EXPECTED_DB === 'true' && body.db !== true) {
-            throw new Error(`database health payload did not include db=true: ${JSON.stringify(body)}`);
-          }
-          NODE
-          }
-
-          check_json "/health/live" "false"
-          check_json "/health" "true"
 
   notify-failure:
     if: ${{ always() && (needs.health.result == 'failure' || needs.health.result == 'cancelled') }}
     needs: health
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
+      - uses: actions/checkout@v5
       - name: Notify operations
         uses: ./.github/actions/notify-operations
         with:
