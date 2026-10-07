@@ -393,7 +393,7 @@ private enum ShippedInventorySchema {
         var createdAt: Date
         var failureCount: Int
         var lastError: String?
-        
+
         init(entityType: String,
              entityId: String,
              operation: String,

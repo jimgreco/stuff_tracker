@@ -21,6 +21,15 @@ attributes, raw property/document payloads (including malformed legacy payloads)
 relationship identities, sort order, timestamps, deletion flags, pending flags,
 queue payloads, failure counts and last errors. Unlinked rows are retained.
 
+The shipped stored attribute `isDeleted` conflicts with SwiftData's own deletion
+state: a direct getter can report false after save even when the stored predicate
+matches true. Models now use `isTombstone` with `@Attribute(originalName:
+"isDeleted")`; lightweight migration preserves the existing stored values and
+the archive keeps its `isDeleted` wire field. The frozen shipped-schema fixture
+checks persisted old tombstones through a predicate before migration, then checks
+their value in the new store and archive. Equality against an archive made with
+the old getter alone would not detect this loss.
+
 A `legacy-recovery.json` archive is written without replacing an existing archive.
 If the source later differs from its saved archive, recovery stops for review.
 The snapshot is imported into a fresh UUID store. The context is saved, then a
@@ -47,7 +56,8 @@ belong to the verified account. No home list, home owner, email, or failure resp
 is used to infer ownership.
 
 The recovery screen offers claim, private JSON export, continue without importing,
-and cancel. Claim permits retained pending writes and deletions to sync; its text
+and cancel. Claim permits safe pending writes and deletions to sync; older records
+whose server outcome cannot be established remain pending for review. Its text
 states this consequence. Export does not claim or upload inventory. Continue opens
 a separate account store and retains recovery under Account → Review older
 inventory. Cancel invalidates the pending confirmation and keeps data intact.
@@ -77,6 +87,42 @@ Unsaved editor state was never a durable queue and is not converted into one her
 Cached inventory remains locked when launch cannot verify the stored server
 identity; offline login is not expanded by this migration.
 
+## Durable creates and unresolved older outcomes
+
+The old client generated a local UUID, POSTed without it, and replaced it with a
+new server UUID only after the reply arrived. A committed POST followed by a lost
+reply or account switch could therefore leave an unknown server ID. Ownership
+confirmation cannot recover that missing mapping, and activity request metadata
+is not an idempotency receipt.
+
+Every newly created local home, location and item now records `clientCreateID`
+before sync. The optional field survives disk reopening and recovery archives;
+existing records default to unknown (`nil`). API create requests send that UUID as
+`client_id`, and migration 014 stores a durable, account-scoped receipt with a
+canonical request hash in the same inventory transaction as the INSERT. The
+resource ID is the original client UUID. Identical POST retries return the existing
+record; changed POST data or an ID collision fails closed. A retry can PATCH the
+original ID even when the first POST reply never reached the app. Old clients that
+omit `client_id` retain their existing API behavior and do not gain this guarantee.
+
+DELETE with the original `client_id` atomically records a cancellation even if it
+overtakes POST. Deletion triggers retire receipts for ordinary and cascaded deletes;
+a delayed POST returns 410 instead of resurrecting the row. Receipts have no TTL.
+Local tombstones remain until a successful deletion response is acknowledged by
+the same account/store generation. The authenticated capability check prevents
+new clients sending durable creates/cancellations to an old API. Deploy all API
+instances before native rollout; a mixed-version pool is not supported.
+
+An older pending record may update its exact existing server UUID. If that UUID
+is absent, it is retained with a review error instead of being POSTed again. An
+older tombstone without a durable identity must establish the exact remote record
+before sending DELETE; an absent record remains pending because the old unknown
+server ID cannot be inferred. Account → Export account inventory for review saves
+all rows, pending state, tombstones and queue payloads privately. Claiming inventory
+does not bypass this restriction. Resolving real older outcomes requires comparing
+the export with server records and an explicit owner-reviewed decision; this
+release does not automatically split, remap, resend or discard them.
+
 ## Rollout and remaining acceptance
 
 Ship through TestFlight to a disposable account/device first. Exercise A/B/A with
@@ -98,4 +144,7 @@ Verified in synthetic XCTest fixtures: on-disk migration of every field and orph
 row; interruptions after archive/import/publication; account switching; queue and
 tombstone retention; mid-sync switches; late responses/deletes/refresh/media/plan;
 legacy claim/export/skip/cancel and overlap rejection. The recovery screen was
-rendered and inspected. See the dated release plan for exact commits and commands.
+rendered and inspected. Replay fixtures cover committed creates followed by lost
+replies/account switches, retry with the original UUID, and lost deletion replies
+for both items and locations. See the dated release plan for exact commits and
+commands.
