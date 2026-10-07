@@ -5,6 +5,9 @@ import SwiftData
 
 @Model
 final class LocalHome {
+    // Nil means this record predates the durable-create contract (or came from
+    // the server). Never infer a safe new create from a missing legacy UUID.
+    var clientCreateID: String? = nil
     @Attribute(.unique) var id: String
     var name: String
     var ownerId: String?
@@ -80,6 +83,9 @@ final class LocalHome {
 
 @Model
 final class LocalLocation {
+    // Nil means this record predates the durable-create contract (or came from
+    // the server). Never infer a safe new create from a missing legacy UUID.
+    var clientCreateID: String? = nil
     @Attribute(.unique) var id: String
     var homeId: String
     var parentId: String?
@@ -147,6 +153,9 @@ final class LocalLocation {
 
 @Model
 final class LocalItem {
+    // Nil means this record predates the durable-create contract (or came from
+    // the server). Never infer a safe new create from a missing legacy UUID.
+    var clientCreateID: String? = nil
     @Attribute(.unique) var id: String
     var homeId: String
     var locationId: String?

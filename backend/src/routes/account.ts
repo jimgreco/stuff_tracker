@@ -10,6 +10,10 @@ import { deleteHomeAttachments } from '../lib/s3';
 const router = Router();
 router.use(requireAuth);
 
+router.get('/sync-capabilities', (_req: AuthRequest, res: Response) => {
+  res.set('Cache-Control', 'no-store').json({ client_create_receipts: 1 });
+});
+
 router.get('/plan', async (req: AuthRequest, res: Response) => {
   const isAdmin = isAdminEmail(req.user!.email);
   res.json({

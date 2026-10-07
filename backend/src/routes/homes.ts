@@ -1,3 +1,4 @@
+import { ClientIDSchema, createIdentity, replayClientCreate, withClientCreate, deleteClientID, cancelClientCreate, ClientCreateError } from '../lib/clientCreates';
 import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -38,15 +39,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 // ── Create home ────────────────────────────────────────────────────────────────
 router.post('/', async (req: AuthRequest, res: Response) => {
-  const { name, icon, is_flagged } = HomeSchema.parse(req.body);
+  const { client_id, ...body } = HomeSchema.extend({ client_id: ClientIDSchema }).parse(req.body);
+  const { name, icon, is_flagged } = body;
+  const identity = createIdentity(req.user!.userId, 'home', client_id, null, body);
+  const previous = await replayClientCreate(identity);
+  if (previous) { res.status(201).json({ ...previous, role: 'owner' }); return; }
   const quota = await canCreateHome(req.user!.userId);
   if (quota) { sendQuota(res, quota); return; }
 
-  const home = await withActivityTransaction(req, async (client) => {
+  const home = await withClientCreate(req, identity, async (client, clientID) => {
     const { rows } = await client.query(
-      `INSERT INTO homes (name, icon, is_flagged, owner_id) VALUES ($1, $2, $3, $4)
+      `INSERT INTO homes (name, icon, is_flagged, owner_id, id) VALUES ($1, $2, $3, $4, COALESCE($5::uuid, gen_random_uuid()))
        RETURNING id, name, icon, is_flagged, owner_id, created_at`,
-      [name, icon ?? null, is_flagged ?? false, req.user!.userId]
+      [name, icon ?? null, is_flagged ?? false, req.user!.userId, clientID ?? null]
     );
     return rows[0];
   });
@@ -107,11 +112,15 @@ router.patch('/:homeId', async (req: AuthRequest, res: Response) => {
 // ── Delete home ────────────────────────────────────────────────────────────────
 router.delete('/:homeId', async (req: AuthRequest, res: Response) => {
   const { homeId } = req.params;
-  const { rows } = await pool.query('SELECT owner_id FROM homes WHERE id = $1', [homeId]);
-  if (!rows[0] || rows[0].owner_id !== req.user!.userId) {
-    res.status(403).json({ error: 'Only the owner can delete a home' }); return;
-  }
-  await withActivityTransaction(req, (client) => client.query('DELETE FROM homes WHERE id = $1', [homeId]));
+  const clientID = deleteClientID(req, homeId);
+  await withActivityTransaction(req, async (client) => {
+    const { rows } = await client.query('SELECT owner_id FROM homes WHERE id = $1', [homeId]);
+    if ((rows[0] && rows[0].owner_id !== req.user!.userId) || (!rows[0] && !clientID)) {
+      throw new ClientCreateError(403, 'home_delete_forbidden', 'Only the owner can delete a home');
+    }
+    await cancelClientCreate(client, req.user!.userId, 'home', clientID, null);
+    await client.query('DELETE FROM homes WHERE id = $1', [homeId]);
+  });
   res.status(204).send();
 });
 

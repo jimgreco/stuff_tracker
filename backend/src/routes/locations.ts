@@ -1,3 +1,4 @@
+import { ClientIDSchema, createIdentity, replayClientCreate, withClientCreate, deleteClientID, cancelClientCreate } from '../lib/clientCreates';
 import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -14,7 +15,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  const { name, parent_id, type, sort_order, icon, is_flagged } = LocationSchema.parse(req.body);
+  const { client_id, ...body } = LocationSchema.extend({ client_id: ClientIDSchema }).parse(req.body);
+  const { name, parent_id, type, sort_order, icon, is_flagged } = body;
+  const identity = createIdentity(req.user!.userId, 'location', client_id, homeId, body);
+  const previous = await replayClientCreate(identity);
+  if (previous) { res.status(201).json(previous); return; }
   if (parent_id) {
     const parent = await pool.query(
       'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
@@ -26,12 +31,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
   }
 
-  const location = await withActivityTransaction(req, async (client) => {
+  const location = await withClientCreate(req, identity, async (client, clientID) => {
     const { rows } = await client.query(
-      `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon, is_flagged)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO locations (home_id, parent_id, name, type, sort_order, icon, is_flagged, id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::uuid, gen_random_uuid()))
        RETURNING id, home_id, parent_id, name, type, sort_order, icon, is_flagged`,
-      [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null, is_flagged ?? false]
+      [homeId, parent_id ?? null, name, type, sort_order ?? 0, icon ?? null, is_flagged ?? false, clientID ?? null]
     );
     return rows[0];
   });
@@ -161,10 +166,11 @@ router.delete('/:locationId', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  await withActivityTransaction(req, (client) => client.query(
-    'DELETE FROM locations WHERE id = $1 AND home_id = $2',
-    [locationId, homeId]
-  ));
+  const clientID = deleteClientID(req, locationId);
+  await withActivityTransaction(req, async (client) => {
+    await cancelClientCreate(client, req.user!.userId, 'location', clientID, homeId.toLowerCase());
+    await client.query('DELETE FROM locations WHERE id = $1 AND home_id = $2', [locationId, homeId]);
+  });
   res.status(204).send();
 });
 

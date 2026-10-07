@@ -1,3 +1,4 @@
+import { ClientCreateError } from './lib/clientCreates';
 import { AttachmentRetiredError } from './lib/attachmentGC';
 import 'express-async-errors';
 import * as fs from 'node:fs';
@@ -78,6 +79,10 @@ export function createApp() {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof ClientCreateError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
     if (err instanceof AttachmentRetiredError) {
       res.status(409).json({ error: err.message, code: 'attachment_retired' });
       return;

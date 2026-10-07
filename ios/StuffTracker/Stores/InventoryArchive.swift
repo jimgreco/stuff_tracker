@@ -63,6 +63,7 @@ struct InventoryArchive: Codable, Equatable {
     }
 
     struct HomeRecord: Codable, Equatable {
+        var clientCreateID: String?
         var id: String
         var name: String
         var ownerId: String?
@@ -76,6 +77,7 @@ struct InventoryArchive: Codable, Equatable {
         var updatedAt: Date
 
         @MainActor init(_ model: LocalHome) {
+            clientCreateID = model.clientCreateID
             id = model.id
             name = model.name
             ownerId = model.ownerId
@@ -102,11 +104,13 @@ struct InventoryArchive: Codable, Equatable {
             model.isDeleted = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
+            model.clientCreateID = clientCreateID
             return model
         }
     }
 
     struct LocationRecord: Codable, Equatable {
+        var clientCreateID: String?
         var id: String
         var homeId: String
         var parentId: String?
@@ -122,6 +126,7 @@ struct InventoryArchive: Codable, Equatable {
         var relationshipHomeID: String?
 
         @MainActor init(_ model: LocalLocation) {
+            clientCreateID = model.clientCreateID
             id = model.id
             homeId = model.homeId
             parentId = model.parentId
@@ -151,11 +156,13 @@ struct InventoryArchive: Codable, Equatable {
             model.isDeleted = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
+            model.clientCreateID = clientCreateID
             return model
         }
     }
 
     struct ItemRecord: Codable, Equatable {
+        var clientCreateID: String?
         var id: String
         var homeId: String
         var locationId: String?
@@ -181,6 +188,7 @@ struct InventoryArchive: Codable, Equatable {
         var relationshipHomeID: String?
 
         @MainActor init(_ model: LocalItem) {
+            clientCreateID = model.clientCreateID
             id = model.id
             homeId = model.homeId
             locationId = model.locationId
@@ -230,6 +238,7 @@ struct InventoryArchive: Codable, Equatable {
             model.isDeleted = isDeleted
             model.createdAt = createdAt
             model.updatedAt = updatedAt
+            model.clientCreateID = clientCreateID
             return model
         }
     }

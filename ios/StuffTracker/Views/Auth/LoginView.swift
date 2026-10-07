@@ -328,7 +328,7 @@ private extension View {
 }
 
 
-private struct InventoryRecoveryDocument: FileDocument {
+struct InventoryRecoveryDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
     var data: Data
     init(data: Data) { self.data = data }
@@ -345,7 +345,7 @@ struct InventoryRecoveryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Recover saved inventory").font(.headline)
-            Text("Only claim this older inventory if every saved record belongs to \(user.email). Its unsynced changes and pending deletions will then sync to this account. If it contains another account’s records, export a recovery copy for review first.")
+            Text("Only claim this older inventory if every saved record belongs to \(user.email). Its saved changes can sync to this account. Records with an unknown prior server outcome stay saved for review. If it contains another account’s records, export a recovery copy for review first.")
                 .font(.subheadline)
             Button("All saved inventory is mine — recover") { authStore.confirmInventoryClaim() }
                 .buttonStyle(.borderedProminent)

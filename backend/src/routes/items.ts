@@ -1,3 +1,4 @@
+import { ClientIDSchema, createIdentity, replayClientCreate, withClientCreate, deleteClientID, cancelClientCreate } from '../lib/clientCreates';
 import { Router, Response } from 'express';
 import { pool } from '../db/pool';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -71,6 +72,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
+  const { client_id, ...body } = ItemSchema.extend({ client_id: ClientIDSchema }).parse(req.body);
+  const identity = createIdentity(req.user!.userId, 'item', client_id, homeId, body);
+  const previous = await replayClientCreate(identity);
+  if (previous) { res.status(201).json(await signItemAttachmentUrls(previous)); return; }
   const {
     name,
     location_id,
@@ -87,7 +92,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     estimated_value_cents,
     is_flagged,
     sort_order,
-  } = ItemSchema.parse(req.body);
+  } = body;
   if (location_id) {
     const location = await pool.query(
       'SELECT id FROM locations WHERE id = $1 AND home_id = $2',
@@ -104,15 +109,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const item = await withActivityTransaction(req, async (client) => {
+  const item = await withClientCreate(req, identity, async (client, clientID) => {
     await assertAttachmentsAvailable(client, { photo_urls, documents });
     const { rows } = await client.query(
       `INSERT INTO items (
        home_id, location_id, name, icon, notes, quantity, properties, photo_urls,
        documents, purchase_date, serial_number, model_number, warranty_expires_date,
-       estimated_value_cents, is_flagged, sort_order, created_by
+       estimated_value_cents, is_flagged, sort_order, created_by, id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, COALESCE($18::uuid, gen_random_uuid()))
      RETURNING *`,
     [
       homeId,
@@ -132,6 +137,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       is_flagged ?? false,
       sort_order ?? 0,
       req.user!.userId,
+      clientID ?? null,
       ]
     );
     return rows[0];
@@ -246,10 +252,11 @@ router.delete('/:itemId', async (req: AuthRequest, res: Response) => {
   const role = await getHomeRole(homeId, req.user!.userId);
   if (!canEdit(role)) { res.status(403).json({ error: 'Edit access required' }); return; }
 
-  await withActivityTransaction(req, (client) => client.query(
-    'DELETE FROM items WHERE id = $1 AND home_id = $2',
-    [itemId, homeId]
-  ));
+  const clientID = deleteClientID(req, itemId);
+  await withActivityTransaction(req, async (client) => {
+    await cancelClientCreate(client, req.user!.userId, 'item', clientID, homeId.toLowerCase());
+    await client.query('DELETE FROM items WHERE id = $1 AND home_id = $2', [itemId, homeId]);
+  });
   res.status(204).send();
 });
 

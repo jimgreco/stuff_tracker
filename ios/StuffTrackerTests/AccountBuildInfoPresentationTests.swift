@@ -138,9 +138,29 @@ final class AuthStoreSessionTests: XCTestCase {
 
 private final class AccountBoundaryURLProtocol: URLProtocol {
     static var handler: ((AccountBoundaryURLProtocol) -> Void)?
+    static var supportsReceipts = true
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() { Self.handler?(self) }
+    override func startLoading() {
+        if Self.supportsReceipts && request.url?.path == "/account/sync-capabilities" {
+            respond(200, "{\"client_create_receipts\":1}")
+        } else { Self.handler?(self) }
+    }
+    func failConnection() { client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost)) }
+    func bodyJSON() -> [String: Any] {
+        var data = request.httpBody ?? Data()
+        if data.isEmpty, let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(contentsOf: buffer.prefix(count))
+            }
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
     override func stopLoading() {}
     func respond(_ status: Int, _ json: String = "{}") {
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
@@ -180,6 +200,7 @@ final class NativeAccountBoundaryTests: XCTestCase {
             defaults.removePersistentDomain(forName: defaultsName)
             UserDefaults.standard.removeObject(forKey: AuthStore.completedAuthenticationDefaultsKey)
             AccountBoundaryURLProtocol.handler = nil
+            AccountBoundaryURLProtocol.supportsReceipts = true
         }
     }
 
@@ -272,7 +293,7 @@ final class NativeAccountBoundaryTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedDeleteRetainsTombstoneUntilConfirmedMissing() async throws {
+    func testFailedDeleteRetainsTombstoneUntilAcknowledged() async throws {
         let f = Fixture(); defer { f.cleanup() }
         try f.signIn(f.accountA)
         let home = f.local.createHome(name: "Delete later")
@@ -280,7 +301,7 @@ final class NativeAccountBoundaryTests: XCTestCase {
         AccountBoundaryURLProtocol.handler = { $0.respond(503) }
         await f.sync.syncPendingChanges()
         XCTAssertEqual(f.local.fetchDeletedHomes().map(\.id), [home.id])
-        AccountBoundaryURLProtocol.handler = { $0.respond(404) }
+        AccountBoundaryURLProtocol.handler = { $0.respond(204) }
         await f.sync.syncPendingChanges()
         XCTAssertTrue(f.local.fetchDeletedHomes().isEmpty)
     }
@@ -290,6 +311,7 @@ final class NativeAccountBoundaryTests: XCTestCase {
         let f = Fixture(); defer { f.cleanup() }
         try f.signIn(f.accountA)
         let home = f.local.createHome(name: "Revoked home")
+        home.clientCreateID = nil
         var methods: [String] = []
         AccountBoundaryURLProtocol.handler = { request in
             methods.append(request.request.httpMethod!)
@@ -502,6 +524,148 @@ final class NativeAccountBoundaryTests: XCTestCase {
         XCTAssertNil(subscription.errorMessage)
         XCTAssertFalse(subscription.isLoading)
     }
+    @MainActor
+    private func exerciseCreateReplay(kind: String, switchAccount: Bool, deleteAfterLostReply: Bool) async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.signIn(f.accountA)
+        let home = f.local.createHome(name: "Server home")
+        home.needsSync = false
+        home.clientCreateID = nil
+        let homeID = home.id
+        let entityID: String
+        if kind == "location" { entityID = f.local.createLocation(homeId: homeID, name: "Pending", parentId: nil, type: "container")!.id }
+        else { entityID = f.local.createItem(homeId: homeID, name: "Pending", locationId: nil)!.id }
+        f.local.save()
+        var exists = false
+        var creates = 0
+        var deletes = 0
+        let path = "/homes/\(homeID)/\(kind == "location" ? "locations" : "items")"
+        let record: [String: Any] = kind == "location"
+            ? ["id": entityID, "home_id": homeID, "name": "Pending", "type": "container", "sort_order": 0]
+            : ["id": entityID, "home_id": homeID, "name": "Pending", "quantity": 1, "created_by": f.accountA.id]
+        let json = String(data: try JSONSerialization.data(withJSONObject: record), encoding: .utf8)!
+        AccountBoundaryURLProtocol.handler = { request in
+            let method = request.request.httpMethod!
+            if request.request.url!.path == "/homes/\(homeID)" {
+                let detail: [String: Any] = ["id": homeID, "name": "Server home", "owner_id": f.accountA.id,
+                    "role": "owner", "locations": kind == "location" && exists ? [record] : [],
+                    "items": kind == "item" && exists ? [record] : []]
+                request.respond(200, String(data: try! JSONSerialization.data(withJSONObject: detail), encoding: .utf8)!)
+            } else if method == "PATCH" { request.respond(exists ? 200 : 404, exists ? json : "{}") }
+            else if method == "POST" {
+                XCTAssertEqual(request.request.url!.path, path)
+                XCTAssertEqual(request.bodyJSON()["client_id"] as? String, entityID)
+                creates += 1
+                exists = true // remote commit happened before this reply was lost/fenced
+                if switchAccount {
+                    Task { @MainActor in
+                        f.auth.signOut()
+                        try f.signIn(f.accountB)
+                        request.respond(201, json)
+                    }
+                } else { request.failConnection() }
+            } else if method == "DELETE" {
+                XCTAssertEqual(URLComponents(url: request.request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, entityID)
+                deletes += 1
+                exists = false
+                if deletes == 1 { request.failConnection() } else { request.respond(204) }
+            } else { XCTFail("Unexpected request \(method)"); request.respond(500) }
+        }
+        await f.sync.syncPendingChanges()
+        if switchAccount {
+            XCTAssertEqual(f.auth.currentUser?.id, f.accountB.id)
+            XCTAssertTrue(f.local.fetchHomes().isEmpty)
+            f.auth.signOut()
+            try f.signIn(f.accountA)
+        }
+        XCTAssertEqual(creates, 1)
+        if kind == "location" {
+            XCTAssertTrue(f.local.fetchLocation(id: entityID)!.needsSync)
+            XCTAssertEqual(f.local.fetchLocation(id: entityID)!.clientCreateID, entityID)
+            if deleteAfterLostReply { f.local.deleteLocation(f.local.fetchLocation(id: entityID)!) }
+        } else {
+            XCTAssertTrue(f.local.fetchItem(id: entityID)!.needsSync)
+            XCTAssertEqual(f.local.fetchItem(id: entityID)!.clientCreateID, entityID)
+            if deleteAfterLostReply { f.local.deleteItem(f.local.fetchItem(id: entityID)!) }
+        }
+        await f.sync.syncPendingChanges()
+        if deleteAfterLostReply {
+            XCTAssertEqual(kind == "location" ? f.local.fetchDeletedLocations().count : f.local.fetchDeletedItems().count, 1)
+            await f.sync.syncPendingChanges()
+            XCTAssertEqual(kind == "location" ? f.local.fetchDeletedLocations().count : f.local.fetchDeletedItems().count, 0)
+            XCTAssertEqual(deletes, 2)
+            XCTAssertFalse(exists)
+        } else {
+            XCTAssertFalse(kind == "location" ? f.local.fetchLocation(id: entityID)!.needsSync : f.local.fetchItem(id: entityID)!.needsSync)
+            XCTAssertTrue(exists)
+        }
+        XCTAssertEqual(creates, 1, "Retry must reconcile original UUID, never POST a new row")
+    }
+
+    @MainActor
+    func testItemAndLocationLostCreateRepliesRetryWithoutDuplicates() async throws {
+        for kind in ["item", "location"] { try await exerciseCreateReplay(kind: kind, switchAccount: false, deleteAfterLostReply: false) }
+    }
+
+    @MainActor
+    func testItemAndLocationCreatesFencedByAccountSwitchRetryOriginalUUID() async throws {
+        for kind in ["item", "location"] { try await exerciseCreateReplay(kind: kind, switchAccount: true, deleteAfterLostReply: false) }
+    }
+
+    @MainActor
+    func testDeleteAfterLostCreateOrAccountSwitchRetainsTombstoneUntilRetryAcknowledged() async throws {
+        for kind in ["item", "location"] {
+            for switched in [false, true] { try await exerciseCreateReplay(kind: kind, switchAccount: switched, deleteAfterLostReply: true) }
+        }
+    }
+
+    @MainActor
+    func testLegacyUnknownOutcomesStayPendingAndExportableWithoutCreateOrDelete() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.signIn(f.accountA)
+        let home = f.local.createHome(name: "Known server home")
+        home.needsSync = false
+        home.clientCreateID = nil
+        let item = f.local.createItem(homeId: home.id, name: "Uncertain old item", locationId: nil)!
+        item.clientCreateID = nil
+        let location = f.local.createLocation(homeId: home.id, name: "Uncertain old location", parentId: nil, type: "container")!
+        location.clientCreateID = nil
+        let deleted = f.local.createItem(homeId: home.id, name: "Unknown older deletion", locationId: nil)!
+        deleted.clientCreateID = nil
+        f.local.deleteItem(deleted)
+        var writes = 0
+        AccountBoundaryURLProtocol.handler = { request in
+            if request.request.httpMethod == "GET" {
+                request.respond(200, "{\"id\":\"\(home.id)\",\"name\":\"Known server home\",\"owner_id\":\"account-a\",\"role\":\"owner\",\"locations\":[],\"items\":[]}")
+            } else if request.request.httpMethod == "PATCH" { request.respond(404) }
+            else { writes += 1; request.respond(500) }
+        }
+        await f.sync.syncPendingChanges()
+        XCTAssertEqual(writes, 0)
+        XCTAssertTrue(item.needsSync)
+        XCTAssertTrue(location.needsSync)
+        XCTAssertEqual(f.local.fetchDeletedItems().map(\.id), [deleted.id])
+        let exported = try JSONDecoder().decode(InventoryArchive.self, from: f.auth.currentInventoryData())
+        XCTAssertEqual(exported.items.count, 2)
+        XCTAssertEqual(exported.locations.count, 1)
+        XCTAssertNotNil(f.sync.syncError)
+    }
+
+    @MainActor
+    func testOldServerCannotReceiveNewDurableCreateOrCancellation() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        try f.signIn(f.accountA)
+        AccountBoundaryURLProtocol.supportsReceipts = false
+        var effects = 0
+        AccountBoundaryURLProtocol.handler = { request in
+            if request.request.httpMethod != "GET" { effects += 1 }
+            request.respond(404)
+        }
+        let id = UUID().uuidString.lowercased()
+        do { _ = try await f.api.createLocation(homeId: UUID().uuidString, name: "Unsent", parentId: nil, type: "room", clientID: id); XCTFail("Expected unsupported server") } catch { }
+        do { try await f.api.deleteItem(homeId: UUID().uuidString, itemId: id, clientID: id); XCTFail("Expected unsupported server") } catch { }
+        XCTAssertEqual(effects, 0)
+    }
 
 }
 
@@ -523,12 +687,15 @@ final class AccountStoreMigrationTests: XCTestCase {
     @MainActor
     private func seed(_ local: LocalDataManager) throws -> InventoryArchive {
         let home = local.createHome(name: "Offline home")
+        home.clientCreateID = nil
         home.icon = "archivebox"
         home.createdAt = Date(timeIntervalSince1970: 123456)
         home.sortOrder = 9
         let location = local.createLocation(homeId: home.id, name: "Deleted shelf", parentId: nil, type: "container")!
+        location.clientCreateID = nil
         local.deleteLocation(location)
         let item = local.createItem(homeId: home.id, name: "Unsynced item", locationId: location.id)!
+        item.clientCreateID = nil
         item.documentsData = Data("malformed-but-preserved-payload".utf8)
         item.propertiesData = Data([0, 1, 254])
         item.photoUrls = ["homes/legacy/items/photos/example.jpg"]

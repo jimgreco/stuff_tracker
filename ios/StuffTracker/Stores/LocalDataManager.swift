@@ -181,6 +181,13 @@ final class LocalDataManager: ObservableObject {
         return try makeContainer(url: url)
     }
 
+    func currentInventoryData() throws -> Data {
+        guard boundAccountID != nil, let modelContext else { throw CocoaError(.fileReadNoPermission) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(InventoryArchive(context: modelContext))
+    }
+
     var context: ModelContext? { modelContext }
 
     // MARK: - Homes
@@ -212,6 +219,8 @@ final class LocalDataManager: ObservableObject {
         }
         
         let home = LocalHome(name: name, needsSync: true)
+        home.id = home.id.lowercased()
+        home.clientCreateID = home.id
         context.insert(home)
         save()
         return home
@@ -252,6 +261,8 @@ final class LocalDataManager: ObservableObject {
             needsSync: true
         )
         
+        location.id = location.id.lowercased()
+        location.clientCreateID = location.id
         context.insert(location)
         location.home = home
         save()
@@ -300,6 +311,8 @@ final class LocalDataManager: ObservableObject {
             needsSync: true
         )
         
+        item.id = item.id.lowercased()
+        item.clientCreateID = item.id
         context.insert(item)
         item.home = home
         save()

@@ -214,6 +214,11 @@ final class AuthStore: ObservableObject {
         return try local.recoveryData(for: user.id)
     }
 
+    func currentInventoryData() throws -> Data {
+        guard let user = currentUser, api.localAccountID == user.id, local.boundAccountID == user.id else { throw CancellationError() }
+        return try local.currentInventoryData()
+    }
+
     private func activate(_ user: User, response: AuthResponse?) throws {
         if let response {
             api.setAuthTokens(token: response.token, refreshToken: response.refreshToken)

@@ -210,6 +210,50 @@ final class APIClient {
         return fallback
     }
 
+    private struct SyncCapabilities: Decodable { let clientCreateReceipts: Int }
+
+    // New clients fail closed before sending an effect to older servers. This is
+    // intentionally checked per create/cancel, not inferred from activity headers.
+    func requireDurableCreateSupport() async throws {
+        let capabilities: SyncCapabilities = try await request("GET", path: "/account/sync-capabilities")
+        guard capabilities.clientCreateReceipts == 1 else {
+            throw APIError.httpError(409, "Reconnect to a server with safe offline-create support before syncing.")
+        }
+    }
+
+    private struct ClientCreateBody<Body: Encodable>: Encodable {
+        let body: Body
+        let clientID: String?
+        enum CodingKeys: String, CodingKey { case clientID = "client_id" }
+        func encode(to encoder: Encoder) throws {
+            try body.encode(to: encoder)
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(clientID, forKey: .clientID)
+        }
+    }
+
+    private func createResource<T: Decodable, Body: Encodable>(path: String, body: Body,
+        clientID: String?, mutationMetadata: MutationMetadata?) async throws -> T {
+        try await withSessionScope {
+            if clientID != nil { try await requireDurableCreateSupport() }
+            return try await request("POST", path: path, body: ClientCreateBody(body: body, clientID: clientID), mutationMetadata: mutationMetadata)
+        }
+    }
+
+    private func deleteResource(path: String, clientID: String?, mutationMetadata: MutationMetadata?) async throws {
+        try await withSessionScope {
+            let scopedPath = try await deletionPath(path, clientID: clientID)
+            try await requestEmpty("DELETE", path: scopedPath, mutationMetadata: mutationMetadata)
+        }
+    }
+
+    private func deletionPath(_ path: String, clientID: String?) async throws -> String {
+        guard let clientID else { return path }
+        try await requireDurableCreateSupport()
+        guard let uuid = UUID(uuidString: clientID) else { throw APIError.invalidURL }
+        return path + "?client_id=" + uuid.uuidString.lowercased()
+    }
+
     // MARK: - Core request
 
     struct MutationMetadata {
@@ -497,8 +541,8 @@ final class APIClient {
         try await request("GET", path: "/homes")
     }
 
-    func createHome(name: String, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Home {
-        try await request("POST", path: "/homes", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
+    func createHome(name: String, icon: String? = nil, isFlagged: Bool? = nil, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Home {
+        try await createResource(path: "/homes", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged), clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     func getHome(_ id: String) async throws -> HomeDetail {
@@ -532,8 +576,8 @@ final class APIClient {
         try await request("PATCH", path: "/homes/\(id)", body: UpdateHomeBody(name: name, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
-    func deleteHome(_ id: String, mutationMetadata: MutationMetadata? = nil) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(id)", mutationMetadata: mutationMetadata)
+    func deleteHome(_ id: String, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await deleteResource(path: "/homes/\(id)", clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     // MARK: - Members
@@ -589,9 +633,8 @@ final class APIClient {
         }
     }
 
-    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil, isFlagged: Bool? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Location {
-        try await request("POST", path: "/homes/\(homeId)/locations",
-                          body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
+    func createLocation(homeId: String, name: String, parentId: String?, type: String, sortOrder: Int = 0, icon: String? = nil, isFlagged: Bool? = nil, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Location {
+        try await createResource(path: "/homes/\(homeId)/locations", body: LocationBody(name: name, parentId: parentId, type: type, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged), clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     struct UpdateLocationBody: Encodable {
@@ -631,8 +674,8 @@ final class APIClient {
                                  body: UpdateLocationBody(homeId: newHomeId, name: name, parentId: parentId, sortOrder: sortOrder, icon: icon, isFlagged: isFlagged), mutationMetadata: mutationMetadata)
     }
 
-    func deleteLocation(homeId: String, locationId: String, mutationMetadata: MutationMetadata? = nil) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(homeId)/locations/\(locationId)", mutationMetadata: mutationMetadata)
+    func deleteLocation(homeId: String, locationId: String, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await deleteResource(path: "/homes/\(homeId)/locations/\(locationId)", clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     // MARK: - Items
@@ -708,16 +751,16 @@ final class APIClient {
         }
     }
 
-    func createItem(homeId: String, body: ItemBody, mutationMetadata: MutationMetadata? = nil) async throws -> Item {
-        try await request("POST", path: "/homes/\(homeId)/items", body: body, mutationMetadata: mutationMetadata)
+    func createItem(homeId: String, body: ItemBody, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws -> Item {
+        try await createResource(path: "/homes/\(homeId)/items", body: body, clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     func updateItem(homeId: String, itemId: String, body: ItemBody, mutationMetadata: MutationMetadata? = nil) async throws -> Item {
         try await request("PATCH", path: "/homes/\(homeId)/items/\(itemId)", body: body, mutationMetadata: mutationMetadata)
     }
 
-    func deleteItem(homeId: String, itemId: String, mutationMetadata: MutationMetadata? = nil) async throws {
-        try await requestEmpty("DELETE", path: "/homes/\(homeId)/items/\(itemId)", mutationMetadata: mutationMetadata)
+    func deleteItem(homeId: String, itemId: String, clientID: String? = nil, mutationMetadata: MutationMetadata? = nil) async throws {
+        try await deleteResource(path: "/homes/\(homeId)/items/\(itemId)", clientID: clientID, mutationMetadata: mutationMetadata)
     }
 
     func activity(homeId: String, itemId: String? = nil, cursor: String? = nil, actorId: String? = nil, action: String? = nil, entityType: String? = nil, from: Date? = nil) async throws -> ActivityPage {

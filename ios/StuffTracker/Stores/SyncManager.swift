@@ -9,10 +9,13 @@ private enum SyncUploadError: LocalizedError {
     case missingParent(locationName: String)
     case missingItemLocation(itemName: String)
     case cyclicLocation(locationName: String)
+    case unresolvedLegacy(name: String)
     case itemUploadFailed(itemName: String, message: String, context: String)
 
     var errorDescription: String? {
         switch self {
+        case .unresolvedLegacy(let name):
+            return "Older record '\(name)' has an unknown server outcome. It stays saved for review; export the account inventory from Account before resolving it."
         case .missingParent(let locationName):
             return "Location '\(locationName)' references a parent that no longer exists."
         case .missingItemLocation(let itemName):
@@ -163,7 +166,7 @@ final class SyncManager: ObservableObject {
     private func pushHome(_ home: LocalHome) async {
         do {
             if home.isDeleted {
-                try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
+                try await api.deleteHome(home.id, clientID: home.clientCreateID, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
                 try requireSyncSession()
                 local.hardDelete(home: home)
             } else {
@@ -174,9 +177,10 @@ final class SyncManager: ObservableObject {
                     // Exists on server, update
                     let _: Home = try await api.updateHome(home.id, name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-update", id: home.id, at: home.updatedAt))
                     try requireSyncSession()
-                } catch APIError.httpError(404, _) {
-                    // Only a confirmed missing home may be recreated.
-                    let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
+                } catch APIError.httpError(let code, _) where code == 404 || (code == 403 && home.clientCreateID != nil) {
+                    guard home.clientCreateID != nil else { throw SyncUploadError.unresolvedLegacy(name: home.name) }
+                    // Only an explicitly recorded durable create may use POST.
+                    let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, clientID: home.clientCreateID, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
                     try requireSyncSession()
                     // Remap the local ID to server ID if different
                     if created.id != home.id {
@@ -216,38 +220,56 @@ final class SyncManager: ObservableObject {
 
     private func deleteConfirmed(_ request: () async throws -> Void) async throws {
         try requireSyncSession()
-        do { try await request() }
-        catch APIError.httpError(404, _) { /* Already absent. */ }
+        try await request()
         try requireSyncSession()
     }
 
     private func pushDeleted() async {
         for home in local.fetchDeletedHomes() {
             do {
+                if home.clientCreateID == nil {
+                    do { _ = try await api.getHome(home.id) }
+                    catch { try requireSyncSession(); throw SyncUploadError.unresolvedLegacy(name: home.name) }
+                    try requireSyncSession()
+                }
                 try await deleteConfirmed {
-                    try await api.deleteHome(home.id, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
+                    try await api.deleteHome(home.id, clientID: home.clientCreateID, mutationMetadata: mutationMetadata("home-delete", id: home.id, at: home.updatedAt))
                 }
                 try requireSyncSession()
                 local.hardDelete(home: home)
-            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion stays saved: \(error.localizedDescription)" } }
         }
         for loc in local.fetchDeletedLocations() {
             do {
+                if loc.clientCreateID == nil {
+                    let detail = try await api.getHome(loc.homeId)
+                    try requireSyncSession()
+                    guard detail.locations.contains(where: { $0.id.lowercased() == loc.id.lowercased() }) else {
+                        throw SyncUploadError.unresolvedLegacy(name: loc.name)
+                    }
+                }
                 try await deleteConfirmed {
-                    try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id, mutationMetadata: mutationMetadata("location-delete", id: loc.id, at: loc.updatedAt))
+                    try await api.deleteLocation(homeId: loc.homeId, locationId: loc.id, clientID: loc.clientCreateID, mutationMetadata: mutationMetadata("location-delete", id: loc.id, at: loc.updatedAt))
                 }
                 try requireSyncSession()
                 local.hardDelete(location: loc)
-            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion stays saved: \(error.localizedDescription)" } }
         }
         for item in local.fetchDeletedItems() {
             do {
+                if item.clientCreateID == nil {
+                    let detail = try await api.getHome(item.homeId)
+                    try requireSyncSession()
+                    guard detail.items.contains(where: { $0.id.lowercased() == item.id.lowercased() }) else {
+                        throw SyncUploadError.unresolvedLegacy(name: item.name)
+                    }
+                }
                 try await deleteConfirmed {
-                    try await api.deleteItem(homeId: item.homeId, itemId: item.id, mutationMetadata: mutationMetadata("item-delete", id: item.id, at: item.updatedAt))
+                    try await api.deleteItem(homeId: item.homeId, itemId: item.id, clientID: item.clientCreateID, mutationMetadata: mutationMetadata("item-delete", id: item.id, at: item.updatedAt))
                 }
                 try requireSyncSession()
                 local.hardDelete(item: item)
-            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion is still waiting to sync." } }
+            } catch { if (try? requireSyncSession()) != nil { syncError = "A deletion stays saved: \(error.localizedDescription)" } }
         }
     }
 
@@ -312,8 +334,9 @@ final class SyncManager: ObservableObject {
                 icon: detail.icon,
                 isFlagged: detail.isFlagged
             )
-        } catch APIError.httpError(let code, _) where code == 404 {
-            let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
+        } catch APIError.httpError(let code, _) where code == 404 || (code == 403 && home.clientCreateID != nil) {
+            guard home.clientCreateID != nil else { throw SyncUploadError.unresolvedLegacy(name: home.name) }
+            let created = try await api.createHome(name: home.name, icon: home.icon, isFlagged: home.isFlagged, clientID: home.clientCreateID, mutationMetadata: mutationMetadata("home-create", id: home.id, at: home.updatedAt))
             try requireSyncSession()
             let oldId = home.id
             if created.id != oldId {
@@ -377,6 +400,7 @@ final class SyncManager: ObservableObject {
             loc.update(from: updated)
             local.save()
         } catch APIError.httpError(let code, _) where code == 404 {
+            guard loc.clientCreateID != nil else { throw SyncUploadError.unresolvedLegacy(name: loc.name) }
             let oldId = loc.id
             let created = try await api.createLocation(
                 homeId: loc.homeId,
@@ -386,6 +410,7 @@ final class SyncManager: ObservableObject {
                 sortOrder: loc.sortOrder,
                 icon: loc.icon,
                 isFlagged: loc.isFlagged,
+                clientID: loc.clientCreateID,
                 mutationMetadata: mutationMetadata("location-create", id: loc.id, at: loc.updatedAt)
             )
             try requireSyncSession()
@@ -473,8 +498,9 @@ final class SyncManager: ObservableObject {
             item.update(from: updated)
             local.save()
         } catch APIError.httpError(404, _) {
+            guard item.clientCreateID != nil else { throw SyncUploadError.unresolvedLegacy(name: item.name) }
             let oldId = item.id
-            let created = try await api.createItem(homeId: item.homeId, body: itemBody(item), mutationMetadata: mutationMetadata("item-create", id: item.id, at: item.updatedAt))
+            let created = try await api.createItem(homeId: item.homeId, body: itemBody(item), clientID: item.clientCreateID, mutationMetadata: mutationMetadata("item-create", id: item.id, at: item.updatedAt))
             try requireSyncSession()
             if created.id != oldId {
                 local.remapItemId(from: oldId, to: created.id)

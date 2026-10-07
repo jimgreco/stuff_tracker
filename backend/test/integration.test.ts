@@ -1,4 +1,5 @@
 import test from 'node:test';
+import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -391,6 +392,122 @@ test('attachment adoption and cleanup serialize both race orders against real Po
   } finally {
     await writer.query('ROLLBACK');
     writer.release();
+  }
+});
+
+test('durable creates preserve original IDs across lost replies, concurrent retries and deletion races', { skip: !runDatabaseIntegrationTests }, async (t) => {
+  await resetDatabase();
+  const server = await listen();
+  t.after(() => close(server));
+  const base = serverBaseUrl(server);
+  const auth = await postJson(`${base}/auth/dev`, { email: 'receipt-a@example.test', name: 'Receipt A' });
+  const a = await auth.json() as { token: string; user: { id: string } };
+  const authB = await postJson(`${base}/auth/dev`, { email: 'receipt-b@example.test', name: 'Receipt B' });
+  const b = await authB.json() as { token: string; user: { id: string } };
+  const uuid = () => crypto.randomUUID();
+  const post = (path: string, body: object, token = a.token) => postJson(base + path, body, token);
+  const del = (path: string, token = a.token) => fetch(base + path, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+
+  assert.equal((await fetch(base + '/account/sync-capabilities')).status, 401);
+  assert.deepEqual(await (await fetch(base + '/account/sync-capabilities', { headers: { Authorization: `Bearer ${a.token}` } })).json(), { client_create_receipts: 1 });
+  const homeID = uuid();
+  const homeBody = { client_id: homeID, name: 'Original home' };
+  const firstHome = await post('/homes', homeBody);
+  assert.equal(firstHome.status, 201);
+  assert.equal((await firstHome.json() as any).id, homeID);
+  // The free-home quota is now exhausted; a lost-response retry must still replay.
+  const homeReplay = await post('/homes', { name: 'Original home', client_id: homeID });
+  assert.equal(homeReplay.status, 201);
+  assert.equal((await homeReplay.json() as any).id, homeID);
+  assert.equal((await post('/homes', { client_id: uuid(), name: 'Exceeds quota' })).status, 402);
+  await pool.query("INSERT INTO user_entitlements (user_id, source, status) VALUES ($1, 'manual', 'active')", [a.user.id]);
+  await pool.query("INSERT INTO home_members (home_id, user_id, role) VALUES ($1, $2, 'editor')", [homeID, b.user.id]);
+
+  for (const kind of ['location', 'item'] as const) {
+    const table = kind === 'location' ? 'locations' : 'items';
+    const path = `/homes/${homeID}/${table}`;
+    const clientID = uuid();
+    const body = { client_id: clientID, name: `Original ${kind}`, ...(kind === 'location' ? { type: 'container' } : {}) };
+    // Both requests race from the same original UUID; discarding both responses
+    // models an effect committed before the native account switch/lost reply.
+    const concurrent = await Promise.all([post(path, body), post(path, body)]);
+    assert.deepEqual(concurrent.map((r) => r.status), [201, 201]);
+    for (const response of concurrent) assert.equal((await response.json() as any).id, clientID);
+    assert.equal((await pool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE id = $1`, [clientID])).rows[0].count, 1);
+    const receipt = (await pool.query('SELECT request_hash, resource_id FROM client_create_receipts WHERE user_id = $1 AND entity_type = $2 AND client_id = $3', [a.user.id, kind, clientID])).rows[0];
+    assert.equal(receipt.resource_id, clientID);
+    assert.match(receipt.request_hash, /^[a-f0-9]{64}$/);
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS count FROM home_activity_events WHERE entity_id = $1 AND action = 'created'", [clientID])).rows[0].count, 1);
+
+    assert.equal((await post(path, { ...body, name: 'Changed POST' })).status, 409);
+    const otherAccount = await post(path, body, b.token);
+    assert.equal(otherAccount.status, 409, 'another account gets no receipt or entity data');
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM client_create_receipts WHERE user_id = $1 AND client_id = $2', [b.user.id, clientID])).rows[0].count, 0);
+    const retry = await post(path, body);
+    assert.equal(retry.status, 201);
+    assert.equal((await retry.json() as any).id, clientID);
+
+    // Native retry can PATCH its original ID even if the create reply was lost.
+    const patched = await fetch(`${base}${path}/${clientID}`, { method: 'PATCH', headers: activityHeaders(a.token, `receipt-patch-${kind}`), body: JSON.stringify({ name: 'Edited after lost reply' }) });
+    assert.equal(patched.status, 200);
+    assert.equal((await patched.json() as any).id, clientID);
+    const deletePath = `${path}/${clientID}?client_id=${clientID}`;
+    assert.equal((await del(deletePath)).status, 204); // response may be lost
+    assert.equal((await del(deletePath)).status, 204);
+    assert.equal((await post(path, body)).status, 410);
+    assert.equal((await pool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE id = $1`, [clientID])).rows[0].count, 0);
+
+    const cancelledID = uuid();
+    assert.equal((await del(`${path}/${cancelledID}?client_id=${cancelledID}`)).status, 204);
+    assert.equal((await post(path, { ...body, client_id: cancelledID })).status, 410, 'delete overtaking POST cancels future creation');
+    assert.equal((await pool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE id = $1`, [cancelledID])).rows[0].count, 0);
+
+    const ordinaryID = uuid();
+    assert.equal((await post(path, { ...body, client_id: ordinaryID })).status, 201);
+    assert.equal((await del(`${path}/${ordinaryID}`, b.token)).status, 204, 'legacy collaborator deletion also retires original receipt');
+    assert.equal((await post(path, { ...body, client_id: ordinaryID })).status, 410);
+  }
+
+  // Parent cascades retire receipts for locations, including descendants.
+  const parentID = uuid(), childID = uuid();
+  assert.equal((await post(`/homes/${homeID}/locations`, { client_id: parentID, name: 'Parent', type: 'room' })).status, 201);
+  assert.equal((await post(`/homes/${homeID}/locations`, { client_id: childID, parent_id: parentID, name: 'Child', type: 'container' })).status, 201);
+  assert.equal((await del(`/homes/${homeID}/locations/${parentID}`)).status, 204);
+  assert.equal((await post(`/homes/${homeID}/locations`, { client_id: childID, parent_id: parentID, name: 'Child', type: 'container' })).status, 410);
+  assert.equal((await del(`/homes/${homeID}?client_id=${homeID}`)).status, 204);
+  assert.equal((await del(`/homes/${homeID}?client_id=${homeID}`)).status, 204);
+  assert.equal((await post('/homes', homeBody)).status, 410);
+  const cancelledHome = uuid();
+  assert.equal((await del(`/homes/${cancelledHome}?client_id=${cancelledHome}`)).status, 204);
+  assert.equal((await post('/homes', { client_id: cancelledHome, name: 'Delayed home' })).status, 410);
+});
+
+test('failed create effects roll back receipts and unkeyed clients remain compatible', { skip: !runDatabaseIntegrationTests }, async (t) => {
+  await resetDatabase();
+  const server = await listen();
+  t.after(() => close(server));
+  const base = serverBaseUrl(server);
+  const auth = await postJson(base + '/auth/dev', { email: 'receipt-rollback@example.test', name: 'Rollback' });
+  const owner = await auth.json() as { token: string; user: { id: string } };
+  const home = await (await postJson(base + '/homes', { name: 'Legacy client home' }, owner.token)).json() as { id: string };
+  for (const kind of ['item', 'location'] as const) {
+    const table = kind === 'item' ? 'items' : 'locations';
+    const id = crypto.randomUUID();
+    const { withClientCreate, createIdentity } = require('../src/lib/clientCreates');
+    const request = { user: { userId: owner.user.id }, get: () => undefined } as any;
+    const identity = createIdentity(owner.user.id, kind, id, home.id, { name: 'Rollback' });
+    await assert.rejects(withClientCreate(request, identity, async (client) => {
+      if (kind === 'item') await client.query("INSERT INTO items (id, home_id, name) VALUES ($1, $2, 'Never committed')", [id, home.id]);
+      else await client.query("INSERT INTO locations (id, home_id, name, type) VALUES ($1, $2, 'Never committed', 'room')", [id, home.id]);
+      throw new Error('Injected after effect before receipt commit');
+    }), /Injected/);
+    assert.equal((await pool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE id = $1`, [id])).rows[0].count, 0);
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS count FROM client_create_receipts WHERE client_id = $1', [id])).rows[0].count, 0);
+    const body = { client_id: id, name: 'Retry succeeds', ...(kind === 'location' ? { type: 'room' } : {}) };
+    assert.equal((await postJson(`${base}/homes/${home.id}/${table}`, body, owner.token)).status, 201);
+    const legacy = await postJson(`${base}/homes/${home.id}/${table}`, { name: 'Unkeyed compatible', ...(kind === 'location' ? { type: 'room' } : {}) }, owner.token);
+    assert.equal(legacy.status, 201);
+    assert.notEqual((await legacy.json() as any).id, id);
   }
 });
 

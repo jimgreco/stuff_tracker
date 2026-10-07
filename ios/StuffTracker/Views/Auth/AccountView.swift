@@ -2,6 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
 import StoreKit
+import UniformTypeIdentifiers
 
 private enum SubscriptionLegalLinks {
     static let privacyPolicy = URL(string: "https://cubbylog.com/privacy.html")!
@@ -130,6 +131,8 @@ struct AccountView: View {
     @State private var showDeleteAccountConfirmation = false
     @State private var isDeletingAccount = false
     @State private var deletionError: String?
+    @State private var inventoryExport: InventoryRecoveryDocument?
+    @State private var showInventoryExporter = false
 
     private var ownedHomes: [HomeDetail] {
         homeStore.homeDetails.filter { $0.role == "owner" || $0.role == "admin" }
@@ -190,6 +193,11 @@ struct AccountView: View {
                     }
                 )
                 .environmentObject(syncManager)
+            }
+            .fileExporter(isPresented: $showInventoryExporter, document: inventoryExport, contentType: .json,
+                          defaultFilename: "CubbyLog-account-recovery") { result in
+                if case .failure = result { authStore.errorMessage = "Export did not complete. Saved inventory is unchanged." }
+                inventoryExport = nil
             }
             .task(id: authStore.isAuthenticated) {
                 if authStore.isAuthenticated {
@@ -294,6 +302,17 @@ struct AccountView: View {
                 Text("Recover or export inventory retained from an older version. Your current account store stays saved.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+
+        Section("Recovery export") {
+            Button("Export account inventory for review") {
+                do {
+                    inventoryExport = InventoryRecoveryDocument(data: try authStore.currentInventoryData())
+                    showInventoryExporter = true
+                } catch { authStore.errorMessage = "Could not read account inventory. Saved data is unchanged." }
+            }
+            Text("Includes pending records and deletions. Older records with unknown server outcomes stay saved for review instead of being recreated. Save the export somewhere private.")
+                .font(.caption).foregroundStyle(.secondary)
         }
 
         Section("Sync") {
