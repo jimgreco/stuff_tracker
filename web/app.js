@@ -38,6 +38,7 @@
     sheet: IS_ADMIN_ROUTE ? { type: "account" } : null,
     photoPreview: null,
     isUploadingAttachment: false,
+    isSavingItem: false,
     actionMenu: null,
     draggingItem: null,
     suppressItemClick: false,
@@ -1106,15 +1107,16 @@
   }
 
   function sheetChrome(title, body, options = {}) {
+    const busy = state.isUploadingAttachment || state.isSavingItem;
     const save = options.saveFormId
-      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save" ${state.isUploadingAttachment ? "disabled" : ""}>${escapeHtml(options.saveLabel || "Save")}</button>`
+      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save" ${busy ? "disabled" : ""}>${escapeHtml(state.isSavingItem ? "Saving…" : options.saveLabel || "Save")}</button>`
       : `<span></span>`;
     const closeAction = options.closeAction || "close-sheet";
     return `
       <div class="sheet-backdrop">
         <section class="sheet${options.sheetClass ? ` ${escapeAttr(options.sheetClass)}` : ""}" role="dialog" aria-modal="true" aria-label="${escapeAttr(title)}">
           <header class="sheet-header">
-            <button type="button" class="sheet-close" data-action="${escapeAttr(closeAction)}" ${state.isUploadingAttachment ? "disabled" : ""}>${escapeHtml(options.closeLabel || "Done")}</button>
+            <button type="button" class="sheet-close" data-action="${escapeAttr(closeAction)}" ${busy ? "disabled" : ""}>${escapeHtml(options.closeLabel || "Done")}</button>
             <div class="sheet-title">${escapeHtml(title)}</div>
             ${save}
           </header>
@@ -1458,7 +1460,9 @@
     const draft = state.sheet.draft || cloneItem(item);
     const iconOptions = allIconOptions().slice(0, 10);
     const body = `
-      <form id="item-editor-form" data-form="item-save" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}">
+      <form id="item-editor-form" data-form="item-save" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" aria-busy="${state.isSavingItem}">
+        ${state.sheet.error ? `<p class="item-editor-error" role="alert">${escapeHtml(state.sheet.error)}</p>` : ""}
+        <fieldset class="item-editor-fields" ${state.isSavingItem ? "disabled" : ""}>
         <input type="hidden" name="icon" value="${escapeAttr(draft.icon || "")}">
         <section class="form-section">
           <h2 class="section-title">Details</h2>
@@ -1544,6 +1548,7 @@
             </button>
           </div>
         </section>
+        </fieldset>
       </form>
     `;
     return sheetChrome("Edit Item", body, { closeLabel: "Cancel", saveFormId: "item-editor-form" });
@@ -2734,13 +2739,32 @@
     await loadServerHomes();
   }
 
-  function readItemDraftFromForm(form) {
+  async function submitItemEditor(form) {
+    if (state.isSavingItem || state.isUploadingAttachment || state.sheet?.type !== "itemEditor") return;
+    const sheet = state.sheet;
+    sheet.draft = readItemDraftFromForm(form, { trim: false });
+    sheet.error = "";
+    state.isSavingItem = true;
+    render();
+    try {
+      await saveItemFromForm(form);
+      if (state.sheet === sheet) state.sheet = null;
+      showToast("Item saved");
+    } catch (error) {
+      if (state.sheet === sheet) sheet.error = error.message || String(error);
+    } finally {
+      state.isSavingItem = false;
+      render({ preserveSheetScroll: !sheet.error });
+    }
+  }
+
+  function readItemDraftFromForm(form, { trim = true } = {}) {
     const formItem = findItem(form.dataset.homeId, form.dataset.itemId);
     return {
-      name: form.elements.name.value.trim(),
+      name: trim ? form.elements.name.value.trim() : form.elements.name.value,
       icon: form.elements.icon.value || null,
       quantity: Math.max(1, Number(form.elements.quantity.value) || 1),
-      notes: form.elements.notes.value.trim(),
+      notes: trim ? form.elements.notes.value.trim() : form.elements.notes.value,
       locationId: form.elements.locationId.value || null,
       properties: Array.from(form.querySelectorAll("[data-property-row]")).map((row) => ({
         id: row.dataset.propertyId || id(),
@@ -2973,6 +2997,7 @@
   }
 
   async function handleAction(element) {
+    if (state.isSavingItem) return;
     const action = element.dataset.action;
     if (state.isUploadingAttachment && ["open-location-picker", "open-activity", "open-delete"].includes(action)) return;
     if (action === "open-account") {
@@ -3457,10 +3482,7 @@
     }
 
     if (kind === "item-save") {
-      await runMutation(async () => {
-        await saveItemFromForm(form);
-        state.sheet = null;
-      }, "Item saved");
+      await submitItemEditor(form);
       return;
     }
 
@@ -3537,6 +3559,10 @@
   }
 
   function handleInput(event) {
+    const form = event.target.closest?.("#item-editor-form");
+    if (form && state.sheet?.type === "itemEditor" && !state.isSavingItem) {
+      state.sheet.draft = readItemDraftFromForm(form, { trim: false });
+    }
     if (event.target.id === "search-input") {
       state.search = event.target.value;
       render();
@@ -3593,7 +3619,7 @@
       if (state.photoPreview) {
         state.photoPreview = null;
         render();
-      } else if (state.sheet && !state.isUploadingAttachment) {
+      } else if (state.sheet && !state.isUploadingAttachment && !state.isSavingItem) {
         dismissActiveSheet();
       } else if (state.actionMenu) {
         state.actionMenu = null;
