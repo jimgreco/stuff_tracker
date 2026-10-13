@@ -23,6 +23,7 @@
   const state = {
     apiBaseUrl: localStorage.getItem(STORAGE.apiBaseUrl) || DEFAULT_API_BASE_URL,
     token: STORED_TOKEN,
+    sessionGeneration: 0,
     refreshToken: STORED_REFRESH_TOKEN,
     user: HAS_STORED_SESSION ? readJson(STORAGE.user, null) : null,
     accountPlan: null,
@@ -59,6 +60,8 @@
   let activeDropZone = null;
   let activeDropChip = null;
   let activeTokenRefresh = null;
+  let homesLoadSequence = 0;
+  let mutationSequence = 0;
 
   if (!HAS_STORED_SESSION) {
     state.collapsed = new Set();
@@ -239,12 +242,26 @@
   }
 
   function clearSession() {
+    state.sessionGeneration++;
+    mutationSequence++;
     state.token = "";
     state.refreshToken = "";
     state.user = null;
-    resetSelectionMode();
+    resetAccountPresentation();
+    state.isLoading = false;
     clearCachedData();
     persistSession();
+    render();
+  }
+
+  function resetAccountPresentation() {
+    state.sheet = null;
+    state.photoPreview = null;
+    state.actionMenu = null;
+    state.adding = null;
+    state.isSavingItem = false;
+    state.isUploadingAttachment = false;
+    resetSelectionMode();
   }
 
   function resetSelectionMode() {
@@ -2047,20 +2064,43 @@
     return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
   }
 
+  function sessionScope() {
+    return { generation: state.sessionGeneration, apiBaseUrl: state.apiBaseUrl };
+  }
+
+  function isCurrentSession(scope) {
+    return scope.generation === state.sessionGeneration && scope.apiBaseUrl === state.apiBaseUrl;
+  }
+
+  function staleSessionError() {
+    return Object.assign(new Error("This request belongs to an earlier sign-in."), { name: "StaleSessionError" });
+  }
+
+  function requireCurrentSession(scope) {
+    if (!isCurrentSession(scope)) throw staleSessionError();
+  }
+
   async function apiRequest(method, path, body) {
+    const scope = sessionScope();
     const mutation = method === "GET" ? null : { id: id(), occurredAt: new Date().toISOString() };
     let response = await sendApiRequest(method, path, body, mutation);
+    requireCurrentSession(scope);
 
     if (response.status === 401 && isRefreshableRequest(path)) {
       if (state.refreshToken && await refreshAccessToken()) {
+        requireCurrentSession(scope);
         response = await sendApiRequest(method, path, body, mutation);
+        requireCurrentSession(scope);
       } else {
+        requireCurrentSession(scope);
         clearSession();
         throw new Error("Session expired. Please sign in again.");
       }
     }
 
-    return parseApiResponse(response);
+    const result = await parseApiResponse(response);
+    requireCurrentSession(scope);
+    return result;
   }
 
   function sendApiRequest(method, path, body, mutation) {
@@ -2089,29 +2129,34 @@
 
   async function refreshAccessToken() {
     if (!state.refreshToken) return false;
-
-    if (!activeTokenRefresh) {
-      activeTokenRefresh = (async () => {
-        const response = await fetch(`${state.apiBaseUrl}/auth/refresh`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken: state.refreshToken }),
-        });
-
-        if (!response.ok) {
-          const message = await apiErrorMessage(response);
-          clearSession();
-          throw new Error(response.status === 401 ? "Session expired. Please sign in again." : message);
-        }
-
-        applyAuthResponse(await response.json());
-        return true;
-      })().finally(() => {
-        activeTokenRefresh = null;
+    if (activeTokenRefresh && isCurrentSession(activeTokenRefresh.scope)) return activeTokenRefresh.promise;
+    const scope = sessionScope();
+    const refreshToken = state.refreshToken;
+    const refresh = { scope, promise: null };
+    activeTokenRefresh = refresh;
+    refresh.promise = (async () => {
+      const response = await fetch(`${scope.apiBaseUrl}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
       });
-    }
+      requireCurrentSession(scope);
 
-    return activeTokenRefresh;
+      if (!response.ok) {
+        const message = await apiErrorMessage(response);
+        requireCurrentSession(scope);
+        if (response.status === 401) clearSession();
+        throw new Error(response.status === 401 ? "Session expired. Please sign in again." : message);
+      }
+
+      const auth = await response.json();
+      requireCurrentSession(scope);
+      applyAuthResponse(auth, { refreshing: true });
+      return true;
+    })().finally(() => {
+      if (activeTokenRefresh === refresh) activeTokenRefresh = null;
+    });
+    return refresh.promise;
   }
 
   async function parseApiResponse(response) {
@@ -2140,6 +2185,7 @@
   }
 
   async function uploadItemAttachment(homeId, kind, file) {
+    const scope = sessionScope();
     if (!file || file.size <= 0) {
       throw new Error(`${file?.name || "File"} is empty`);
     }
@@ -2161,6 +2207,7 @@
       headers: upload.headers,
       body: file,
     });
+    requireCurrentSession(scope);
 
     if (!response.ok) {
       throw new Error(await uploadErrorMessage(response));
@@ -2234,9 +2281,10 @@
     const containers = Array.from(document.querySelectorAll("[data-google-sign-in-host]"));
     if (!state.googleClientId || !window.google?.accounts?.id || !containers.length) return;
 
+    const scope = sessionScope();
     window.google.accounts.id.initialize({
       client_id: state.googleClientId,
-      callback: handleGoogleCredentialResponse,
+      callback: response => handleGoogleCredentialResponse(response, scope),
     });
 
     containers.forEach((container) => {
@@ -2257,7 +2305,8 @@
     });
   }
 
-  function handleGoogleCredentialResponse(response) {
+  function handleGoogleCredentialResponse(response, scope) {
+    if (!isCurrentSession(scope)) return;
     if (!response?.credential) {
       showToast("Google sign-in failed");
       render();
@@ -2272,6 +2321,7 @@
   }
 
   async function signInWithApple() {
+    const scope = sessionScope();
     if (!state.appleClientId || !window.AppleID?.auth) {
       throw new Error("Apple sign-in is not configured");
     }
@@ -2284,6 +2334,7 @@
     });
 
     const response = await window.AppleID.auth.signIn();
+    requireCurrentSession(scope);
     const identityToken = response?.authorization?.id_token;
     if (!identityToken) {
       throw new Error("Apple sign-in did not return an identity token");
@@ -2299,27 +2350,43 @@
     state.sheet = null;
   }
 
-  function applyAuthResponse(auth) {
+  function applyAuthResponse(auth, { refreshing = false } = {}) {
+    const user = normalizeUser(auth.user);
+    const accountChanged = state.user?.id !== user.id;
+    if (!refreshing || accountChanged) state.sessionGeneration++;
+    if (accountChanged) {
+      resetAccountPresentation();
+      clearCachedData();
+    }
     state.token = auth.token;
     state.refreshToken = auth.refreshToken ?? auth.refresh_token ?? state.refreshToken;
-    state.user = normalizeUser(auth.user);
+    state.user = user;
     persistSession();
   }
 
   async function loadServerHomes() {
+    const scope = sessionScope();
+    const sequence = ++homesLoadSequence;
+    const requireCurrentLoad = () => {
+      requireCurrentSession(scope);
+      if (sequence !== homesLoadSequence) throw staleSessionError();
+    };
     try {
       const [plan, homes] = await Promise.all([
         apiRequest("GET", "/account/plan"),
         apiRequest("GET", "/homes"),
       ]);
-      state.accountPlan = plan;
+      requireCurrentLoad();
       const details = await Promise.all(homes.map((home) => apiRequest("GET", `/homes/${home.id}`)));
+      requireCurrentLoad();
+      state.accountPlan = plan;
       state.homes = details.map(normalizeHomeDetail);
       state.homesLoaded = true;
       state.homesLoadError = "";
       pruneSelection();
       persistData();
     } catch (error) {
+      requireCurrentLoad();
       state.homesLoadError = error?.message || "Check your connection and try again.";
       state.homesLoaded = state.homes.length > 0;
       throw error;
@@ -2410,17 +2477,21 @@
   }
 
   async function runMutation(work, successMessage, options = {}) {
+    const scope = sessionScope();
+    const sequence = ++mutationSequence;
     state.isLoading = true;
     if (options.renderAtStart) render();
     try {
       await work();
-      if (successMessage) showToast(successMessage);
+      if (successMessage && isCurrentSession(scope)) showToast(successMessage);
     } catch (error) {
-      showToast(error.message || String(error));
+      if (isCurrentSession(scope) && error.name !== "StaleSessionError") showToast(error.message || String(error));
     } finally {
-      state.isLoading = false;
-      render();
-      openPendingItemLink();
+      if (sequence === mutationSequence) {
+        state.isLoading = false;
+        render();
+        openPendingItemLink();
+      }
     }
   }
 
@@ -2472,6 +2543,7 @@
   }
 
   async function moveItem(homeId, itemId, targetLocationId, insertionIndex) {
+    const scope = sessionScope();
     const home = findHome(homeId);
     const item = findItem(homeId, itemId);
     if (!home || !item) return false;
@@ -2500,11 +2572,13 @@
       await loadServerHomes();
       return true;
     } catch (error) {
-      state.homes = originalHomes;
-      persistData();
+      if (isCurrentSession(scope)) {
+        state.homes = originalHomes;
+        persistData();
+      }
       throw error;
     } finally {
-      if (fromLocationId !== toLocationId) {
+      if (isCurrentSession(scope) && fromLocationId !== toLocationId) {
         state.collapsed.delete(nodeKey("home", homeId));
         if (toLocationId) expandLocationPath(homeId, toLocationId);
         persistCollapsed();
@@ -2513,6 +2587,7 @@
   }
 
   async function moveItems(homeId, itemIds, targetLocationId, insertionIndex) {
+    const scope = sessionScope();
     const home = findHome(homeId);
     const uniqueIds = Array.from(new Set(itemIds)).filter(Boolean);
     if (!home || !uniqueIds.length) return false;
@@ -2540,13 +2615,17 @@
       await loadServerHomes();
       return true;
     } catch (error) {
-      state.homes = originalHomes;
-      persistData();
+      if (isCurrentSession(scope)) {
+        state.homes = originalHomes;
+        persistData();
+      }
       throw error;
     } finally {
-      state.collapsed.delete(nodeKey("home", homeId));
-      if (targetLocationId) expandLocationPath(homeId, targetLocationId);
-      persistCollapsed();
+      if (isCurrentSession(scope)) {
+        state.collapsed.delete(nodeKey("home", homeId));
+        if (targetLocationId) expandLocationPath(homeId, targetLocationId);
+        persistCollapsed();
+      }
     }
   }
 
@@ -2692,6 +2771,7 @@
   }
 
   async function setItemsFlagged(homeId, itemIds, isFlagged) {
+    const scope = sessionScope();
     const home = findHome(homeId);
     const items = Array.from(new Set(itemIds))
       .map((itemId) => findItem(homeId, itemId))
@@ -2711,8 +2791,10 @@
       })));
       await loadServerHomes();
     } catch (error) {
-      state.homes = originalHomes;
-      persistData();
+      if (isCurrentSession(scope)) {
+        state.homes = originalHomes;
+        persistData();
+      }
       throw error;
     }
   }
@@ -2742,19 +2824,23 @@
   async function submitItemEditor(form) {
     if (state.isSavingItem || state.isUploadingAttachment || state.sheet?.type !== "itemEditor") return;
     const sheet = state.sheet;
+    const scope = sessionScope();
     sheet.draft = readItemDraftFromForm(form, { trim: false });
     sheet.error = "";
     state.isSavingItem = true;
     render();
     try {
       await saveItemFromForm(form);
+      requireCurrentSession(scope);
       if (state.sheet === sheet) state.sheet = null;
       showToast("Item saved");
     } catch (error) {
       if (state.sheet === sheet) sheet.error = error.message || String(error);
     } finally {
-      state.isSavingItem = false;
-      render({ preserveSheetScroll: !sheet.error });
+      if (isCurrentSession(scope)) {
+        state.isSavingItem = false;
+        render({ preserveSheetScroll: !sheet.error });
+      }
     }
   }
 
@@ -3509,6 +3595,8 @@
     const form = document.getElementById("item-editor-form");
     if (!form || state.sheet?.type !== "itemEditor" || !["photo", "document"].includes(kind)) return;
 
+    const scope = sessionScope();
+    const sheet = state.sheet;
     state.sheet.draft = readItemDraftFromForm(form);
     state.isUploadingAttachment = true;
     render();
@@ -3516,10 +3604,12 @@
     try {
       const uploads = [];
       for (const file of files) {
+        requireCurrentSession(scope);
         uploads.push({ file, upload: await uploadItemAttachment(form.dataset.homeId, kind, file) });
       }
 
-      if (state.sheet?.type !== "itemEditor") return;
+      requireCurrentSession(scope);
+      if (state.sheet !== sheet) return;
 
       const currentForm = document.getElementById("item-editor-form");
       const draft = currentForm && state.sheet?.type === "itemEditor"
@@ -3546,10 +3636,12 @@
       state.sheet.draft = draft;
       showToast(attachmentUploadSuccessMessage(kind, uploads.length));
     } catch (error) {
-      showToast(error.message || String(error));
+      if (isCurrentSession(scope)) showToast(error.message || String(error));
     } finally {
-      state.isUploadingAttachment = false;
-      render();
+      if (isCurrentSession(scope)) {
+        state.isUploadingAttachment = false;
+        render();
+      }
     }
   }
 
