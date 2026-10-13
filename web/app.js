@@ -1557,6 +1557,13 @@
         ${renderDocumentSection(draft.documents)}
         <section class="form-section">
           <div class="form-list">
+            <button type="button" class="row-button" data-action="copy-item-link" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" ${state.sheet.copyingLink ? "disabled" : ""}>
+              ${svgIcon("link")} ${state.sheet.copyingLink ? "Copying…" : "Copy Item Link"}
+            </button>
+            <div class="full-row">
+              <p class="footnote" role="status">${state.sheet.itemLinkStatus === "copied" ? "Item link copied. " : state.sheet.itemLinkStatus === "manual" ? "Select and copy the link below. " : ""}People need access to this home to open the link.</p>
+              ${state.sheet.itemLinkStatus === "manual" ? `<label class="form-row"><span>Item link</span><input id="item-share-link" type="text" readonly value="${escapeAttr(itemShareURL(home.id, item.id))}" aria-label="Item link to copy"></label>` : ""}
+            </div>
             <button type="button" class="row-button" data-action="open-activity" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" ${state.isUploadingAttachment ? "disabled" : ""}>
               ${svgIcon("refresh")} View Item History
             </button>
@@ -2904,6 +2911,39 @@
     };
   }
 
+  function itemShareURL(homeId, itemId) {
+    return `https://cubbylog.com/items/${encodeURIComponent(homeId)}/${encodeURIComponent(itemId)}`;
+  }
+
+  async function copyItemLink(homeId, itemId) {
+    const sheet = state.sheet;
+    if (sheet?.type !== "itemEditor" || sheet.homeId !== homeId || sheet.itemId !== itemId
+      || sheet.copyingLink || !findItem(homeId, itemId)) return;
+    const scope = sessionScope();
+    const form = document.getElementById("item-editor-form");
+    if (form) sheet.draft = readItemDraftFromForm(form, { trim: false });
+    sheet.copyingLink = true;
+    sheet.itemLinkStatus = "";
+    render();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(itemShareURL(homeId, itemId));
+      if (isCurrentSession(scope) && state.sheet === sheet) sheet.itemLinkStatus = "copied";
+    } catch {
+      if (isCurrentSession(scope) && state.sheet === sheet) sheet.itemLinkStatus = "manual";
+    } finally {
+      sheet.copyingLink = false;
+      if (isCurrentSession(scope) && state.sheet === sheet) {
+        render();
+        if (sheet.itemLinkStatus === "manual") {
+          const input = document.getElementById("item-share-link");
+          input?.focus();
+          input?.select();
+        }
+      }
+    }
+  }
+
   async function sortChildrenForTarget(actionTarget = state.sheet) {
     const target = targetForActionTarget(actionTarget);
     if (!target) return;
@@ -3165,6 +3205,10 @@
     if (action === "close-activity") {
       state.sheet = state.sheet?.returnSheet || null;
       render();
+      return;
+    }
+    if (action === "copy-item-link") {
+      await copyItemLink(element.dataset.homeId, element.dataset.itemId);
       return;
     }
     if (action === "open-activity") {

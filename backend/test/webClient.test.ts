@@ -67,6 +67,85 @@ function itemLinkFixture() {
   return { ...fixture, frames, timers };
 }
 
+function itemCopyFixture() {
+  const fixture = editorFixture();
+  const focused: string[] = [];
+  fixture.context.document.getElementById = (id: string) => id === 'item-editor-form' ? fixture.form
+    : id === 'item-share-link' ? { focus: () => focused.push('focus'), select: () => focused.push('select') } : null;
+  const copied: string[] = [];
+  fixture.context.navigator = { clipboard: { writeText: async (url: string) => { copied.push(url); } } };
+  const copy = () => fixture.client.handleAction({ dataset: { action: 'copy-item-link', homeId: 'home', itemId: 'item' } });
+  return { ...fixture, copied, focused, copy };
+}
+
+test('copy item link uses the canonical URL and preserves unfinished editor text', async () => {
+  const { client, form, copied, copy } = itemCopyFixture();
+  await copy();
+  assert.deepEqual(copied, ['https://cubbylog.com/items/home/item']);
+  assert.equal(client.state.sheet.type, 'itemEditor');
+  assert.equal(client.state.sheet.draft.name, form.elements.name.value);
+  assert.equal(client.state.sheet.draft.notes, form.elements.notes.value);
+  assert.equal(client.state.sheet.itemLinkStatus, 'copied');
+  assert.equal(client.state.isSavingItem, false);
+});
+
+test('copied item links encode each identifier without changing the host', async () => {
+  const { client, context, copied } = itemCopyFixture();
+  context.document.getElementById = () => null;
+  client.state.homes = [{ id: 'home /?#', items: [{ id: 'item /?#' }] }];
+  client.state.sheet = { type: 'itemEditor', homeId: 'home /?#', itemId: 'item /?#' };
+  await client.handleAction({ dataset: { action: 'copy-item-link', homeId: 'home /?#', itemId: 'item /?#' } });
+  assert.deepEqual(copied, ['https://cubbylog.com/items/home%20%2F%3F%23/item%20%2F%3F%23']);
+});
+
+for (const failure of ['unavailable', 'denied']) {
+  test(`copy item link offers selected manual-copy text when clipboard is ${failure}`, async () => {
+    const { client, context, focused, form, copy } = itemCopyFixture();
+    context.navigator = failure === 'unavailable' ? {} : { clipboard: { writeText: async () => { throw new Error('Denied'); } } };
+    await copy();
+    assert.equal(client.state.sheet.itemLinkStatus, 'manual');
+    assert.equal(client.state.sheet.draft.notes, form.elements.notes.value);
+    assert.deepEqual(focused, ['focus', 'select']);
+    assert.equal(client.state.sheet.copyingLink, false);
+  });
+}
+
+test('pending clipboard writes ignore repeat clicks and completion after switching sheets', async () => {
+  const { client, context, copy } = itemCopyFixture();
+  let complete!: () => void;
+  let count = 0;
+  context.navigator.clipboard.writeText = () => { count++; return new Promise<void>(resolve => { complete = resolve; }); };
+  const pending = copy();
+  await copy();
+  assert.equal(count, 1);
+  const nextSheet = { type: 'account' };
+  client.state.sheet = nextSheet;
+  complete();
+  await pending;
+  assert.equal(client.state.sheet, nextSheet);
+  assert.equal(client.state.sheet.itemLinkStatus, undefined);
+});
+
+test('clipboard failure after sign-out does not restore the old item or link field', async () => {
+  const { client, context, focused, copy } = itemCopyFixture();
+  let reject!: (error: Error) => void;
+  context.navigator.clipboard.writeText = () => new Promise<void>((_resolve, fail) => { reject = fail; });
+  const pending = copy();
+  client.clearSession();
+  reject(new Error('Denied'));
+  await pending;
+  assert.equal(client.state.sheet, null);
+  assert.deepEqual(focused, []);
+});
+
+test('copy item link ignores an item no longer in the current home', async () => {
+  const { client, copied, copy } = itemCopyFixture();
+  client.state.homes[0].items = [];
+  await copy();
+  assert.deepEqual(copied, []);
+  assert.equal(client.state.sheet.itemLinkStatus, undefined);
+});
+
 test('a shared-item link opens the current item after revealing its location', () => {
   const { client, frames, timers } = itemLinkFixture();
   client.openItemLink();
