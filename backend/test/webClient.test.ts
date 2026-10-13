@@ -22,12 +22,13 @@ function browserFixture() {
   vm.runInContext(source.slice(0, source.indexOf('  document.addEventListener("click"')) + `
     render = () => {};
     showToast = message => { state.toast = message; };
+    const openItemLink = openPendingItemLink;
     openPendingItemLink = () => {};
     globalThis.client = {
       state, submitItemEditor, handleInput, handleAction, apiRequest,
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
-      handleGoogleCredentialResponse, sessionScope,
+      handleGoogleCredentialResponse, sessionScope, openItemLink,
       setSaveHandler: handler => { saveItemFromForm = handler; },
     };
   })();`, context);
@@ -49,6 +50,67 @@ function editorFixture() {
   const form = { dataset: { homeId: 'home', itemId: 'item' }, elements, querySelectorAll: () => [] };
   return { ...fixture, form };
 }
+
+function itemLinkFixture() {
+  const fixture = browserFixture();
+  const { client, context } = fixture;
+  const frames: (() => void)[] = [];
+  const timers: (() => void)[] = [];
+  context.requestAnimationFrame = (callback: () => void) => frames.push(callback);
+  context.window.setTimeout = (callback: () => void) => timers.push(callback);
+  context.document.querySelectorAll = () => [];
+  const item = { id: 'item-A', name: 'Private item A', properties: [], photoUrls: [], documents: [] };
+  client.applyAuthResponse(auth('A'));
+  client.state.homes = [{ id: 'home-A', items: [item], locations: [] }];
+  client.state.homesLoaded = true;
+  client.state.pendingItemLink = { homeId: 'home-A', itemId: 'item-A' };
+  return { ...fixture, frames, timers };
+}
+
+test('a shared-item link opens the current item after revealing its location', () => {
+  const { client, frames, timers } = itemLinkFixture();
+  client.openItemLink();
+  frames.shift()!();
+  client.state.homes[0].items[0].name = 'Latest item name';
+  timers.shift()!();
+  assert.equal(client.state.sheet.type, 'itemEditor');
+  assert.equal(client.state.sheet.draft.name, 'Latest item name');
+  assert.equal(client.state.highlightedItemId, '');
+});
+
+for (const stage of ['frame', 'timer']) {
+  test(`a shared-item link cannot reopen old details after an account switch during its ${stage}`, () => {
+    const { client, frames, timers } = itemLinkFixture();
+    client.openItemLink();
+    if (stage === 'timer') frames.shift()!();
+    client.clearSession();
+    client.applyAuthResponse(auth('B'));
+    (stage === 'frame' ? frames : timers).shift()!();
+    assert.equal(client.state.sheet, null);
+    assert.equal(client.state.highlightedItemId, '');
+    assert.equal(timers.length, 0);
+  });
+}
+
+test('a shared-item link does not resurrect an item removed before its delayed editor opens', () => {
+  const { client, frames, timers } = itemLinkFixture();
+  client.openItemLink();
+  frames.shift()!();
+  client.state.homes[0].items = [];
+  timers.shift()!();
+  assert.equal(client.state.sheet, null);
+  assert.equal(client.state.highlightedItemId, '');
+});
+
+test('new navigation cancels a shared-item reveal even when its sheet is closed again', async () => {
+  const { client, frames, timers } = itemLinkFixture();
+  client.openItemLink();
+  frames.shift()!();
+  await client.handleAction({ dataset: { action: 'open-account' } });
+  await client.handleAction({ dataset: { action: 'close-sheet' } });
+  timers.shift()!();
+  assert.equal(client.state.sheet, null);
+});
 
 test('item save keeps the complete draft on failure and rejects overlapping submissions', async () => {
   const { client, form } = editorFixture();

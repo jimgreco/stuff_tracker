@@ -255,6 +255,7 @@
   }
 
   function resetAccountPresentation() {
+    state.highlightedItemId = "";
     state.sheet = null;
     state.photoPreview = null;
     state.actionMenu = null;
@@ -2892,6 +2893,9 @@
       return;
     }
     state.deepLinkHandled = true;
+    const scope = sessionScope();
+    const isCurrentNavigation = () => isCurrentSession(scope)
+      && state.highlightedItemId === context.item.id && state.sheet === null;
 
     prepareHierarchyForItem(context.home, context.item);
     state.highlightedItemId = context.item.id;
@@ -2899,12 +2903,15 @@
     render();
 
     requestAnimationFrame(() => {
+      if (!isCurrentNavigation()) return;
       const chip = itemChipElement(context.home.id, context.item.id);
       chip?.scrollIntoView({ block: "center", behavior: "smooth" });
 
       window.setTimeout(() => {
-        const latestItem = findItem(context.home.id, context.item.id) || context.item;
+        if (!isCurrentNavigation()) return;
+        const latestItem = findItem(context.home.id, context.item.id);
         state.highlightedItemId = "";
+        if (!latestItem) { render(); return; }
         state.sheet = {
           type: "itemEditor",
           homeId: context.home.id,
@@ -3086,6 +3093,8 @@
     if (state.isSavingItem) return;
     const action = element.dataset.action;
     if (state.isUploadingAttachment && ["open-location-picker", "open-activity", "open-delete"].includes(action)) return;
+    // A deliberate interaction takes precedence over a delayed shared-item link.
+    state.highlightedItemId = "";
     if (action === "open-account") {
       state.sheet = { type: "account" };
       state.actionMenu = null;
@@ -3651,6 +3660,7 @@
   }
 
   function handleInput(event) {
+    state.highlightedItemId = "";
     const form = event.target.closest?.("#item-editor-form");
     if (form && state.sheet?.type === "itemEditor" && !state.isSavingItem) {
       state.sheet.draft = readItemDraftFromForm(form, { trim: false });
