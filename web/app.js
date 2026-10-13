@@ -1082,11 +1082,13 @@
   }
 
   function renderInlineAdd(placeholder) {
+    const adding = state.adding;
     return `
       <form class="inline-add" data-form="commit-add">
-        <input data-add-input name="name" placeholder="${escapeAttr(placeholder)}" autocomplete="off">
-        <button type="submit" class="inline-icon commit" aria-label="Save">${svgIcon("check")}</button>
-        <button type="button" class="inline-icon" data-action="cancel-add" aria-label="Cancel">${svgIcon("x")}</button>
+        <input data-add-input name="name" value="${escapeAttr(adding?.name || "")}" placeholder="${escapeAttr(placeholder)}" maxlength="${adding?.kind === "location" ? 255 : 200}" autocomplete="off" ${adding?.saving ? "disabled" : ""} ${adding?.attempt ? "readonly" : ""}>
+        <button type="submit" class="inline-icon commit" aria-label="${adding?.saving ? "Saving" : "Save"}" ${adding?.saving ? "disabled" : ""}>${svgIcon("check")}</button>
+        <button type="button" class="inline-icon" data-action="cancel-add" aria-label="Cancel" ${adding?.saving ? "disabled" : ""}>${svgIcon("x")}</button>
+        ${adding?.error ? `<p class="item-editor-error inline-add-error" role="alert">${escapeHtml(adding.error)}${adding.attempt ? `<br>${adding.created ? "This was added. Retry to reload your inventory." : "Retry to confirm this addition before changing its name."}` : ""}</p>` : ""}
       </form>
     `;
   }
@@ -2496,51 +2498,57 @@
     }
   }
 
-  async function createHome(name) {
-    await apiRequest("POST", "/homes", { name, icon: null });
-    await loadServerHomes();
+  function inlineCreateRequest(adding, name) {
+    const clientId = id();
+    if (adding.kind === "home") {
+      return { path: "/homes", body: { client_id: clientId, name, icon: null } };
+    }
+    const home = findHome(adding.homeId);
+    if (!home) throw new Error("This home is no longer available. Reload your inventory and try again.");
+    if (adding.kind === "location") {
+      return { path: `/homes/${home.id}/locations`, body: {
+        client_id: clientId, name, parent_id: adding.parentId || null,
+        type: adding.locationType, sort_order: childLocations(home, adding.parentId).length, icon: null,
+      } };
+    }
+    return { path: `/homes/${home.id}/items`, body: {
+      client_id: clientId,
+      ...itemPayload({ name, locationId: adding.parentId || null, quantity: 1,
+        properties: [], photoUrls: [], documents: [], sortOrder: itemsIn(home, adding.parentId).length }),
+    } };
   }
 
-  async function createLocation(homeId, name, parentId, type) {
-    const home = findHome(homeId);
-    if (!home) return;
-    const sortOrder = childLocations(home, parentId).length;
-    await apiRequest("POST", `/homes/${homeId}/locations`, {
-      name,
-      parent_id: parentId || null,
-      type,
-      sort_order: sortOrder,
-      icon: null,
-    });
-    await loadServerHomes();
-  }
-
-  async function createItem(homeId, name, locationId) {
-    const home = findHome(homeId);
-    if (!home) return;
-    const sortOrder = itemsIn(home, locationId).length;
-    const item = {
-      id: id(),
-      homeId,
-      locationId: locationId || null,
-      name,
-      icon: null,
-      notes: "",
-      quantity: 1,
-      properties: [],
-      photoUrls: [],
-      documents: [],
-      purchaseDate: null,
-      serialNumber: null,
-      modelNumber: null,
-      warrantyExpiresDate: null,
-      estimatedValueCents: null,
-      isFlagged: false,
-      sortOrder,
-      createdBy: state.user?.id || "local",
-    };
-    await apiRequest("POST", `/homes/${homeId}/items`, itemPayload(item));
-    await loadServerHomes();
+  async function submitInlineAdd(form) {
+    const adding = state.adding;
+    const name = adding?.attempt?.name ?? form.elements.name.value.trim();
+    if (!adding || adding.saving || !name) return;
+    const scope = sessionScope();
+    if (!adding.attempt) adding.name = form.elements.name.value;
+    adding.error = "";
+    adding.saving = true;
+    render();
+    try {
+      // Preserve both the client identity and exact payload if the response or
+      // following inventory refresh is lost after the server commits the create.
+      if (!adding.attempt) {
+        adding.attempt = { name, ...inlineCreateRequest(adding, name) };
+      }
+      if (!adding.created) {
+        await apiRequest("POST", adding.attempt.path, adding.attempt.body);
+        adding.created = true;
+      }
+      await loadServerHomes();
+      requireCurrentSession(scope);
+      if (state.adding === adding) state.adding = null;
+      showToast("Added");
+    } catch (error) {
+      if (isCurrentSession(scope) && state.adding === adding) adding.error = error.message || String(error);
+    } finally {
+      if (isCurrentSession(scope)) {
+        adding.saving = false;
+        render();
+      }
+    }
   }
 
   async function moveItem(homeId, itemId, targetLocationId, insertionIndex) {
@@ -3238,6 +3246,7 @@
       return;
     }
     if (action === "cancel-add") {
+      if (state.adding?.saving) return;
       state.adding = null;
       render();
       return;
@@ -3538,15 +3547,7 @@
     const kind = form.dataset.form;
 
     if (kind === "commit-add") {
-      const name = form.elements.name.value.trim();
-      if (!name || !state.adding) return;
-      const adding = state.adding;
-      state.adding = null;
-      await runMutation(async () => {
-        if (adding.kind === "home") await createHome(name);
-        else if (adding.kind === "location") await createLocation(adding.homeId, name, adding.parentId, adding.locationType);
-        else if (adding.kind === "item") await createItem(adding.homeId, name, adding.parentId);
-      }, "Added");
+      await submitInlineAdd(form);
       return;
     }
 
@@ -3661,6 +3662,8 @@
 
   function handleInput(event) {
     state.highlightedItemId = "";
+    const addingForm = event.target.closest?.('form[data-form="commit-add"]');
+    if (addingForm && state.adding && !state.adding.saving && !state.adding.attempt) state.adding.name = addingForm.elements.name.value;
     const form = event.target.closest?.("#item-editor-form");
     if (form && state.sheet?.type === "itemEditor" && !state.isSavingItem) {
       state.sheet.draft = readItemDraftFromForm(form, { trim: false });

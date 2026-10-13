@@ -25,7 +25,7 @@ function browserFixture() {
     const openItemLink = openPendingItemLink;
     openPendingItemLink = () => {};
     globalThis.client = {
-      state, submitItemEditor, handleInput, handleAction, apiRequest,
+      state, submitItemEditor, submitInlineAdd, handleInput, handleAction, apiRequest,
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
       handleGoogleCredentialResponse, sessionScope, openItemLink,
@@ -378,4 +378,98 @@ test('changing accounts clears the previous account editor and attachment state'
   assert.equal(client.state.sheet, null);
   assert.equal(client.state.isUploadingAttachment, false);
   assert.equal(client.state.isSavingItem, false);
+});
+
+function inlineAddFixture(kind = 'item') {
+  const fixture = transportFixture();
+  fixture.client.state.homes = [{ id: 'home-A', items: [], locations: [] }];
+  fixture.client.state.adding = { kind, homeId: 'home-A', parentId: null, locationType: 'room' };
+  const form = { elements: { name: { value: 'New storage ' } } };
+  return { ...fixture, form };
+}
+
+for (const kind of ['home', 'location', 'item']) {
+  test(`${kind} quick-add retains failed text and replays the same create after an uncertain response`, async () => {
+    const { client, requests, form } = inlineAddFixture(kind);
+    const saving = client.submitInlineAdd(form);
+    const firstBody = requests[0].options.body;
+    assert.match(JSON.parse(firstBody).client_id, /^[0-9a-f-]{36}$/);
+    requests[0].reject(new TypeError('Connection interrupted'));
+    await saving;
+    assert.equal(client.state.adding.name, 'New storage ');
+    assert.equal(client.state.adding.error, 'Connection interrupted');
+    assert.equal(client.state.adding.saving, false);
+    // Another refresh may change sibling ordering before retrying the same create.
+    client.state.homes[0].items.push({ id: 'other', locationId: null, sortOrder: 0 });
+    client.state.homes[0].locations.push({ id: 'other', parentId: null, sortOrder: 0 });
+    form.elements.name.value = 'Changed after uncertain create';
+    const retry = client.submitInlineAdd(form);
+    assert.equal(requests[1].options.body, firstBody);
+    assert.equal(client.state.adding.name, 'New storage ');
+    requests[1].resolve(response({ id: JSON.parse(firstBody).client_id }));
+    await nextTurn();
+    requests[2].resolve(response({ isPaid: true }));
+    requests[3].resolve(response([]));
+    await retry;
+    assert.equal(client.state.adding, null);
+    assert.equal(client.state.toast, 'Added');
+  });
+}
+
+test('quick-add only reloads inventory when the create was already confirmed', async () => {
+  const { client, requests, form } = inlineAddFixture();
+  const saving = client.submitInlineAdd(form);
+  requests[0].resolve(response({ id: 'created' }));
+  await nextTurn();
+  requests[1].resolve(response({ isPaid: true }));
+  requests[2].reject(new Error('Refresh interrupted'));
+  await saving;
+  assert.equal(client.state.adding.error, 'Refresh interrupted');
+  assert.equal(client.state.adding.created, true);
+  const retry = client.submitInlineAdd(form);
+  assert.equal(requests.filter(request => request.options.method === 'POST').length, 1);
+  requests[3].resolve(response({ isPaid: true }));
+  requests[4].resolve(response([]));
+  await retry;
+  assert.equal(client.state.adding, null);
+});
+
+test('quick-add ignores duplicate submissions and cancellation while saving', async () => {
+  const { client, requests, form } = inlineAddFixture();
+  const saving = client.submitInlineAdd(form);
+  await client.submitInlineAdd(form);
+  await client.handleAction({ dataset: { action: 'cancel-add' } });
+  assert.equal(requests.length, 1);
+  assert.equal(client.state.adding.saving, true);
+  requests[0].reject(new Error('Offline'));
+  await saving;
+  assert.equal(client.state.adding.saving, false);
+});
+
+test('quick-add cannot restore its failed draft into a new account', async () => {
+  const { client, requests, form } = inlineAddFixture();
+  const saving = client.submitInlineAdd(form);
+  client.clearSession();
+  client.applyAuthResponse(auth('B'));
+  client.state.adding = { kind: 'home', name: 'Account B draft', saving: true };
+  requests[0].reject(new Error('Old account failure'));
+  await saving;
+  assert.equal(client.state.adding.name, 'Account B draft');
+  assert.equal(client.state.adding.saving, true);
+  assert.equal(client.state.adding.error, undefined);
+});
+
+test('a confirmed quick-add does not dismiss a different draft opened while it was saving', async () => {
+  const { client, requests, form } = inlineAddFixture();
+  const saving = client.submitInlineAdd(form);
+  await client.handleAction({ dataset: { action: 'start-add', addKind: 'home' } });
+  client.state.adding.name = 'Next home draft';
+  const newerDraft = client.state.adding;
+  requests[0].resolve(response({ id: 'created' }));
+  await nextTurn();
+  requests[1].resolve(response({ isPaid: true }));
+  requests[2].resolve(response([]));
+  await saving;
+  assert.equal(client.state.adding, newerDraft);
+  assert.equal(client.state.adding.name, 'Next home draft');
 });

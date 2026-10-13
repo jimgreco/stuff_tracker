@@ -1393,6 +1393,11 @@ button:disabled {
   background: #fffdf8;
 }
 
+.inline-add .inline-add-error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .inline-icon {
   display: grid;
   width: 36px;
