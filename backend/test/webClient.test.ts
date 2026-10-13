@@ -25,7 +25,7 @@ function browserFixture() {
     const openItemLink = openPendingItemLink;
     openPendingItemLink = () => {};
     globalThis.client = {
-      state, submitItemEditor, submitInlineAdd, handleInput, handleAction, apiRequest,
+      state, submitItemEditor, submitInlineAdd, submitRename, handleInput, handleAction, apiRequest,
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
       handleGoogleCredentialResponse, sessionScope, openItemLink,
@@ -472,4 +472,75 @@ test('a confirmed quick-add does not dismiss a different draft opened while it w
   await saving;
   assert.equal(client.state.adding, newerDraft);
   assert.equal(client.state.adding.name, 'Next home draft');
+});
+
+
+function renameFixture(kind = 'home') {
+  const fixture = transportFixture();
+  fixture.client.state.homes = [{ id: 'home-A', name: 'Home', icon: null, items: [], locations: [{ id: 'room', name: 'Room' }] }];
+  fixture.client.state.sheet = { type: 'rename', kind, homeId: 'home-A', ...(kind === 'location' ? { locationId: 'room' } : {}) };
+  return { ...fixture, form: { elements: { name: { value: 'Updated name ' } } } };
+}
+
+for (const kind of ['home', 'location']) {
+  test(`${kind} rename retains its failed draft and can retry`, async () => {
+    const { client, requests, form } = renameFixture(kind);
+    const saving = client.submitRename(form);
+    assert.equal(new URL(requests[0].url).pathname, kind === 'home' ? '/homes/home-A' : '/homes/home-A/locations/room');
+    requests[0].reject(new Error('Offline'));
+    await saving;
+    assert.equal(client.state.sheet.name, 'Updated name ');
+    assert.equal(client.state.sheet.error, 'Offline');
+    assert.equal(client.state.sheet.saving, false);
+    const retry = client.submitRename(form);
+    requests[1].resolve(response({}));
+    await nextTurn();
+    requests[2].resolve(response({ isPaid: true }));
+    requests[3].resolve(response([]));
+    await retry;
+    assert.equal(client.state.sheet, null);
+    assert.equal(client.state.toast, 'Renamed');
+  });
+}
+
+test('rename ignores duplicate submissions and closing while saving', async () => {
+  const { client, requests, form } = renameFixture();
+  const saving = client.submitRename(form);
+  await client.submitRename(form);
+  await client.handleAction({ dataset: { action: 'close-sheet' } });
+  assert.equal(requests.length, 1);
+  assert.equal(client.state.sheet.saving, true);
+  requests[0].reject(new Error('Offline'));
+  await saving;
+});
+
+test('a late rename cannot dismiss a different sheet', async () => {
+  const { client, requests, form } = renameFixture();
+  const saving = client.submitRename(form);
+  client.state.sheet = { type: 'account' };
+  requests[0].resolve(response({}));
+  await nextTurn();
+  requests[1].resolve(response({ isPaid: true }));
+  requests[2].resolve(response([]));
+  await saving;
+  assert.equal(client.state.sheet.type, 'account');
+});
+
+test('an old rename failure cannot affect a new account sheet', async () => {
+  const { client, requests, form } = renameFixture();
+  const saving = client.submitRename(form);
+  client.clearSession();
+  client.applyAuthResponse(auth('B'));
+  client.state.sheet = { type: 'rename', name: 'Account B draft', saving: true };
+  requests[0].reject(new Error('Account A error'));
+  await saving;
+  assert.equal(client.state.sheet.name, 'Account B draft');
+  assert.equal(client.state.sheet.saving, true);
+  assert.equal(client.state.sheet.error, undefined);
+});
+
+test('rename typing survives unrelated redraws without trimming unfinished text', () => {
+  const { client, form } = renameFixture();
+  client.handleInput({ target: { closest: (selector: string) => selector === '#rename-form' ? form : null } });
+  assert.equal(client.state.sheet.name, 'Updated name ');
 });

@@ -1127,9 +1127,9 @@
   }
 
   function sheetChrome(title, body, options = {}) {
-    const busy = state.isUploadingAttachment || state.isSavingItem;
+    const busy = state.isUploadingAttachment || state.isSavingItem || state.sheet?.saving;
     const save = options.saveFormId
-      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save" ${busy ? "disabled" : ""}>${escapeHtml(state.isSavingItem ? "Saving…" : options.saveLabel || "Save")}</button>`
+      ? `<button type="submit" form="${escapeAttr(options.saveFormId)}" class="sheet-save" ${busy ? "disabled" : ""}>${escapeHtml(state.isSavingItem || state.sheet?.saving ? "Saving…" : options.saveLabel || "Save")}</button>`
       : `<span></span>`;
     const closeAction = options.closeAction || "close-sheet";
     return `
@@ -1328,13 +1328,14 @@
   function renderRenameSheet() {
     const target = targetForSheet();
     if (!target) return "";
-    const title = target.location ? target.location.name : target.home.name;
+    const title = state.sheet.name ?? (target.location ? target.location.name : target.home.name);
     const body = `
       <form id="rename-form" class="form-section" data-form="rename">
+        ${state.sheet.error ? `<p class="item-editor-error" role="alert">${escapeHtml(state.sheet.error)}</p>` : ""}
         <div class="form-list">
           <label class="form-row">
             <span>Name</span>
-            <input id="rename-input" name="name" value="${escapeAttr(title)}" autocomplete="off">
+            <input id="rename-input" name="name" value="${escapeAttr(title)}" maxlength="${target.location ? 255 : 200}" autocomplete="off" ${state.sheet.saving ? "disabled" : ""}>
           </label>
         </div>
       </form>
@@ -2711,10 +2712,10 @@
     return Array.from(updates.values());
   }
 
-  async function renameTarget(name) {
-    const target = targetForSheet();
-    if (!target) return;
-    if (state.sheet.kind === "home") {
+  async function renameTarget(name, sheet) {
+    const target = targetForActionTarget(sheet);
+    if (!target || (sheet.kind !== "home" && !target.location)) throw new Error("This home or location is no longer available.");
+    if (sheet.kind === "home") {
       await apiRequest("PATCH", `/homes/${target.home.id}`, { name, icon: target.home.icon || null });
       await loadServerHomes();
       return;
@@ -2723,6 +2724,31 @@
     if (target.location) {
       await apiRequest("PATCH", `/homes/${target.home.id}/locations/${target.location.id}`, { name });
       await loadServerHomes();
+    }
+  }
+
+  async function submitRename(form) {
+    const sheet = state.sheet;
+    if (sheet?.type !== "rename" || sheet.saving) return;
+    const name = form.elements.name.value.trim();
+    if (!name) return;
+    const scope = sessionScope();
+    sheet.name = form.elements.name.value;
+    sheet.error = "";
+    sheet.saving = true;
+    render();
+    try {
+      await renameTarget(name, sheet);
+      requireCurrentSession(scope);
+      if (state.sheet === sheet) state.sheet = null;
+      showToast("Renamed");
+    } catch (error) {
+      if (isCurrentSession(scope) && state.sheet === sheet) sheet.error = error.message || String(error);
+    } finally {
+      if (isCurrentSession(scope)) {
+        sheet.saving = false;
+        render();
+      }
     }
   }
 
@@ -3128,7 +3154,7 @@
       return;
     }
     if (action === "close-sheet") {
-      if (state.isUploadingAttachment) return;
+      if (state.isUploadingAttachment || state.sheet?.saving) return;
       state.sheet = null;
       state.photoPreview = null;
       state.actionMenu = null;
@@ -3568,12 +3594,7 @@
     }
 
     if (kind === "rename") {
-      const name = form.elements.name.value.trim();
-      if (!name) return;
-      await runMutation(async () => {
-        await renameTarget(name);
-        state.sheet = null;
-      }, "Renamed");
+      await submitRename(form);
       return;
     }
 
@@ -3664,6 +3685,8 @@
     state.highlightedItemId = "";
     const addingForm = event.target.closest?.('form[data-form="commit-add"]');
     if (addingForm && state.adding && !state.adding.saving && !state.adding.attempt) state.adding.name = addingForm.elements.name.value;
+    const renameForm = event.target.closest?.("#rename-form");
+    if (renameForm && state.sheet?.type === "rename" && !state.sheet.saving) state.sheet.name = renameForm.elements.name.value;
     const form = event.target.closest?.("#item-editor-form");
     if (form && state.sheet?.type === "itemEditor" && !state.isSavingItem) {
       state.sheet.draft = readItemDraftFromForm(form, { trim: false });
