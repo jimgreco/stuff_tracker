@@ -223,6 +223,8 @@ struct ItemEditView: View {
     @State private var showSubscriptionSheet = false
     @State private var attachmentError: String?
     @State private var showActivityHistory = false
+    @State private var showItemLinkCopied = false
+    @State private var itemLinkCopyCount = 0
 
     private let editorListInsets = EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20)
     private let editorActionInsets = EdgeInsets(top: 7, leading: 20, bottom: 7, trailing: 20)
@@ -304,6 +306,7 @@ struct ItemEditView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                     .disabled(isSaving)
+                    .accessibilityLabel("Item actions")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -369,6 +372,27 @@ struct ItemEditView: View {
                 }
             }
             .interactiveDismissDisabled(isSaving)
+            .overlay(alignment: .top) {
+                if showItemLinkCopied {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label("Item link copied", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(CubbyTheme.green)
+                        Text("People need access to this home to open the link.")
+                            .font(.caption)
+                            .foregroundStyle(CubbyTheme.mutedInk)
+                    }
+                    .cubbyPanel(padding: 14, elevated: true)
+                    .padding()
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("item-link-copy-confirmation")
+                }
+            }
+            .task(id: itemLinkCopyCount) {
+                guard showItemLinkCopied else { return }
+                do { try await Task.sleep(for: .seconds(4)) } catch { return }
+                showItemLinkCopied = false
+            }
             .alert("Couldn’t Complete Action", isPresented: Binding(
                 get: { attachmentError != nil },
                 set: { if !$0 { attachmentError = nil } }
@@ -432,6 +456,15 @@ struct ItemEditView: View {
     @ViewBuilder
     private var shareMenuItems: some View {
             if let deepLink = deepLinkForSharing {
+                Button {
+                    UIPasteboard.general.string = deepLink.url.absoluteString
+                    showItemLinkCopied = true
+                    itemLinkCopyCount += 1
+                    UIAccessibility.post(notification: .announcement, argument: "Item link copied")
+                } label: {
+                    Label("Copy Item Link", systemImage: "doc.on.doc")
+                }
+
                 ShareLink(item: deepLink.url) {
                     Label("Share Item Link", systemImage: "link")
                 }
@@ -457,9 +490,9 @@ struct ItemEditView: View {
     }
 
     private var deepLinkForSharing: ItemDeepLink? {
-        let item = itemForSharing
-        guard !item.homeId.isEmpty, !item.id.isEmpty else { return nil }
-        return ItemDeepLink(homeId: item.homeId, itemId: item.id)
+        let savedHomeId = item.homeId.isEmpty ? homeId : item.homeId
+        guard !savedHomeId.isEmpty, !item.id.isEmpty else { return nil }
+        return ItemDeepLink(homeId: savedHomeId, itemId: item.id)
     }
 
     private var itemForSharing: Item {

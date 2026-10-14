@@ -72,6 +72,36 @@ final class StuffTrackerScreenshots: XCTestCase {
         XCTAssertTrue(app.staticTexts["Serving Bin"].waitForExistence(timeout: 5))
     }
 
+    func testCopyItemLinkPreservesUnsavedEdits() throws {
+        app.buttons["Search stuff..."].tap()
+        let searchField = app.textFields["Search stuff..."]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        searchField.typeText("camera\n")
+        let cameraBag = app.buttons["Camera Bag"]
+        XCTAssertTrue(scrollUpUntilHittable(cameraBag))
+        cameraBag.tap()
+
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(" draft")
+        app.buttons["Item actions"].tap()
+        let copyLink = app.buttons["Copy Item Link"]
+        XCTAssertTrue(copyLink.waitForExistence(timeout: 5))
+        let menu = XCTAttachment(screenshot: app.screenshot())
+        menu.name = "Copy item link menu"
+        menu.lifetime = .keepAlways
+        add(menu)
+        copyLink.tap()
+
+        XCTAssertTrue(app.staticTexts["Item link copied"].waitForExistence(timeout: 5))
+        XCTAssertEqual(nameField.value as? String, "Camera Bag draft")
+        let confirmation = XCTAttachment(screenshot: app.screenshot())
+        confirmation.name = "Copied link preserves draft"
+        confirmation.lifetime = .keepAlways
+        add(confirmation)
+    }
+
     func testScrollingUpdatesBreadcrumb() throws {
         let scrollView = app.scrollViews.firstMatch
         XCTAssertTrue(scrollView.waitForExistence(timeout: 5))
