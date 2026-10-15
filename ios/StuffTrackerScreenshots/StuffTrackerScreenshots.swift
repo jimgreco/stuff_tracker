@@ -102,6 +102,35 @@ final class StuffTrackerScreenshots: XCTestCase {
         add(confirmation)
     }
 
+    func testCopySerialNumberPreservesUnsavedEdits() throws {
+        app.buttons["Search stuff..."].tap()
+        let searchField = app.textFields["Search stuff..."]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        searchField.typeText("camera\n")
+        let cameraBag = app.buttons["Camera Bag"]
+        XCTAssertTrue(scrollUpUntilHittable(cameraBag))
+        cameraBag.tap()
+        let nameField = app.textFields["Name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(" draft")
+        app.buttons["Item actions"].tap()
+        let copySerial = app.buttons["Copy Serial Number"]
+        XCTAssertTrue(copySerial.waitForExistence(timeout: 5))
+        XCTAssertTrue(copySerial.isEnabled)
+        let menu = XCTAttachment(screenshot: app.screenshot())
+        menu.name = "Copy serial number menu"
+        menu.lifetime = .keepAlways
+        add(menu)
+        copySerial.tap()
+        XCTAssertTrue(app.staticTexts["Serial number copied"].waitForExistence(timeout: 5))
+        XCTAssertEqual(nameField.value as? String, "Camera Bag draft")
+        let confirmation = XCTAttachment(screenshot: app.screenshot())
+        confirmation.name = "Copied serial preserves draft"
+        confirmation.lifetime = .keepAlways
+        add(confirmation)
+    }
+
     func testScrollingUpdatesBreadcrumb() throws {
         let scrollView = app.scrollViews.firstMatch
         XCTAssertTrue(scrollView.waitForExistence(timeout: 5))

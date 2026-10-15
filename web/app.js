@@ -1519,6 +1519,10 @@
               <span>Serial</span>
               <input name="serialNumber" value="${escapeAttr(draft.serialNumber || "")}" autocomplete="off">
             </label>
+            <button id="copy-item-serial" type="button" class="row-button" data-action="copy-item-serial" data-home-id="${escapeAttr(home.id)}" data-item-id="${escapeAttr(item.id)}" ${state.sheet.copyingSerial || !draft.serialNumber?.trim() ? "disabled" : ""}>
+              ${svgIcon("doc")} ${state.sheet.copyingSerial ? "Copying…" : "Copy Serial Number"}
+            </button>
+            ${state.sheet.serialCopyStatus ? `<div class="full-row"><p class="footnote" role="status">${state.sheet.serialCopyStatus === "copied" ? "Serial number copied." : "Select and copy the serial number above."}</p></div>` : ""}
             <label class="form-row">
               <span>Model</span>
               <input name="modelNumber" value="${escapeAttr(draft.modelNumber || "")}" autocomplete="off">
@@ -2902,7 +2906,7 @@
       photoUrls: state.sheet?.draft?.photoUrls || formItem?.photoUrls || [],
       documents: state.sheet?.draft?.documents || formItem?.documents || [],
       purchaseDate: form.elements.purchaseDate.value || null,
-      serialNumber: form.elements.serialNumber.value.trim() || null,
+      serialNumber: (trim ? form.elements.serialNumber.value.trim() : form.elements.serialNumber.value) || null,
       modelNumber: form.elements.modelNumber.value.trim() || null,
       warrantyExpiresDate: form.elements.warrantyExpiresDate.value || null,
       estimatedValueCents: centsFromDollars(form.elements.estimatedValue.value),
@@ -2937,6 +2941,37 @@
         render();
         if (sheet.itemLinkStatus === "manual") {
           const input = document.getElementById("item-share-link");
+          input?.focus();
+          input?.select();
+        }
+      }
+    }
+  }
+
+  async function copyItemSerial(homeId, itemId) {
+    const sheet = state.sheet;
+    if (sheet?.type !== "itemEditor" || sheet.homeId !== homeId || sheet.itemId !== itemId
+      || sheet.copyingSerial || !findItem(homeId, itemId)) return;
+    const scope = sessionScope();
+    const form = document.getElementById("item-editor-form");
+    if (form) sheet.draft = readItemDraftFromForm(form, { trim: false });
+    const serial = sheet.draft?.serialNumber?.trim();
+    if (!serial) return;
+    sheet.copyingSerial = true;
+    sheet.serialCopyStatus = "";
+    render();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(serial);
+      if (isCurrentSession(scope) && state.sheet === sheet) sheet.serialCopyStatus = "copied";
+    } catch {
+      if (isCurrentSession(scope) && state.sheet === sheet) sheet.serialCopyStatus = "manual";
+    } finally {
+      sheet.copyingSerial = false;
+      if (isCurrentSession(scope) && state.sheet === sheet) {
+        render();
+        if (sheet.serialCopyStatus === "manual") {
+          const input = document.getElementById("item-editor-form")?.elements.serialNumber;
           input?.focus();
           input?.select();
         }
@@ -3209,6 +3244,10 @@
     }
     if (action === "copy-item-link") {
       await copyItemLink(element.dataset.homeId, element.dataset.itemId);
+      return;
+    }
+    if (action === "copy-item-serial") {
+      await copyItemSerial(element.dataset.homeId, element.dataset.itemId);
       return;
     }
     if (action === "open-activity") {
@@ -3734,6 +3773,8 @@
     const form = event.target.closest?.("#item-editor-form");
     if (form && state.sheet?.type === "itemEditor" && !state.isSavingItem) {
       state.sheet.draft = readItemDraftFromForm(form, { trim: false });
+      const copySerial = document.getElementById("copy-item-serial");
+      if (copySerial) copySerial.disabled = state.sheet.copyingSerial || !state.sheet.draft.serialNumber?.trim();
     }
     if (event.target.id === "search-input") {
       state.search = event.target.value;

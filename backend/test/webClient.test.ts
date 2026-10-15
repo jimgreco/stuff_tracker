@@ -146,6 +146,56 @@ test('copy item link ignores an item no longer in the current home', async () =>
   assert.equal(client.state.sheet.itemLinkStatus, undefined);
 });
 
+test('copy serial number uses the current draft and preserves unsaved edits', async () => {
+  const { client, form, copied } = itemCopyFixture();
+  form.elements.serialNumber.value = '  DRAFT-0042  ';
+  await client.handleAction({ dataset: { action: 'copy-item-serial', homeId: 'home', itemId: 'item' } });
+  assert.deepEqual(copied, ['DRAFT-0042']);
+  assert.equal(client.state.sheet.draft.serialNumber, '  DRAFT-0042  ');
+  assert.equal(client.state.sheet.draft.name, form.elements.name.value);
+  assert.equal(client.state.sheet.draft.notes, form.elements.notes.value);
+  assert.equal(client.state.sheet.serialCopyStatus, 'copied');
+  assert.equal(client.state.isSavingItem, false);
+});
+
+test('empty serial numbers do not overwrite the clipboard', async () => {
+  const { client, form, copied } = itemCopyFixture();
+  form.elements.serialNumber.value = '   ';
+  await client.handleAction({ dataset: { action: 'copy-item-serial', homeId: 'home', itemId: 'item' } });
+  assert.deepEqual(copied, []);
+});
+
+for (const failure of ['unavailable', 'denied']) {
+  test(`serial copy selects the draft field when clipboard is ${failure}`, async () => {
+    const { client, form, context } = itemCopyFixture();
+    const focused: string[] = [];
+    Object.assign(form.elements.serialNumber, {
+      value: 'DRAFT-0042', focus: () => focused.push('focus'), select: () => focused.push('select'),
+    });
+    context.navigator = failure === 'unavailable' ? {} : { clipboard: { writeText: async () => { throw new Error('Denied'); } } };
+    await client.handleAction({ dataset: { action: 'copy-item-serial', homeId: 'home', itemId: 'item' } });
+    assert.equal(client.state.sheet.serialCopyStatus, 'manual');
+    assert.equal(client.state.sheet.draft.notes, form.elements.notes.value);
+    assert.deepEqual(focused, ['focus', 'select']);
+  });
+}
+
+test('serial copy ignores repeat clicks and completion after sign-out', async () => {
+  const { client, context, form } = itemCopyFixture();
+  form.elements.serialNumber.value = 'DRAFT-0042';
+  let reject!: (error: Error) => void;
+  let count = 0;
+  context.navigator.clipboard.writeText = () => { count++; return new Promise<void>((_resolve, fail) => { reject = fail; }); };
+  const copy = () => client.handleAction({ dataset: { action: 'copy-item-serial', homeId: 'home', itemId: 'item' } });
+  const pending = copy();
+  await copy();
+  assert.equal(count, 1);
+  client.clearSession();
+  reject(new Error('Denied'));
+  await pending;
+  assert.equal(client.state.sheet, null);
+});
+
 test('a shared-item link opens the current item after revealing its location', () => {
   const { client, frames, timers } = itemLinkFixture();
   client.openItemLink();
