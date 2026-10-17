@@ -17,4 +17,6 @@ In production, the backend container serves this folder from the same origin as 
 
 Item share links use `/items/:homeId/:itemId`. The backend serves the web app for those paths so signed-in web users can reveal the linked item, while iOS can claim the same HTTPS links through Universal Links.
 
+Inventory search includes attached document names, so searching for a receipt or manual can reveal its parent item and location. It searches document names, not file contents or attachment URLs, and continues to respect the flag filter.
+
 The web app reads public provider IDs and the optional App Store fallback URL from `GET /auth/config`. Set `GOOGLE_WEB_CLIENT_ID` for browser Google Sign-In, `APPLE_WEB_CLIENT_ID` for Sign in with Apple JS, and either `IOS_APP_STORE_URL` or `APP_STORE_APP_APPLE_ID` for the iOS App Store link. The iOS `GOOGLE_CLIENT_ID` and `APPLE_BUNDLE_ID` are still used for native sign-in but are not exposed as web client IDs.

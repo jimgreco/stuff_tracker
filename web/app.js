@@ -571,7 +571,7 @@
           <div class="search-controls">
             <div class="search-wrap">
               ${svgIcon("search")}
-              <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Search stuff..." value="${escapeAttr(state.search)}">
+              <input id="search-input" class="search-input" type="search" autocomplete="off" placeholder="Search stuff..." aria-label="Search items, notes, and document names" value="${escapeAttr(state.search)}">
             </div>
             <button type="button" class="flag-filter ${state.flaggedOnly ? "is-active" : ""}" data-action="toggle-flag-filter" aria-pressed="${state.flaggedOnly ? "true" : "false"}" aria-label="${state.flaggedOnly ? "Showing flagged items" : "Show flagged items"}">
               ${svgIcon(state.flaggedOnly ? "flag.fill" : "flag")}
@@ -886,7 +886,7 @@
       ? "No flagged items match this search."
       : state.flaggedOnly
         ? "Flag items to keep them close at hand."
-        : "Try another item, room, property, or note.";
+        : "Try another item, room, property, note, or document name.";
     return `
       <div class="no-results">
         <div class="empty-panel">
@@ -1930,6 +1930,7 @@
           item.serialNumber || "",
           item.modelNumber || "",
           propertyText,
+          ...(item.documents || []).map((document) => document.name || ""),
         ].join(" ").toLowerCase().includes(query);
       });
 

@@ -46,6 +46,25 @@ final class StuffTrackerScreenshots: XCTestCase {
         snapshot("04-Item-Details")
     }
 
+    func testSearchFindsAnItemByItsDocumentName() throws {
+        app.buttons["Search stuff..."].tap()
+        let searchField = app.textFields["Search stuff..."]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        searchField.typeText("RECEIPT\n")
+
+        let cameraBag = app.buttons["Camera Bag"]
+        XCTAssertTrue(scrollUpUntilHittable(cameraBag))
+        XCTAssertTrue(app.staticTexts["Office"].exists)
+        XCTAssertFalse(app.buttons["Coffee Filters"].exists)
+        let result = XCTAttachment(screenshot: app.screenshot())
+        result.name = "Document name search reveals parent item"
+        result.lifetime = .keepAlways
+        add(result)
+
+        app.buttons["Clear search"].tap()
+        XCTAssertTrue(scrollDownUntilHittable(app.buttons["Coffee Filters"]))
+    }
+
     func testNewContainerAppearsImmediatelyInItsRoom() throws {
         let searchButton = app.buttons["Search stuff..."]
         XCTAssertTrue(searchButton.waitForExistence(timeout: 5))

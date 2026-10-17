@@ -264,6 +264,20 @@ struct Item: Codable, Identifiable {
         createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy) ?? ""
         needsSync = false
     }
+
+    func matchesSearchQuery(_ query: String) -> Bool {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return name.localizedCaseInsensitiveContains(query) ||
+            (notes ?? "").localizedCaseInsensitiveContains(query) ||
+            (serialNumber ?? "").localizedCaseInsensitiveContains(query) ||
+            (modelNumber ?? "").localizedCaseInsensitiveContains(query) ||
+            properties.contains {
+                $0.key.localizedCaseInsensitiveContains(query) ||
+                $0.value.localizedCaseInsensitiveContains(query)
+            } ||
+            documents.contains { $0.name.localizedCaseInsensitiveContains(query) }
+    }
 }
 
 // MARK: - HomeDetail (full tree response)

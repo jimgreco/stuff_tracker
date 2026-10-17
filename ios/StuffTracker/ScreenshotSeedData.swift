@@ -136,6 +136,9 @@ enum ScreenshotSeedData {
                     ItemProperty(key: "Insurance", value: "Personal articles policy"),
                     ItemProperty(key: "Last checked", value: "May 2026")
                 ],
+                documents: [
+                    ItemDocument(url: "https://example.invalid/camera-receipt.pdf", name: "Purchase Receipt.pdf")
+                ],
                 purchaseDate: "2024-09-14",
                 serialNumber: "CAM-2048-ML",
                 modelNumber: "TRVL-KIT",

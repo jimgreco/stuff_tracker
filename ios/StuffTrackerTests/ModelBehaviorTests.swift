@@ -2,6 +2,37 @@ import XCTest
 @testable import StuffTracker
 
 final class ModelBehaviorTests: XCTestCase {
+    func testItemSearchMatchesDocumentNamesWithoutSearchingAttachmentURLs() {
+        let item = Item(
+            id: "camera", homeId: "home", name: "Camera Bag",
+            documents: [
+                ItemDocument(url: "https://example.invalid/private-object.pdf?signature=hidden-value", name: "Purchase Receipt.pdf"),
+                ItemDocument(url: "https://example.invalid/second.pdf", name: "Travel Manual.pdf")
+            ]
+        )
+
+        XCTAssertTrue(item.matchesSearchQuery("RECEIPT"))
+        XCTAssertTrue(item.matchesSearchQuery("  travel manual  "))
+        XCTAssertTrue(item.matchesSearchQuery(".pdf"))
+        XCTAssertFalse(item.matchesSearchQuery("private-object"))
+        XCTAssertFalse(item.matchesSearchQuery("hidden-value"))
+        XCTAssertFalse(item.matchesSearchQuery("missing document"))
+    }
+
+    func testItemSearchPreservesExistingDetailsAndHandlesMissingDocuments() {
+        let item = Item(
+            id: "camera", homeId: "home", name: "Camera Bag", notes: "Travel kit",
+            properties: [ItemProperty(key: "Color", value: "Blue")],
+            serialNumber: "SN-2048", modelNumber: "TRVL-42"
+        )
+
+        for query in ["camera", "TRAVEL", "color", "blue", "sn-2048", "trvl-42", "", " \n "] {
+            XCTAssertTrue(item.matchesSearchQuery(query), "Expected match for \(query)")
+        }
+        XCTAssertFalse(item.matchesSearchQuery("receipt"))
+        XCTAssertFalse(item.matchesSearchQuery("home"))
+    }
+
     func testItemDecodingDefaultsMissingServerFields() throws {
         let data = """
         {

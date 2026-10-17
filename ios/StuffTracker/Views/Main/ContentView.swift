@@ -752,17 +752,10 @@ struct ContentView: View {
             )
             let flaggedLocationIds = expandedLocationIds(from: flaggedRootLocationIds)
 
-            // Find items that match by name/notes/properties
+            // Find items by their details or attached document names.
             let matchingItems = home.items.filter {
                 guard hasQuery else { return true }
-                return $0.name.localizedCaseInsensitiveContains(q) ||
-                ($0.notes ?? "").localizedCaseInsensitiveContains(q) ||
-                ($0.serialNumber ?? "").localizedCaseInsensitiveContains(q) ||
-                ($0.modelNumber ?? "").localizedCaseInsensitiveContains(q) ||
-                $0.properties.contains {
-                    $0.key.localizedCaseInsensitiveContains(q) ||
-                    $0.value.localizedCaseInsensitiveContains(q)
-                }
+                return $0.matchesSearchQuery(q)
             }
 
             let visibleItems = home.items.filter { item in
@@ -841,7 +834,7 @@ struct ContentView: View {
         if showFlaggedOnly {
             return "Flag homes, containers, or items to keep them close at hand."
         }
-        return "No matches for \"\(query)\"."
+        return "No matches for \"\(query)\". Try an item name, note, or document name."
     }
 
     private func validCollapsibleNodes(in homes: [HomeDetail]) -> Set<CollapsibleTreeNode> {
@@ -1358,6 +1351,7 @@ private struct BottomSearchControls: View {
                 searchIcon
 
                 TextField("Search stuff...", text: $searchText)
+                    .accessibilityHint("Find items by their details or attached document names.")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -1388,6 +1382,7 @@ private struct BottomSearchControls: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("Search stuff...")
+                .accessibilityHint("Find items by their details or attached document names.")
                 .accessibilityAddTraits(.isButton)
 
                 clearSearchButton

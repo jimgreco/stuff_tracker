@@ -28,12 +28,93 @@ function browserFixture() {
       state, submitItemEditor, submitInlineAdd, submitRename, handleInput, handleAction, apiRequest,
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
-      handleGoogleCredentialResponse, sessionScope, openItemLink,
+      handleGoogleCredentialResponse, sessionScope, openItemLink, filteredHomes,
       setSaveHandler: handler => { saveItemFromForm = handler; },
     };
   })();`, context);
   return { client: context.client, context, storage };
 }
+
+function documentSearchFixture() {
+  const fixture = browserFixture();
+  fixture.client.applyAuthResponse(auth('A'));
+  fixture.client.state.homes = [{
+    id: 'home-A', name: 'Maple House', locations: [
+      { id: 'floor', name: 'Main Floor', parentId: null },
+      { id: 'office', name: 'Office', parentId: 'floor' },
+      { id: 'kitchen', name: 'Kitchen', parentId: 'floor' },
+    ], items: [
+      {
+        id: 'camera', name: 'Camera Bag', locationId: 'office', notes: 'Travel kit',
+        serialNumber: 'SN-2048', modelNumber: 'TRVL-42', isFlagged: false,
+        properties: [{ key: 'Color', value: 'Blue' }], documents: [
+          { name: 'Purchase Receipt.pdf', url: 'https://example.invalid/private-object.pdf?signature=hidden-value' },
+          { name: 'Travel Manual.pdf', url: 'https://example.invalid/second.pdf' },
+        ],
+      },
+      { id: 'coffee', name: 'Coffee Filters', locationId: 'kitchen', properties: [], documents: [], isFlagged: true },
+      { id: 'legacy', name: 'Old Lamp', locationId: null, properties: [] },
+    ],
+  }];
+  return fixture;
+}
+
+test('document name search reveals its item and ancestors without changing saved data', () => {
+  const { client } = documentSearchFixture();
+  const original = JSON.stringify(client.state.homes);
+  for (const query of ['RECEIPT', '  travel manual  ', '.pdf']) {
+    client.state.search = query;
+    const results = client.filteredHomes();
+    assert.equal(results.length, 1);
+    assert.equal(results[0].id, 'home-A');
+    assert.deepEqual(Array.from(results[0].items, (item: any) => item.id), ['camera']);
+    assert.deepEqual(Array.from(results[0].locations, (location: any) => location.id), ['floor', 'office']);
+  }
+  assert.equal(JSON.stringify(client.state.homes), original);
+});
+
+test('document search excludes attachment URLs and supports items without documents', () => {
+  const { client } = documentSearchFixture();
+  for (const query of ['private-object', 'hidden-value', 'missing document']) {
+    client.state.search = query;
+    assert.equal(client.filteredHomes().length, 0);
+  }
+  client.state.search = 'old lamp';
+  assert.equal(client.filteredHomes()[0].items[0].id, 'legacy');
+});
+
+test('document name matches continue to respect the flagged item filter', () => {
+  const { client } = documentSearchFixture();
+  client.state.search = 'receipt';
+  client.state.flaggedOnly = true;
+  assert.equal(client.filteredHomes().length, 0);
+  client.state.homes[0].items[0].isFlagged = true;
+  const results = client.filteredHomes();
+  assert.equal(results.length, 1);
+  assert.deepEqual(Array.from(results[0].items, (item: any) => item.id), ['camera']);
+  assert.deepEqual(Array.from(results[0].locations, (location: any) => location.id), ['floor', 'office']);
+});
+
+test('document search preserves existing field matches and an empty search restores all items', () => {
+  const { client } = documentSearchFixture();
+  for (const query of ['camera', 'TRAVEL', 'color', 'blue', 'sn-2048', 'trvl-42']) {
+    client.state.search = query;
+    assert.equal(client.filteredHomes()[0].items[0].id, 'camera');
+  }
+  client.state.search = ' \n ';
+  assert.equal(client.filteredHomes(), client.state.homes);
+  assert.equal(client.filteredHomes()[0].items.length, 3);
+});
+
+test('a document search cannot retain results after changing accounts', () => {
+  const { client } = documentSearchFixture();
+  client.state.search = 'receipt';
+  assert.equal(client.filteredHomes().length, 1);
+  client.clearSession();
+  client.applyAuthResponse(auth('B'));
+  client.state.search = 'receipt';
+  assert.equal(client.filteredHomes().length, 0);
+});
 
 function editorFixture() {
   const fixture = browserFixture();
