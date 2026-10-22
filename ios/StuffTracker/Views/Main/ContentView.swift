@@ -228,6 +228,7 @@ struct ContentView: View {
     @StateObject private var breadcrumbTracker = BreadcrumbScrollTracker()
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
+    @State private var documentFilter: ItemDocumentFilter = .all
     @State private var showAccountSheet = false
     @State private var showBulkMoveSheet = false
     @State private var showBulkDeleteConfirm = false
@@ -373,6 +374,7 @@ struct ContentView: View {
                     BottomSearchControls(
                         searchText: $searchText,
                         showFlaggedOnly: $showFlaggedOnly,
+                        documentFilter: $documentFilter,
                         isSearchPresented: isSearchInputPresented,
                         isSearchFocused: $isSearchFocused,
                         onActivateSearch: { activateSearchInput() },
@@ -550,6 +552,7 @@ struct ContentView: View {
     private func revealHierarchy(homeId: String, locationId: String?) {
         searchText = ""
         showFlaggedOnly = false
+        documentFilter = .all
         dismissSearchInput()
 
         collapseStore.setCollapsed(false, for: .home(homeId))
@@ -628,6 +631,7 @@ struct ContentView: View {
     private func prepareHierarchyForDeepLink(to item: Item, in home: HomeDetail) {
         searchText = ""
         showFlaggedOnly = false
+        documentFilter = .all
         isSearchFocused = false
         isSearchInputPresented = false
         itemSelection.clearSelection()
@@ -701,6 +705,10 @@ struct ContentView: View {
     }
 
     private var filteredHomes: [HomeDetail] {
+        searchFilteredHomes.compactMap { $0.filteredByDocuments(documentFilter) }
+    }
+
+    private var searchFilteredHomes: [HomeDetail] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty || showFlaggedOnly else { return homeStore.homeDetails }
 
@@ -815,7 +823,7 @@ struct ContentView: View {
     }
 
     private var isFiltering: Bool {
-        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly || documentFilter != .all
     }
 
     private var shouldShowSearchControls: Bool {
@@ -823,10 +831,15 @@ struct ContentView: View {
     }
 
     private var emptyFilterTitle: String {
-        showFlaggedOnly ? "No Flags" : "No Results"
+        if documentFilter == .withDocuments { return "No items with documents" }
+        if documentFilter == .withoutDocuments { return "No items without documents" }
+        return showFlaggedOnly ? "No Flags" : "No Results"
     }
 
     private var emptyFilterDescription: String {
+        if documentFilter != .all {
+            return "Try changing the document filter, search, or flags."
+        }
         let query = searchText.trimmingCharacters(in: .whitespaces)
         if showFlaggedOnly && !query.isEmpty {
             return "No flagged homes, containers, or items match \"\(query)\"."
@@ -1322,22 +1335,50 @@ private struct HierarchyAddChipSurfaceModifier: ViewModifier {
 private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
+    @Binding var documentFilter: ItemDocumentFilter
     let isSearchPresented: Bool
     @FocusState.Binding var isSearchFocused: Bool
     let onActivateSearch: () -> Void
     let onSubmitSearch: () -> Void
 
     var body: some View {
-        HStack(spacing: isSearchPresented ? 0 : 10) {
-            if !isSearchPresented {
-                BottomFlagFilterButton(isOn: $showFlaggedOnly)
+        VStack(alignment: .trailing, spacing: 6) {
+            if documentFilter != .all && !isSearchPresented {
+                Text(documentFilter.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("document-filter-status")
             }
+            HStack(spacing: isSearchPresented ? 0 : 10) {
+                if !isSearchPresented {
+                    BottomFlagFilterButton(isOn: $showFlaggedOnly)
+                }
 
-            searchField
-            .frame(maxWidth: .infinity)
-            .frame(height: isSearchPresented ? 52 : 48)
-            .padding(.horizontal, isSearchPresented ? 15 : 13)
-            .bottomSearchFieldSurface(isFocused: isSearchPresented)
+                searchField
+                    .frame(maxWidth: .infinity)
+                    .frame(height: isSearchPresented ? 52 : 48)
+                    .padding(.horizontal, isSearchPresented ? 15 : 13)
+                    .bottomSearchFieldSurface(isFocused: isSearchPresented)
+
+                if !isSearchPresented {
+                    Menu {
+                        Picker("Documents", selection: $documentFilter) {
+                            ForEach(ItemDocumentFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: documentFilter == .withDocuments ? "doc.fill" : "doc")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 48, height: 48)
+                    }
+                    .foregroundStyle(.white)
+                    .bottomFlagFilterSurface(isOn: documentFilter != .all)
+                    .accessibilityLabel("Documents")
+                    .accessibilityValue(documentFilter.title)
+                    .accessibilityIdentifier("document-filter")
+                }
+            }
         }
         .padding(.horizontal, isSearchPresented ? 10 : 14)
         .padding(.top, isSearchPresented ? 10 : 8)

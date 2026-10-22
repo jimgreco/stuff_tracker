@@ -65,6 +65,36 @@ final class StuffTrackerScreenshots: XCTestCase {
         XCTAssertTrue(scrollDownUntilHittable(app.buttons["Coffee Filters"]))
     }
 
+    func testDocumentFilterCombinesWithSearchAndCanBeCleared() throws {
+        app.buttons["document-filter"].tap()
+        app.buttons["With documents"].tap()
+        XCTAssertTrue(app.buttons["Camera Bag"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Coffee Filters"].exists)
+        XCTAssertTrue(app.staticTexts["Office"].exists)
+        let withDocuments = XCTAttachment(screenshot: app.screenshot())
+        withDocuments.name = "Inventory with documents"
+        withDocuments.lifetime = .keepAlways
+        add(withDocuments)
+
+        app.buttons["Search stuff..."].tap()
+        app.textFields["Search stuff..."].typeText("RECEIPT\n")
+        XCTAssertTrue(app.buttons["Camera Bag"].waitForExistence(timeout: 5))
+        app.buttons["document-filter"].tap()
+        app.buttons["Without documents"].tap()
+        XCTAssertTrue(app.staticTexts["No items without documents"].waitForExistence(timeout: 5))
+        let empty = XCTAttachment(screenshot: app.screenshot())
+        empty.name = "Document filter with no matching search results"
+        empty.lifetime = .keepAlways
+        add(empty)
+
+        app.buttons["Clear search"].tap()
+        XCTAssertFalse(app.buttons["Camera Bag"].exists)
+        XCTAssertTrue(scrollDownUntilHittable(app.buttons["Coffee Filters"]))
+        app.buttons["document-filter"].tap()
+        app.buttons["All items"].tap()
+        XCTAssertTrue(scrollUpUntilHittable(app.buttons["Camera Bag"]))
+    }
+
     func testNewContainerAppearsImmediatelyInItsRoom() throws {
         let searchButton = app.buttons["Search stuff..."]
         XCTAssertTrue(searchButton.waitForExistence(timeout: 5))

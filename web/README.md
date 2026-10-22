@@ -19,4 +19,6 @@ Item share links use `/items/:homeId/:itemId`. The backend serves the web app fo
 
 Inventory search includes attached document names, so searching for a receipt or manual can reveal its parent item and location. It searches document names, not file contents or attachment URLs, and continues to respect the flag filter.
 
+The Documents filter offers All items, With documents, and Without documents on web and iPhone. It combines with search and flags, including searches for a home or room, and keeps the location path for matching items. Photos do not count as documents. The filter uses the current saved inventory copy, updates when documents change, and does not alter items. Opening an item link clears filters so the item can be revealed; changing accounts resets the document filter.
+
 The web app reads public provider IDs and the optional App Store fallback URL from `GET /auth/config`. Set `GOOGLE_WEB_CLIENT_ID` for browser Google Sign-In, `APPLE_WEB_CLIENT_ID` for Sign in with Apple JS, and either `IOS_APP_STORE_URL` or `APP_STORE_APP_APPLE_ID` for the iOS App Store link. The iOS `GOOGLE_CLIENT_ID` and `APPLE_BUNDLE_ID` are still used for native sign-in but are not exposed as web client IDs.

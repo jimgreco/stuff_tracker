@@ -3025,6 +3025,33 @@ body.has-modal {
   background: var(--warning);
 }
 
+.document-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+  color: var(--secondary);
+  font-size: 14px;
+}
+
+.document-filter {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 16px;
+}
+
+.document-filter.is-active {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 .breadcrumb {
   top: calc(var(--safe-top) + 116px);
   padding: 8px 14px;

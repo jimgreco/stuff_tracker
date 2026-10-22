@@ -282,6 +282,20 @@ struct Item: Codable, Identifiable {
 
 // MARK: - HomeDetail (full tree response)
 
+enum ItemDocumentFilter: String, CaseIterable, Identifiable {
+    case all, withDocuments, withoutDocuments
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All items"
+        case .withDocuments: return "With documents"
+        case .withoutDocuments: return "Without documents"
+        }
+    }
+}
+
 struct HomeDetail: Codable {
     let id: String
     var name: String
@@ -291,6 +305,26 @@ struct HomeDetail: Codable {
     var isFlagged: Bool
     var locations: [Location]
     var items: [Item]
+
+    /// Apply after search/flags so matching home or room names never bypass the item filter.
+    func filteredByDocuments(_ filter: ItemDocumentFilter) -> HomeDetail? {
+        guard filter != .all else { return self }
+        let visibleItems = items.filter { !$0.documents.isEmpty == (filter == .withDocuments) }
+        guard !visibleItems.isEmpty else { return nil }
+
+        var needed = Set(visibleItems.compactMap(\.locationId))
+        var toResolve = needed
+        while !toResolve.isEmpty {
+            let parents = Set(locations.filter { toResolve.contains($0.id) }.compactMap(\.parentId))
+            toResolve = parents.subtracting(needed)
+            needed.formUnion(toResolve)
+        }
+
+        var result = self
+        result.items = visibleItems
+        result.locations = locations.filter { needed.contains($0.id) }
+        return result
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id, name, ownerId, role, icon, isFlagged, locations, items

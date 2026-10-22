@@ -116,6 +116,81 @@ test('a document search cannot retain results after changing accounts', () => {
   assert.equal(client.filteredHomes().length, 0);
 });
 
+test('document filters keep matching items and their ancestor paths without mutating inventory', () => {
+  const { client } = documentSearchFixture();
+  const original = JSON.stringify(client.state.homes);
+  client.state.documentFilter = 'with';
+  const withDocuments = client.filteredHomes()[0];
+  assert.deepEqual(Array.from(withDocuments.items, (item: any) => item.id), ['camera']);
+  assert.deepEqual(Array.from(withDocuments.locations, (location: any) => location.id), ['floor', 'office']);
+  client.state.documentFilter = 'without';
+  const withoutDocuments = client.filteredHomes()[0];
+  assert.deepEqual(Array.from(withoutDocuments.items, (item: any) => item.id), ['coffee', 'legacy']);
+  assert.deepEqual(Array.from(withoutDocuments.locations, (location: any) => location.id), ['floor', 'kitchen']);
+  assert.equal(JSON.stringify(client.state.homes), original);
+  client.state.documentFilter = 'all';
+  assert.equal(client.filteredHomes(), client.state.homes);
+});
+
+test('home, room and document-name matches cannot bypass the document filter', () => {
+  const { client } = documentSearchFixture();
+  for (const query of ['maple', 'main floor', 'receipt']) {
+    client.state.search = query;
+    client.state.documentFilter = 'with';
+    assert.deepEqual(Array.from(client.filteredHomes()[0].items, (item: any) => item.id), ['camera']);
+  }
+  client.state.documentFilter = 'without';
+  assert.equal(client.filteredHomes().length, 0);
+  client.state.search = 'office';
+  assert.equal(client.filteredHomes().length, 0);
+});
+
+test('document and flag filters intersect and return an empty result when no item qualifies', () => {
+  const { client } = documentSearchFixture();
+  client.state.flaggedOnly = true;
+  client.state.documentFilter = 'with';
+  assert.equal(client.filteredHomes().length, 0);
+  client.state.documentFilter = 'without';
+  assert.deepEqual(Array.from(client.filteredHomes()[0].items, (item: any) => item.id), ['coffee']);
+  client.state.search = 'old lamp';
+  assert.equal(client.filteredHomes().length, 0);
+});
+
+test('document filter reflects attachment addition and removal in the current saved copy', () => {
+  const { client } = documentSearchFixture();
+  client.state.documentFilter = 'with';
+  client.state.homes[0].items[1].documents = [{ name: 'Receipt.pdf', url: 'https://example.invalid/receipt' }];
+  assert.equal(client.filteredHomes()[0].items.length, 2);
+  client.state.homes[0].items[0].documents = [];
+  assert.deepEqual(Array.from(client.filteredHomes()[0].items, (item: any) => item.id), ['coffee']);
+  client.state.homes[0].items[1].documents = [];
+  assert.equal(client.filteredHomes().length, 0);
+});
+
+test('changing and clearing document filters preserves search and flags', () => {
+  const { client } = documentSearchFixture();
+  client.state.search = 'receipt';
+  client.state.flaggedOnly = true;
+  for (const value of ['with', 'without', 'all', 'invalid']) {
+    client.handleInput({ target: { id: 'document-filter', value } });
+    assert.equal(client.state.documentFilter, value === 'invalid' ? 'all' : value);
+    assert.equal(client.state.search, 'receipt');
+    assert.equal(client.state.flaggedOnly, true);
+  }
+});
+
+test('document filter is reset across account changes without retaining another account inventory', () => {
+  const { client } = documentSearchFixture();
+  client.state.documentFilter = 'with';
+  client.clearSession();
+  assert.equal(client.state.documentFilter, 'all');
+  client.applyAuthResponse(auth('B'));
+  assert.equal(client.filteredHomes().length, 0);
+  client.state.documentFilter = 'without';
+  client.applyAuthResponse(auth('C'));
+  assert.equal(client.state.documentFilter, 'all');
+});
+
 function editorFixture() {
   const fixture = browserFixture();
   const item = { id: 'item', name: 'Original', properties: [], photoUrls: [], documents: [] };

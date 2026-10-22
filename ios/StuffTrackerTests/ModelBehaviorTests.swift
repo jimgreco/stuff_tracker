@@ -2,6 +2,65 @@ import XCTest
 @testable import StuffTracker
 
 final class ModelBehaviorTests: XCTestCase {
+    private func documentFilterHome() -> HomeDetail {
+        HomeDetail(id: "home", name: "Maple House", ownerId: "owner", role: "owner", locations: [
+            Location(id: "floor", homeId: "home", name: "Main Floor", type: .floor, sortOrder: 0),
+            Location(id: "office", homeId: "home", parentId: "floor", name: "Office", type: .room, sortOrder: 0),
+            Location(id: "kitchen", homeId: "home", parentId: "floor", name: "Kitchen", type: .room, sortOrder: 1)
+        ], items: [
+            Item(id: "camera", homeId: "home", locationId: "office", name: "Camera Bag",
+                 documents: [ItemDocument(url: "https://example.invalid/receipt", name: "Receipt.pdf")]),
+            Item(id: "coffee", homeId: "home", locationId: "kitchen", name: "Coffee Filters", isFlagged: true),
+            Item(id: "lamp", homeId: "home", name: "Old Lamp", photoUrls: ["https://example.invalid/photo"])
+        ])
+    }
+
+    func testDocumentFilterKeepsOnlyMatchingItemsAndAncestors() throws {
+        let home = documentFilterHome()
+        let withDocuments = try XCTUnwrap(home.filteredByDocuments(.withDocuments))
+        XCTAssertEqual(withDocuments.items.map(\.id), ["camera"])
+        XCTAssertEqual(withDocuments.locations.map(\.id), ["floor", "office"])
+        let withoutDocuments = try XCTUnwrap(home.filteredByDocuments(.withoutDocuments))
+        XCTAssertEqual(withoutDocuments.items.map(\.id), ["coffee", "lamp"])
+        XCTAssertEqual(withoutDocuments.locations.map(\.id), ["floor", "kitchen"])
+        XCTAssertEqual(home.items.count, 3)
+        XCTAssertEqual(home.locations.count, 3)
+        XCTAssertEqual(home.filteredByDocuments(.all)?.items.map(\.id), home.items.map(\.id))
+    }
+
+    func testDocumentFilterDoesNotBringBackItemsExcludedBySearchOrFlags() {
+        var home = documentFilterHome()
+        home.items = home.items.filter(\.isFlagged)
+        XCTAssertNil(home.filteredByDocuments(.withDocuments))
+        XCTAssertEqual(home.filteredByDocuments(.withoutDocuments)?.items.map(\.id), ["coffee"])
+        home.items = []
+        XCTAssertNil(home.filteredByDocuments(.withoutDocuments))
+    }
+
+    func testDocumentFilterReflectsCurrentAttachmentChangesAndPreservesMetadata() throws {
+        var home = documentFilterHome()
+        home.isFlagged = true
+        home.items[0].documents = []
+        XCTAssertNil(home.filteredByDocuments(.withDocuments))
+        home.items[1].documents = [ItemDocument(url: "https://example.invalid/new", name: "New.pdf")]
+        let result = try XCTUnwrap(home.filteredByDocuments(.withDocuments))
+        XCTAssertEqual(result.items.map(\.id), ["coffee"])
+        XCTAssertEqual(result.id, home.id)
+        XCTAssertEqual(result.ownerId, home.ownerId)
+        XCTAssertEqual(result.role, home.role)
+        XCTAssertTrue(result.isFlagged)
+    }
+
+    func testDocumentFilterTerminatesOnCyclicLocationsAndKeepsRootItems() throws {
+        var home = documentFilterHome()
+        home.locations[0].parentId = "office"
+        XCTAssertEqual(home.filteredByDocuments(.withDocuments)?.locations.map(\.id), ["floor", "office"])
+        home.items = [Item(id: "root", homeId: "home", name: "Root")]
+        let result = try XCTUnwrap(home.filteredByDocuments(.withoutDocuments))
+        XCTAssertTrue(result.locations.isEmpty)
+        XCTAssertEqual(result.items.map(\.id), ["root"])
+    }
+
     func testItemSearchMatchesDocumentNamesWithoutSearchingAttachmentURLs() {
         let item = Item(
             id: "camera", homeId: "home", name: "Camera Bag",

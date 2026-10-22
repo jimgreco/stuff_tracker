@@ -33,6 +33,7 @@
     collapsed: new Set(readJson(STORAGE.collapsed, [])),
     search: "",
     flaggedOnly: false,
+    documentFilter: "all",
     isLoading: false,
     toast: "",
     toastTimer: null,
@@ -255,6 +256,7 @@
   }
 
   function resetAccountPresentation() {
+    state.documentFilter = "all";
     state.highlightedItemId = "";
     state.sheet = null;
     state.photoPreview = null;
@@ -552,7 +554,7 @@
     }
 
     const homes = filteredHomes();
-    const isFiltering = state.search.trim().length > 0 || state.flaggedOnly;
+    const isFiltering = state.search.trim().length > 0 || state.flaggedOnly || state.documentFilter !== "all";
     return `
       <div class="mobile-shell ${state.selectionMode ? "has-selection-bar" : ""}">
         <header class="top-bar">
@@ -580,6 +582,12 @@
         </header>
         <div id="breadcrumb" class="breadcrumb is-hidden" aria-hidden="true"></div>
         <main class="content" aria-busy="${state.isLoading ? "true" : "false"}">
+          <div class="document-filter-row">
+            <label for="document-filter">Documents</label>
+            <select id="document-filter" class="document-filter ${state.documentFilter !== "all" ? "is-active" : ""}">
+              ${[["all", "All items"], ["with", "With documents"], ["without", "Without documents"]].map(([value, label]) => `<option value="${value}" ${state.documentFilter === value ? "selected" : ""}>${label}</option>`).join("")}
+            </select>
+          </div>
           ${state.homesLoadError && state.homes.length ? renderHomesStaleBanner() : ""}
           ${
             state.isLoading && !state.homes.length
@@ -881,8 +889,12 @@
   function renderNoResults() {
     const query = state.search.trim();
     const icon = state.flaggedOnly ? "flag" : "search";
-    const title = state.flaggedOnly ? "No flagged items" : "No results";
-    const copy = state.flaggedOnly && query
+    const title = state.documentFilter === "with" ? "No items with documents"
+      : state.documentFilter === "without" ? "No items without documents"
+      : state.flaggedOnly ? "No flagged items" : "No results";
+    const copy = state.documentFilter !== "all"
+      ? "Try changing the document filter, search, or flags."
+      : state.flaggedOnly && query
       ? "No flagged items match this search."
       : state.flaggedOnly
         ? "Flag items to keep them close at hand."
@@ -1902,6 +1914,25 @@
   }
 
   function filteredHomes() {
+    const homes = searchFilteredHomes();
+    if (state.documentFilter === "all") return homes;
+    return homes.map((home) => {
+      const items = home.items.filter((item) =>
+        Boolean(item.documents?.length) === (state.documentFilter === "with"));
+      if (!items.length) return null;
+      const needed = new Set(items.map((item) => item.locationId).filter(Boolean));
+      let toResolve = new Set(needed);
+      while (toResolve.size) {
+        const parents = home.locations.filter((location) => toResolve.has(location.id) && location.parentId)
+          .map((location) => location.parentId);
+        toResolve = new Set(parents.filter((parentId) => !needed.has(parentId)));
+        toResolve.forEach((parentId) => needed.add(parentId));
+      }
+      return { ...home, items, locations: home.locations.filter((location) => needed.has(location.id)) };
+    }).filter(Boolean);
+  }
+
+  function searchFilteredHomes() {
     const query = state.search.trim().toLowerCase();
     const hasQuery = query.length > 0;
     if (!hasQuery && !state.flaggedOnly) return state.homes;
@@ -3036,6 +3067,7 @@
   function prepareHierarchyForItem(home, item) {
     state.search = "";
     state.flaggedOnly = false;
+    state.documentFilter = "all";
     state.adding = null;
     state.collapsed.delete(nodeKey("home", home.id));
     expandLocationPath(home.id, item.locationId);
@@ -3767,6 +3799,12 @@
 
   function handleInput(event) {
     state.highlightedItemId = "";
+    if (event.target.id === "document-filter") {
+      state.documentFilter = ["with", "without"].includes(event.target.value) ? event.target.value : "all";
+      state.actionMenu = null;
+      render();
+      return;
+    }
     const addingForm = event.target.closest?.('form[data-form="commit-add"]');
     if (addingForm && state.adding && !state.adding.saving && !state.adding.attempt) state.adding.name = addingForm.elements.name.value;
     const renameForm = event.target.closest?.("#rename-form");
