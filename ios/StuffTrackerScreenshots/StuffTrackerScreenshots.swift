@@ -65,6 +65,26 @@ final class StuffTrackerScreenshots: XCTestCase {
         XCTAssertTrue(scrollDownUntilHittable(app.buttons["Coffee Filters"]))
     }
 
+    func testPhotoFilterCombinesWithDocuments() throws {
+        app.buttons["document-filter"].tap()
+        app.buttons["Without photos"].tap()
+        XCTAssertTrue(app.staticTexts["Without photos"].waitForExistence(timeout: 5))
+        let photoFilter = XCTAttachment(screenshot: app.screenshot())
+        photoFilter.name = "Inventory without photos"
+        photoFilter.lifetime = .keepAlways
+        add(photoFilter)
+        app.buttons["document-filter"].tap()
+        app.buttons["With documents"].tap()
+        XCTAssertTrue(app.staticTexts["With documents · Without photos"].waitForExistence(timeout: 5))
+        let combined = XCTAttachment(screenshot: app.screenshot())
+        combined.name = "Combined attachment filters"
+        combined.lifetime = .keepAlways
+        add(combined)
+        app.buttons["document-filter"].tap()
+        app.buttons["Any photos"].tap()
+        XCTAssertTrue(app.buttons["Camera Bag"].waitForExistence(timeout: 5))
+    }
+
     func testDocumentFilterCombinesWithSearchAndCanBeCleared() throws {
         app.buttons["document-filter"].tap()
         app.buttons["With documents"].tap()

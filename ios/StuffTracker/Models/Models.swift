@@ -296,6 +296,18 @@ enum ItemDocumentFilter: String, CaseIterable, Identifiable {
     }
 }
 
+enum ItemPhotoFilter: String, CaseIterable, Identifiable {
+    case all, withPhotos, withoutPhotos
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "Any photos"
+        case .withPhotos: return "With photos"
+        case .withoutPhotos: return "Without photos"
+        }
+    }
+}
+
 struct HomeDetail: Codable {
     let id: String
     var name: String
@@ -307,9 +319,12 @@ struct HomeDetail: Codable {
     var items: [Item]
 
     /// Apply after search/flags so matching home or room names never bypass the item filter.
-    func filteredByDocuments(_ filter: ItemDocumentFilter) -> HomeDetail? {
-        guard filter != .all else { return self }
-        let visibleItems = items.filter { !$0.documents.isEmpty == (filter == .withDocuments) }
+    func filteredByDocuments(_ filter: ItemDocumentFilter, photos: ItemPhotoFilter = .all) -> HomeDetail? {
+        guard filter != .all || photos != .all else { return self }
+        let visibleItems = items.filter {
+            (filter == .all || !$0.documents.isEmpty == (filter == .withDocuments))
+                && (photos == .all || !$0.photoUrls.isEmpty == (photos == .withPhotos))
+        }
         guard !visibleItems.isEmpty else { return nil }
 
         var needed = Set(visibleItems.compactMap(\.locationId))

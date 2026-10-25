@@ -34,6 +34,7 @@
     search: "",
     flaggedOnly: false,
     documentFilter: "all",
+    photoFilter: "all",
     isLoading: false,
     toast: "",
     toastTimer: null,
@@ -257,6 +258,7 @@
 
   function resetAccountPresentation() {
     state.documentFilter = "all";
+    state.photoFilter = "all";
     state.highlightedItemId = "";
     state.sheet = null;
     state.photoPreview = null;
@@ -554,7 +556,7 @@
     }
 
     const homes = filteredHomes();
-    const isFiltering = state.search.trim().length > 0 || state.flaggedOnly || state.documentFilter !== "all";
+    const isFiltering = state.search.trim().length > 0 || state.flaggedOnly || state.documentFilter !== "all" || state.photoFilter !== "all";
     return `
       <div class="mobile-shell ${state.selectionMode ? "has-selection-bar" : ""}">
         <header class="top-bar">
@@ -586,6 +588,10 @@
             <label for="document-filter">Documents</label>
             <select id="document-filter" class="document-filter ${state.documentFilter !== "all" ? "is-active" : ""}">
               ${[["all", "All items"], ["with", "With documents"], ["without", "Without documents"]].map(([value, label]) => `<option value="${value}" ${state.documentFilter === value ? "selected" : ""}>${label}</option>`).join("")}
+            </select>
+            <label for="photo-filter">Photos</label>
+            <select id="photo-filter" class="document-filter ${state.photoFilter !== "all" ? "is-active" : ""}">
+              ${[["all", "All items"], ["with", "With photos"], ["without", "Without photos"]].map(([value, label]) => `<option value="${value}" ${state.photoFilter === value ? "selected" : ""}>${label}</option>`).join("")}
             </select>
           </div>
           ${state.homesLoadError && state.homes.length ? renderHomesStaleBanner() : ""}
@@ -889,11 +895,13 @@
   function renderNoResults() {
     const query = state.search.trim();
     const icon = state.flaggedOnly ? "flag" : "search";
-    const title = state.documentFilter === "with" ? "No items with documents"
+    const title = state.photoFilter === "with" ? "No items with photos"
+      : state.photoFilter === "without" ? "No items without photos"
+      : state.documentFilter === "with" ? "No items with documents"
       : state.documentFilter === "without" ? "No items without documents"
       : state.flaggedOnly ? "No flagged items" : "No results";
-    const copy = state.documentFilter !== "all"
-      ? "Try changing the document filter, search, or flags."
+    const copy = state.documentFilter !== "all" || state.photoFilter !== "all"
+      ? "Try changing the photo or document filters, search, or flags."
       : state.flaggedOnly && query
       ? "No flagged items match this search."
       : state.flaggedOnly
@@ -1915,10 +1923,11 @@
 
   function filteredHomes() {
     const homes = searchFilteredHomes();
-    if (state.documentFilter === "all") return homes;
+    if (state.documentFilter === "all" && state.photoFilter === "all") return homes;
     return homes.map((home) => {
       const items = home.items.filter((item) =>
-        Boolean(item.documents?.length) === (state.documentFilter === "with"));
+        (state.documentFilter === "all" || Boolean(item.documents?.length) === (state.documentFilter === "with"))
+        && (state.photoFilter === "all" || Boolean(item.photoUrls?.length) === (state.photoFilter === "with")));
       if (!items.length) return null;
       const needed = new Set(items.map((item) => item.locationId).filter(Boolean));
       let toResolve = new Set(needed);
@@ -3068,6 +3077,7 @@
     state.search = "";
     state.flaggedOnly = false;
     state.documentFilter = "all";
+    state.photoFilter = "all";
     state.adding = null;
     state.collapsed.delete(nodeKey("home", home.id));
     expandLocationPath(home.id, item.locationId);
@@ -3799,6 +3809,12 @@
 
   function handleInput(event) {
     state.highlightedItemId = "";
+    if (event.target.id === "photo-filter") {
+      state.photoFilter = ["with", "without"].includes(event.target.value) ? event.target.value : "all";
+      state.actionMenu = null;
+      render();
+      return;
+    }
     if (event.target.id === "document-filter") {
       state.documentFilter = ["with", "without"].includes(event.target.value) ? event.target.value : "all";
       state.actionMenu = null;

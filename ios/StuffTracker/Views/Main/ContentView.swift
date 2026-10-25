@@ -229,6 +229,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var showFlaggedOnly = false
     @State private var documentFilter: ItemDocumentFilter = .all
+    @State private var photoFilter: ItemPhotoFilter = .all
     @State private var showAccountSheet = false
     @State private var showBulkMoveSheet = false
     @State private var showBulkDeleteConfirm = false
@@ -375,6 +376,7 @@ struct ContentView: View {
                         searchText: $searchText,
                         showFlaggedOnly: $showFlaggedOnly,
                         documentFilter: $documentFilter,
+                        photoFilter: $photoFilter,
                         isSearchPresented: isSearchInputPresented,
                         isSearchFocused: $isSearchFocused,
                         onActivateSearch: { activateSearchInput() },
@@ -553,6 +555,7 @@ struct ContentView: View {
         searchText = ""
         showFlaggedOnly = false
         documentFilter = .all
+        photoFilter = .all
         dismissSearchInput()
 
         collapseStore.setCollapsed(false, for: .home(homeId))
@@ -632,6 +635,7 @@ struct ContentView: View {
         searchText = ""
         showFlaggedOnly = false
         documentFilter = .all
+        photoFilter = .all
         isSearchFocused = false
         isSearchInputPresented = false
         itemSelection.clearSelection()
@@ -705,7 +709,7 @@ struct ContentView: View {
     }
 
     private var filteredHomes: [HomeDetail] {
-        searchFilteredHomes.compactMap { $0.filteredByDocuments(documentFilter) }
+        searchFilteredHomes.compactMap { $0.filteredByDocuments(documentFilter, photos: photoFilter) }
     }
 
     private var searchFilteredHomes: [HomeDetail] {
@@ -823,7 +827,7 @@ struct ContentView: View {
     }
 
     private var isFiltering: Bool {
-        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly || documentFilter != .all
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || showFlaggedOnly || documentFilter != .all || photoFilter != .all
     }
 
     private var shouldShowSearchControls: Bool {
@@ -831,14 +835,16 @@ struct ContentView: View {
     }
 
     private var emptyFilterTitle: String {
+        if photoFilter == .withPhotos { return "No items with photos" }
+        if photoFilter == .withoutPhotos { return "No items without photos" }
         if documentFilter == .withDocuments { return "No items with documents" }
         if documentFilter == .withoutDocuments { return "No items without documents" }
         return showFlaggedOnly ? "No Flags" : "No Results"
     }
 
     private var emptyFilterDescription: String {
-        if documentFilter != .all {
-            return "Try changing the document filter, search, or flags."
+        if documentFilter != .all || photoFilter != .all {
+            return "Try changing the photo or document filters, search, or flags."
         }
         let query = searchText.trimmingCharacters(in: .whitespaces)
         if showFlaggedOnly && !query.isEmpty {
@@ -1336,6 +1342,7 @@ private struct BottomSearchControls: View {
     @Binding var searchText: String
     @Binding var showFlaggedOnly: Bool
     @Binding var documentFilter: ItemDocumentFilter
+    @Binding var photoFilter: ItemPhotoFilter
     let isSearchPresented: Bool
     @FocusState.Binding var isSearchFocused: Bool
     let onActivateSearch: () -> Void
@@ -1343,8 +1350,8 @@ private struct BottomSearchControls: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            if documentFilter != .all && !isSearchPresented {
-                Text(documentFilter.title)
+            if (documentFilter != .all || photoFilter != .all) && !isSearchPresented {
+                Text([documentFilter != .all ? documentFilter.title : nil, photoFilter != .all ? photoFilter.title : nil].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("document-filter-status")
@@ -1367,15 +1374,20 @@ private struct BottomSearchControls: View {
                                 Text(filter.title).tag(filter)
                             }
                         }
+                        Picker("Photos", selection: $photoFilter) {
+                            ForEach(ItemPhotoFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
                     } label: {
-                        Image(systemName: documentFilter == .withDocuments ? "doc.fill" : "doc")
+                        Image(systemName: "line.3.horizontal.decrease")
                             .font(.body.weight(.semibold))
                             .frame(width: 48, height: 48)
                     }
                     .foregroundStyle(.white)
-                    .bottomFlagFilterSurface(isOn: documentFilter != .all)
-                    .accessibilityLabel("Documents")
-                    .accessibilityValue(documentFilter.title)
+                    .bottomFlagFilterSurface(isOn: documentFilter != .all || photoFilter != .all)
+                    .accessibilityLabel("Attachment filters")
+                    .accessibilityValue("Documents: \(documentFilter.title). Photos: \(photoFilter.title)")
                     .accessibilityIdentifier("document-filter")
                 }
             }

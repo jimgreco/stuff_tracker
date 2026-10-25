@@ -15,6 +15,20 @@ final class ModelBehaviorTests: XCTestCase {
         ])
     }
 
+    func testPhotoFiltersComposeWithDocumentsAndReflectChanges() throws {
+        var home = documentFilterHome()
+        let withPhotos = try XCTUnwrap(home.filteredByDocuments(.all, photos: .withPhotos))
+        XCTAssertEqual(withPhotos.items.map(\.id), ["lamp"])
+        XCTAssertTrue(withPhotos.locations.isEmpty)
+        let withoutPhotos = try XCTUnwrap(home.filteredByDocuments(.all, photos: .withoutPhotos))
+        XCTAssertEqual(withoutPhotos.items.map(\.id), ["camera", "coffee"])
+        XCTAssertEqual(withoutPhotos.locations.map(\.id), ["floor", "office", "kitchen"])
+        XCTAssertNil(home.filteredByDocuments(.withDocuments, photos: .withPhotos))
+        home.items[0].photoUrls = ["new-photo"]
+        XCTAssertEqual(home.filteredByDocuments(.withDocuments, photos: .withPhotos)?.items.map(\.id), ["camera"])
+        XCTAssertNil(home.filteredByDocuments(.withDocuments, photos: .withoutPhotos))
+    }
+
     func testDocumentFilterKeepsOnlyMatchingItemsAndAncestors() throws {
         let home = documentFilterHome()
         let withDocuments = try XCTUnwrap(home.filteredByDocuments(.withDocuments))

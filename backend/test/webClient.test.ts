@@ -191,6 +191,37 @@ test('document filter is reset across account changes without retaining another 
   assert.equal(client.state.documentFilter, 'all');
 });
 
+test('photo filtering composes with documents, search and flags and retains ancestor paths', () => {
+  const { client } = documentSearchFixture();
+  client.state.homes[0].items[0].photoUrls = ['photo'];
+  client.state.photoFilter = 'with';
+  client.state.documentFilter = 'with';
+  assert.deepEqual(Array.from(client.filteredHomes()[0].items, (item: any) => item.id), ['camera']);
+  assert.deepEqual(Array.from(client.filteredHomes()[0].locations, (loc: any) => loc.id), ['floor', 'office']);
+  client.state.search = 'maple';
+  client.state.photoFilter = 'without';
+  assert.equal(client.filteredHomes().length, 0);
+  client.state.documentFilter = 'all';
+  client.state.flaggedOnly = true;
+  assert.deepEqual(Array.from(client.filteredHomes()[0].items, (item: any) => item.id), ['coffee']);
+  client.state.homes[0].items[1].photoUrls = ['new-photo'];
+  assert.equal(client.filteredHomes().length, 0);
+});
+
+test('photo choices clear across accounts and do not erase other active filters', () => {
+  const { client } = documentSearchFixture();
+  client.state.search = 'maple'; client.state.documentFilter = 'with';
+  client.handleInput({ target: { id: 'photo-filter', value: 'without' } });
+  assert.equal(client.state.photoFilter, 'without');
+  assert.equal(client.state.search, 'maple'); assert.equal(client.state.documentFilter, 'with');
+  client.handleInput({ target: { id: 'photo-filter', value: 'invalid' } });
+  assert.equal(client.state.photoFilter, 'all');
+  client.state.photoFilter = 'with'; client.clearSession();
+  assert.equal(client.state.photoFilter, 'all');
+  client.state.photoFilter = 'without'; client.applyAuthResponse(auth('B'));
+  assert.equal(client.state.photoFilter, 'all');
+});
+
 function editorFixture() {
   const fixture = browserFixture();
   const item = { id: 'item', name: 'Original', properties: [], photoUrls: [], documents: [] };
