@@ -28,7 +28,7 @@ function browserFixture() {
       state, submitItemEditor, submitInlineAdd, submitRename, handleInput, handleAction, apiRequest,
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
-      handleGoogleCredentialResponse, sessionScope, openItemLink, filteredHomes,
+      handleGoogleCredentialResponse, sessionScope, openItemLink, filteredHomes, selectAllMatching, pruneSelection,
       setSaveHandler: handler => { saveItemFromForm = handler; },
     };
   })();`, context);
@@ -859,4 +859,30 @@ test('rename typing survives unrelated redraws without trimming unfinished text'
   const { client, form } = renameFixture();
   client.handleInput({ target: { closest: (selector: string) => selector === '#rename-form' ? form : null } });
   assert.equal(client.state.sheet.name, 'Updated name ');
+});
+
+
+test('select all uses final matching items in one writable home and clears hidden selections', async () => {
+  const { client } = documentSearchFixture();
+  client.state.homes[0].role = 'editor';
+  client.state.homes[0].items[0].photoUrls = ['photo'];
+  client.state.homes.push({ ...client.state.homes[0], id: 'other-home' });
+  client.state.selectionMode = true;
+  client.state.search = 'travel'; client.state.documentFilter = 'with'; client.state.photoFilter = 'with';
+  assert.equal(client.selectAllMatching('home-A'), true);
+  assert.deepEqual(Array.from(client.state.selectedItemIds), ['camera']);
+  assert.equal(client.selectAllMatching('other-home'), false);
+  assert.equal(client.state.selectedHomeId, 'home-A');
+  client.state.photoFilter = 'without'; client.pruneSelection();
+  assert.equal(client.state.selectedItemIds.size, 0);
+  client.state.photoFilter = 'all'; client.state.documentFilter = 'all'; client.state.search = '';
+  client.state.flaggedOnly = true;
+  client.selectAllMatching('home-A');
+  assert.deepEqual(Array.from(client.state.selectedItemIds), ['coffee']);
+  await client.handleAction({ dataset: { action: 'clear-selection' } });
+  assert.equal(client.state.selectedItemIds.size, 0);
+  assert.equal(client.state.selectionMode, true);
+  client.state.homes[0].role = 'viewer';
+  assert.equal(client.selectAllMatching('home-A'), false);
+  assert.equal(client.state.selectedItemIds.size, 0);
 });

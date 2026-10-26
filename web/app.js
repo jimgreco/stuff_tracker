@@ -318,10 +318,20 @@
     return true;
   }
 
+  function selectAllMatching(homeId) {
+    if (!state.selectionMode || (state.selectedHomeId && state.selectedHomeId !== homeId)) return false;
+    const home = filteredHomes().find(home => home.id === homeId);
+    if (!home || !["owner", "admin", "editor"].includes(home.role) || !home.items.length) return false;
+    state.selectedHomeId = homeId;
+    state.selectedItemIds = new Set(home.items.map(item => item.id));
+    state.actionMenu = null;
+    return true;
+  }
+
   function pruneSelection() {
     if (!state.selectedHomeId) return;
-    const home = findHome(state.selectedHomeId);
-    if (!home) {
+    const home = filteredHomes().find(home => home.id === state.selectedHomeId);
+    if (!home || !["owner", "admin", "editor"].includes(home.role)) {
       state.selectedHomeId = "";
       state.selectedItemIds.clear();
       return;
@@ -486,6 +496,7 @@
   }
 
   function render(options = {}) {
+    pruneSelection();
     const active = document.activeElement;
     const activeId = active && active.id;
     const selectionStart = active && "selectionStart" in active ? active.selectionStart : null;
@@ -838,6 +849,7 @@
         <div class="selection-summary">
           <strong>${escapeHtml(label)}</strong>
           <span>${escapeHtml(home?.name || "Choose items in one home")}</span>
+          <button type="button" data-action="clear-selection" ${disabled}>Clear selection</button>
         </div>
         <div class="selection-actions">
           <button type="button" class="selection-action" data-action="open-selection-move" ${disabled} aria-label="Move selected items">
@@ -961,6 +973,7 @@
           homeId: home.id,
           collapsed,
         })}
+        ${state.selectionMode && ["owner", "admin", "editor"].includes(home.role) ? `<button type="button" class="page-command" data-action="select-all-matching" data-home-id="${escapeAttr(home.id)}" ${!home.items.length || (state.selectedHomeId && state.selectedHomeId !== home.id) ? "disabled" : ""}>Select all ${home.items.length} matching items</button>` : ""}
         ${collapsed ? "" : `
           <div class="node-divider"></div>
           ${children}
@@ -3261,6 +3274,17 @@
       state.actionMenu = null;
       state.sheet = null;
       state.adding = null;
+      render();
+      return;
+    }
+    if (action === "select-all-matching") {
+      selectAllMatching(element.dataset.homeId);
+      render();
+      return;
+    }
+    if (action === "clear-selection") {
+      state.selectedHomeId = "";
+      state.selectedItemIds.clear();
       render();
       return;
     }

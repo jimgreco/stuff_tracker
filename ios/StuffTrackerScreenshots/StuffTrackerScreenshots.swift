@@ -21,6 +21,27 @@ final class StuffTrackerScreenshots: XCTestCase {
         XCTAssertTrue(app.staticTexts["Maple House"].waitForExistence(timeout: 15))
     }
 
+    func testSelectAllMatchingAndClear() throws {
+        app.buttons["Search stuff..."].tap()
+        let search = app.textFields["Search stuff..."]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap(); search.typeText("camera\n")
+        app.buttons["Select"].tap()
+        let selectAll = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'select-all-matching-'")).firstMatch
+        XCTAssertTrue(selectAll.waitForExistence(timeout: 5))
+        selectAll.tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "All matching items selected in one home"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.buttons["Clear selection"].tap()
+        XCTAssertTrue(app.staticTexts["0 selected"].waitForExistence(timeout: 5))
+        XCTAssertTrue(selectAll.exists)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Camera Bag"].waitForExistence(timeout: 5))
+    }
+
     func testAppStoreScreenshots() throws {
         snapshot("01-Home-Hierarchy")
 

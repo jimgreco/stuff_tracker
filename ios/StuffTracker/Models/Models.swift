@@ -309,6 +309,7 @@ enum ItemPhotoFilter: String, CaseIterable, Identifiable {
 }
 
 struct HomeDetail: Codable {
+    var canModifyItems: Bool { ["owner", "admin", "editor"].contains(role) }
     let id: String
     var name: String
     let ownerId: String

@@ -94,6 +94,21 @@ final class ItemSelectionController: ObservableObject {
         selectedItemIds.append(itemId)
     }
 
+    @discardableResult
+    func selectAllMatching(in home: HomeDetail) -> Bool {
+        guard isSelecting, home.canModifyItems, !home.items.isEmpty,
+              selectedHomeId == nil || selectedHomeId == home.id else { return false }
+        selectedHomeId = home.id
+        var seen = Set<String>()
+        selectedItemIds = home.items.map(\.id).filter { seen.insert($0).inserted }
+        return true
+    }
+
+    func deselectAll() {
+        selectedHomeId = nil
+        selectedItemIds = []
+    }
+
     func isSelected(_ itemId: String) -> Bool {
         isSelecting && selectedItemIds.contains(itemId)
     }

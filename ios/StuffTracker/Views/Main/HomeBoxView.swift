@@ -442,6 +442,16 @@ struct HomeBoxView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 3)
 
+            if itemSelection.isSelecting && home.canModifyItems {
+                Button("Select all \(home.items.count) matching items") {
+                    itemSelection.selectAllMatching(in: home)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .disabled(home.items.isEmpty || (itemSelection.selectedHomeId != nil && itemSelection.selectedHomeId != home.id))
+                .accessibilityIdentifier("select-all-matching-\(home.id)")
+            }
             if !isCollapsed {
                 Divider().padding(.horizontal, 14)
 

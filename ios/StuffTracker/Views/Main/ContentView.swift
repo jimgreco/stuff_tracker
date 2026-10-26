@@ -351,7 +351,8 @@ struct ContentView: View {
                         isUnflagAction: shouldUnflagSelection,
                         onMove: { showBulkMoveSheet = true },
                         onFlag: { setSelectedItemsFlagged() },
-                        onDelete: { requestDeleteSelectedItems() }
+                        onDelete: { requestDeleteSelectedItems() },
+                        onClear: { itemSelection.deselectAll() }
                     )
                 } else if itemComposer.isPresented {
                     AddComposerBar(
@@ -472,6 +473,9 @@ struct ContentView: View {
             }
             .onReceive(deepLinkStore.$pendingItemLink) { _ in
                 openPendingDeepLinkIfPossible()
+            }
+            .onChange(of: matchingSelectionIDs) { ids in
+                itemSelection.prune(validItemIds: Set(ids))
             }
             .onReceive(homeStore.$homeDetails) { homes in
                 collapseStore.prune(
@@ -706,6 +710,10 @@ struct ContentView: View {
             homeStore.deleteItems(homeId: homeId, itemIds: itemSelection.selectedItemIds)
             itemSelection.clearSelection()
         }
+    }
+
+    private var matchingSelectionIDs: [String] {
+        filteredHomes.first { $0.id == itemSelection.selectedHomeId && $0.canModifyItems }?.items.map(\.id) ?? []
     }
 
     private var filteredHomes: [HomeDetail] {
@@ -1000,6 +1008,7 @@ private struct SelectionActionBar: View {
     let onMove: () -> Void
     let onFlag: () -> Void
     let onDelete: () -> Void
+    let onClear: () -> Void
 
     private var hasSelection: Bool {
         selectedCount > 0
@@ -1011,7 +1020,11 @@ private struct SelectionActionBar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(selectionText)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(selectionText)
+                Button("Clear", action: onClear).disabled(!hasSelection)
+                    .accessibilityLabel("Clear selection")
+            }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(hasSelection ? .primary : .secondary)
                 .lineLimit(1)

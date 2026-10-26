@@ -214,6 +214,28 @@ final class ModelBehaviorTests: XCTestCase {
         XCTAssertEqual(controller.selectedHomeId, "home-2")
     }
 
+    @MainActor
+    func testSelectAllMatchingUsesOnlySuppliedFilteredHomeAndKeepsHomeBoundary() throws {
+        let controller = ItemSelectionController()
+        let home = documentFilterHome()
+        let filtered = try XCTUnwrap(home.filteredByDocuments(.withDocuments, photos: .withoutPhotos))
+        XCTAssertFalse(controller.selectAllMatching(in: filtered))
+        controller.startSelecting()
+        XCTAssertTrue(controller.selectAllMatching(in: filtered))
+        XCTAssertEqual(controller.selectedItemIds, ["camera"])
+        let other = HomeDetail(id: "other", name: home.name, ownerId: home.ownerId, role: "editor", locations: [], items: home.items)
+        XCTAssertFalse(controller.selectAllMatching(in: other))
+        XCTAssertEqual(controller.selectedHomeId, home.id)
+        controller.prune(validItemIds: [])
+        XCTAssertEqual(controller.selectedCount, 0)
+        XCTAssertTrue(controller.selectAllMatching(in: other))
+        controller.deselectAll()
+        XCTAssertTrue(controller.isSelecting)
+        XCTAssertEqual(controller.selectedCount, 0)
+        let reader = HomeDetail(id: home.id, name: home.name, ownerId: home.ownerId, role: "viewer", locations: [], items: home.items)
+        XCTAssertFalse(controller.selectAllMatching(in: reader))
+    }
+
     func testLocalModelsConvertToApiModelsAndFilterDeletedChildren() {
         let home = LocalHome(
             id: "home-1",
