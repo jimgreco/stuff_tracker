@@ -64,6 +64,7 @@
   let activeTokenRefresh = null;
   let homesLoadSequence = 0;
   let mutationSequence = 0;
+  let itemSortInFlight = null;
 
   if (!HAS_STORED_SESSION) {
     state.collapsed = new Set();
@@ -1317,16 +1318,21 @@
       rows.push(actionButton("start-add-from-sheet", "plus", "Add Item", { ...base, addKind: "item" }, false, className));
       rows.push(actionButton("sort-children", "sort", "Order Containers by Name", {}, false, className));
     }
+    const itemCount = itemsIn(target.home, locationId).length;
+    if (["owner", "admin", "editor"].includes(target.home.role) && itemCount > 1) {
+      const sorting = itemSortInFlight && isCurrentSession(itemSortInFlight);
+      rows.push(actionButton("sort-items", "sort", sorting ? "Ordering Items…" : `Order All ${itemCount} Items by Name`, {}, false, className, sorting));
+    }
     rows.push(actionButton("open-delete", "trash", "Delete", {}, true, className));
     return rows;
   }
 
-  function actionButton(action, icon, label, extra = {}, danger = false, className = "sheet-action") {
+  function actionButton(action, icon, label, extra = {}, danger = false, className = "sheet-action", disabled = false) {
     const data = Object.entries(extra)
       .map(([key, value]) => `data-${toKebab(key)}="${escapeAttr(value)}"`)
       .join(" ");
     return `
-      <button type="button" class="${escapeAttr(className)} ${danger ? "danger" : ""}" data-action="${escapeAttr(action)}" ${data} ${className === "inline-action" ? 'role="menuitem"' : ""}>
+      <button type="button" class="${escapeAttr(className)} ${danger ? "danger" : ""}" data-action="${escapeAttr(action)}" ${data} ${className === "inline-action" ? 'role="menuitem"' : ""} ${disabled ? "disabled" : ""}>
         ${svgIcon(icon)} <span>${escapeHtml(label)}</span>
       </button>
     `;
@@ -3042,6 +3048,46 @@
     await loadServerHomes();
   }
 
+  async function sortItemsForTarget(actionTarget) {
+    if (itemSortInFlight && isCurrentSession(itemSortInFlight)) return;
+    const target = targetForActionTarget(actionTarget);
+    if (!target || (actionTarget.locationId && !target.location)
+      || !["owner", "admin", "editor"].includes(target.home.role)) return;
+    // Use the saved home, including filtered-out direct items. Equal names keep
+    // their existing order; case is ignored, as in the native item's action.
+    const sorted = itemsIn(target.home, target.location?.id || null)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }));
+    if (sorted.length < 2) return;
+    const scope = sessionScope();
+    itemSortInFlight = scope;
+    try {
+      await runMutation(async () => {
+        // Each endpoint write is independent. Wait for all of them before
+        // refreshing so a late success cannot overwrite the refreshed order.
+        const results = await Promise.allSettled(sorted.map((item, index) =>
+          apiRequest("PATCH", `/homes/${target.home.id}/items/${item.id}`, { sort_order: index })
+        ));
+        requireCurrentSession(scope);
+        const failed = results.some(result => result.status === "rejected");
+        try {
+          await loadServerHomes();
+        } catch (error) {
+          requireCurrentSession(scope);
+          throw new Error(failed
+            ? "Some items may have been reordered. Could not refresh; try ordering again."
+            : "Items were ordered, but could not refresh. Try ordering again.");
+        }
+        requireCurrentSession(scope);
+        if (failed) throw new Error("Some items could not be ordered. Try ordering again.");
+        if (state.actionMenu === actionTarget) state.actionMenu = null;
+        if (state.sheet === actionTarget) state.sheet = null;
+      }, "Items ordered by name", { renderAtStart: true });
+    } finally {
+      if (itemSortInFlight === scope) itemSortInFlight = null;
+      if (isCurrentSession(scope)) render();
+    }
+  }
+
   function openPendingItemLink() {
     const link = state.pendingItemLink;
     if (!link || state.deepLinkHandled || !hasAuthSession() || !state.homesLoaded) return;
@@ -3655,6 +3701,10 @@
         state.sheet = null;
         state.actionMenu = null;
       }, "Locations sorted");
+      return;
+    }
+    if (action === "sort-items") {
+      await sortItemsForTarget(state.actionMenu || state.sheet);
       return;
     }
     if (action === "dev-sign-in") {

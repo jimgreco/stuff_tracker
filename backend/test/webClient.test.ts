@@ -29,6 +29,7 @@ function browserFixture() {
       loadServerHomes, applyAuthResponse, clearSession, refreshAccessToken,
       setItemsFlagged, uploadItemAttachment, signInWithApple, runMutation,
       handleGoogleCredentialResponse, sessionScope, openItemLink, filteredHomes, selectAllMatching, pruneSelection,
+      sortItemsForTarget, actionRowsForTarget,
       setSaveHandler: handler => { saveItemFromForm = handler; },
     };
   })();`, context);
@@ -885,4 +886,155 @@ test('select all uses final matching items in one writable home and clears hidde
   client.state.homes[0].role = 'viewer';
   assert.equal(client.selectAllMatching('home-A'), false);
   assert.equal(client.state.selectedItemIds.size, 0);
+});
+
+function itemOrderFixture() {
+  const fixture = browserFixture();
+  fixture.client.applyAuthResponse(auth('A'));
+  const homes = [{ id: 'home-A', name: 'Maple House', role: 'editor', locations: [
+    { id: 'floor', name: 'Floor', type: 'floor', parentId: null },
+    { id: 'room', name: 'Office', type: 'room', parentId: 'floor' },
+    { id: 'box', name: 'Drawer', type: 'container', parentId: 'room' },
+  ], items: [null, 'floor', 'room', 'box'].flatMap((locationId, scope) =>
+    ['Zebra case', 'adapter', 'Adapter', 'Étagère'].map((name, index) => ({
+      id: `${scope}-${index}`, name, locationId, sortOrder: index, quantity: 1,
+      isFlagged: index === 0, properties: [], documents: [], photoUrls: [],
+    })))
+  }, { id: 'home-B', name: 'Other home', role: 'owner', locations: [], items: [
+    { id: 'other', name: 'Other item', locationId: null, sortOrder: 9 },
+  ] }];
+  fixture.client.state.homes = structuredClone(homes);
+  const patches: Array<{ path: string; body: any }> = [];
+  const reads: string[] = [];
+  fixture.context.fetch = async (url: string, options: any) => {
+    const pathname = new URL(url).pathname;
+    if (options.method === 'PATCH') {
+      const body = JSON.parse(options.body);
+      patches.push({ path: pathname, body });
+      const item = homes[0].items.find(item => pathname.endsWith('/' + item.id));
+      if (!item) throw new Error('Unexpected item');
+      Object.assign(item, { sortOrder: body.sort_order });
+      return response(item);
+    }
+    reads.push(pathname);
+    return response(pathname === '/homes' ? homes : pathname.startsWith('/homes/')
+      ? homes.find(home => pathname === `/homes/${home.id}`) : {});
+  };
+  return { ...fixture, homes, patches, reads };
+}
+
+test('item ordering menus disclose the full direct count and exclude viewers and single items', () => {
+  const { client } = itemOrderFixture();
+  client.state.search = 'Zebra';
+  client.state.flaggedOnly = true;
+  for (const locationId of [null, 'floor', 'room', 'box']) {
+    assert.match(client.actionRowsForTarget({ homeId: 'home-A', locationId }).join(''), /Order All 4 Items by Name/);
+  }
+  client.state.homes[0].role = 'viewer';
+  assert.doesNotMatch(client.actionRowsForTarget({ homeId: 'home-A' }).join(''), /sort-items/);
+  assert.doesNotMatch(client.actionRowsForTarget({ homeId: 'home-B' }).join(''), /sort-items/);
+});
+
+test('item ordering uses direct items including hidden matches and preserves equal-name order', async () => {
+  for (const [scope, locationId] of [null, 'floor', 'room', 'box'].entries()) {
+    const { client, patches, homes } = itemOrderFixture();
+    const otherItems = structuredClone(homes[0].items.filter(item => item.locationId !== locationId));
+    client.state.search = 'Zebra';
+    client.state.flaggedOnly = true;
+    client.state.documentFilter = 'without';
+    client.state.photoFilter = 'without';
+    client.state.actionMenu = { homeId: 'home-A', locationId };
+    await client.handleAction({ dataset: { action: 'sort-items' } });
+    assert.deepEqual(patches.map(patch => patch.path), [1, 2, 3, 0].map(index => `/homes/home-A/items/${scope}-${index}`));
+    assert.deepEqual(patches.map(patch => patch.body), [0, 1, 2, 3].map(sort_order => ({ sort_order })));
+    assert.deepEqual(homes[0].items.filter(item => item.locationId !== locationId), otherItems);
+    assert.equal(homes[1].items[0].sortOrder, 9);
+    assert.equal(client.state.actionMenu, null);
+    assert.equal(client.state.toast, 'Items ordered by name');
+    assert.equal(client.state.search, 'Zebra');
+    assert.equal(client.state.flaggedOnly, true);
+    const originalOrder = homes[0].items.map(item => item.sortOrder);
+    await client.sortItemsForTarget({ homeId: 'home-A', locationId });
+    assert.deepEqual(homes[0].items.map(item => item.sortOrder), originalOrder);
+  }
+});
+
+test('item ordering ignores stale locations, missing homes, viewers, and zero/one item scopes', async () => {
+  const { client, patches } = itemOrderFixture();
+  for (const target of [null, { homeId: 'missing' }, { homeId: 'home-A', locationId: 'deleted' }, { homeId: 'home-B' }]) {
+    await client.sortItemsForTarget(target);
+  }
+  client.state.homes[0].role = 'viewer';
+  await client.sortItemsForTarget({ homeId: 'home-A' });
+  assert.equal(patches.length, 0);
+});
+
+test('partial ordering waits for late writes, refreshes actual results, and can be retried', async () => {
+  const { client, context, patches, homes, reads } = itemOrderFixture();
+  const request = context.fetch;
+  let finishLate!: () => void;
+  let first = true;
+  context.fetch = async (url: string, options: any) => {
+    if (options.method === 'PATCH' && first) {
+      if (url.endsWith('/0-2')) throw new Error('Connection interrupted');
+      if (url.endsWith('/0-0')) await new Promise<void>(resolve => { finishLate = resolve; });
+    }
+    return request(url, options);
+  };
+  const target = { homeId: 'home-A' };
+  client.state.actionMenu = target;
+  const pending = client.sortItemsForTarget(target);
+  await nextTurn();
+  assert.equal(reads.length, 0);
+  assert.match(client.actionRowsForTarget(target).join(''), /Ordering Items…/);
+  await client.sortItemsForTarget(target);
+  assert.equal(patches.length, 2);
+  finishLate();
+  await pending;
+  assert.match(client.state.toast, /Some items could not be ordered/);
+  assert.equal(client.state.actionMenu, target);
+  assert.equal(client.state.homes[0].items.find((item: any) => item.id === '0-0').sortOrder, 3);
+  assert.doesNotMatch(client.actionRowsForTarget(target).join(''), /Ordering Items…/);
+  first = false;
+  await client.sortItemsForTarget(target);
+  assert.equal(client.state.toast, 'Items ordered by name');
+  assert.deepEqual(homes[0].items.slice(0, 4).map(item => item.sortOrder), [3, 0, 1, 2]);
+});
+
+test('a lost ordering refresh reports the saved result honestly and retry recovers', async () => {
+  const { client, context, homes } = itemOrderFixture();
+  const request = context.fetch;
+  context.fetch = (url: string, options: any) => options.method === 'GET'
+    ? Promise.reject(new Error('Offline')) : request(url, options);
+  const target = { homeId: 'home-A', locationId: 'room' };
+  client.state.actionMenu = target;
+  await client.sortItemsForTarget(target);
+  assert.match(client.state.toast, /Items were ordered, but could not refresh/);
+  assert.equal(client.state.actionMenu, target);
+  assert.deepEqual(homes[0].items.slice(8, 12).map(item => item.sortOrder), [3, 0, 1, 2]);
+  context.fetch = request;
+  await client.sortItemsForTarget(target);
+  assert.equal(client.state.toast, 'Items ordered by name');
+  assert.equal(client.state.homesLoadError, '');
+});
+
+test('late ordering completions cannot refresh or close the next account menu', async () => {
+  const { client, context, reads } = itemOrderFixture();
+  const request = context.fetch;
+  const completions: Array<() => void> = [];
+  context.fetch = async (url: string, options: any) => {
+    if (options.method === 'PATCH') await new Promise<void>(resolve => completions.push(resolve));
+    return request(url, options);
+  };
+  const pending = client.sortItemsForTarget({ homeId: 'home-A' });
+  client.clearSession();
+  client.applyAuthResponse(auth('B'));
+  const nextMenu = { homeId: 'home-B' };
+  client.state.actionMenu = nextMenu;
+  completions.forEach(finish => finish());
+  await pending;
+  assert.equal(reads.length, 0);
+  assert.equal(client.state.homes.length, 0);
+  assert.equal(client.state.actionMenu, nextMenu);
+  assert.notEqual(client.state.toast, 'Items ordered by name');
 });
