@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ClientIDSchema } from '../src/lib/clientCreates';
 import {
   HomeNameSchema,
   HomeSchema,
@@ -153,4 +154,34 @@ test('item schema accepts generated S3 object keys as document ids', () => {
   });
 
   assert.equal(parsed.documents?.[0]?.id, key);
+});
+
+test('inventory schemas preserve legacy UUID shapes and client id normalization', () => {
+  const id = 'ABCDEF12-3456-0789-0123-ABCDEF123456';
+  assert.equal(LocationSchema.parse({ name: 'Room', type: 'room', home_id: id, parent_id: id }).parent_id, id);
+  assert.equal(ItemSchema.parse({ name: 'Keys', home_id: id, location_id: id }).location_id, id);
+  assert.equal(ClientIDSchema.parse(id), id.toLowerCase());
+  assert.equal(ClientIDSchema.parse(undefined), undefined);
+  assert.throws(() => ClientIDSchema.parse('not-a-uuid'));
+  assert.throws(() => ClientIDSchema.parse(null));
+});
+
+test('oversized item collections stop before validating every invalid element', () => {
+  for (const field of ['properties', 'photo_urls', 'documents'] as const) {
+    const result = ItemSchema.safeParse({ name: 'Keys', [field]: Array(10_000).fill(null) });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.equal(result.error.issues.length, 1);
+      assert.equal(result.error.issues[0].code, 'too_big');
+      assert.deepEqual(result.error.issues[0].path, [field]);
+    }
+  }
+});
+
+test('media URL validation preserves bytes used by existing client-create receipts', () => {
+  const url = ' https://CDN.example.com/photo%20one.jpg?signature=a%2Fb&expires=123 ';
+  const body = { name: 'Keys', photo_urls: [url], documents: [{ id: 'doc-1', name: 'Photo', url }] };
+  assert.deepEqual(ItemSchema.parse(body), body);
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', photo_urls: ['not-a-url'] }));
+  assert.throws(() => ItemSchema.parse({ name: 'Keys', documents: [{ id: 'doc-1', name: 'Photo', url: 'not-a-url' }] }));
 });

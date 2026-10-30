@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { z } from 'zod';
+import { UUIDSchema } from './schemas';
 import { pool } from '../db/pool';
 import type { AuthRequest } from '../middleware/auth';
 import { withActivityTransaction } from './activity';
 
-export const ClientIDSchema = z.string().uuid().transform((id) => id.toLowerCase()).optional();
+export const ClientIDSchema = UUIDSchema.transform((id) => id.toLowerCase()).optional();
 type EntityType = 'home' | 'location' | 'item';
 const tables = { home: 'homes', location: 'locations', item: 'items' } as const;
 export class ClientCreateError extends Error {

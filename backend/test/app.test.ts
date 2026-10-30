@@ -4,12 +4,34 @@ import http from 'node:http';
 import net from 'node:net';
 import { createApp } from '../src/app';
 import { pool } from '../src/db/pool';
+import { signToken } from '../src/lib/jwt';
 import { request } from './request';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'unit-test-secret-that-is-long-enough';
 process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? 'test-google-client-id';
 process.env.APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID ?? 'com.jimgreco.stufftracker';
+
+test('validation failures retain the 400 error and client-readable detail paths and messages', async (t) => {
+  const previousSkipRevocation = process.env.SKIP_TOKEN_REVOCATION_CHECKS;
+  process.env.SKIP_TOKEN_REVOCATION_CHECKS = 'true';
+  t.after(() => restoreEnv('SKIP_TOKEN_REVOCATION_CHECKS', previousSkipRevocation));
+
+  const response = await request(createApp(), '/homes', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${signToken({
+      userId: '11111111-1111-4111-8111-111111111111', email: 'validation@example.com',
+    })}` },
+    body: { name: '' },
+  });
+  assert.equal(response.status, 400);
+  const body = JSON.parse(response.text);
+  assert.equal(body.error, 'Validation error');
+  assert.equal(body.details.length, 1);
+  assert.deepEqual(body.details[0].path, ['name']);
+  assert.equal(typeof body.details[0].message, 'string');
+  assert.ok(body.details[0].message.length > 0);
+});
 
 test('app echoes valid request ids on responses', async (t) => {
   const server = await listen();

@@ -38,10 +38,12 @@ test('home sync validation accepts flags', () => {
 });
 
 test('location sync validation rejects unknown location types', () => {
-  assert.throws(
-    () => LocationSchema.parse({ name: 'Attic', type: 'level' }),
-    /Invalid enum value/
-  );
+  const result = LocationSchema.safeParse({ name: 'Attic', type: 'level' });
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.issues[0].code, 'invalid_value');
+    assert.deepEqual(result.error.issues[0].path, ['type']);
+  }
 });
 
 test('item sync validation allows missing legacy fields and explicit root location', () => {
