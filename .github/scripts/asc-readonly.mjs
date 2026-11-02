@@ -90,15 +90,23 @@ export async function existingProfile(client, name, der, now = Date.now(), p = p
 }
 export function isApprovedTester(tester, p = policy) {
   return tester?.type === 'betaTesters' && typeof tester.attributes?.email === 'string'
-    && digest(tester.attributes.email.trim().toLowerCase()) === p.testerEmailSha256
+    && p.testerEmailSha256s.includes(digest(tester.attributes.email.trim().toLowerCase()))
     && tester.attributes.inviteType !== 'PUBLIC_LINK';
 }
+function distinctApprovedTesters(testers, p) {
+  return testers.every(t => typeof t.id === 'string' && t.id && isApprovedTester(t, p))
+    && new Set(testers.map(t => t.id)).size === testers.length
+    && new Set(testers.map(t => digest(t.attributes.email.trim().toLowerCase()))).size === testers.length;
+}
 export async function audience(client, p = policy) {
+  check(Array.isArray(p.testerEmailSha256s) && p.testerEmailSha256s.length === 2
+    && new Set(p.testerEmailSha256s).size === 2
+    && p.testerEmailSha256s.every(hash => /^[0-9a-f]{64}$/.test(hash)), 'Exactly two pinned tester identities are required.');
   const app = (await client.get(`/v1/apps/${p.appId}`)).data;
   check(app?.type === 'apps' && app.id === p.appId && app.attributes?.bundleId === p.bundleId, 'App Store app identity differs.');
   const groups = await client.list(`/v1/apps/${p.appId}/betaGroups?limit=200`);
   check(groups.length === p.groups.length && groups.every(g => p.groups.some(e => e.id === g.id)), 'TestFlight groups changed.');
-  let jim;
+  const approvedIds = new Set();
   for (const expected of p.groups) {
     const group = groups.find(g => g.id === expected.id), a = group.attributes;
     check(group.type === 'betaGroups' && a?.name === expected.name && a.isInternalGroup === expected.internal
@@ -107,13 +115,17 @@ export async function audience(client, p = policy) {
     const testers = await client.list(`/v1/betaGroups/${expected.id}/betaTesters?limit=200`);
     check(testers.length === expected.testers, 'TestFlight tester count changed.');
     if (expected.testers) {
-      check(testers.length === 1 && isApprovedTester(testers[0], p), 'TestFlight tester identity changed.'); jim = testers[0].id;
+      check(expected.internal && testers.length === p.testerEmailSha256s.length
+        && distinctApprovedTesters(testers, p), 'TestFlight tester identity changed.');
+      for (const tester of testers) approvedIds.add(tester.id);
     }
     if (!expected.internal) check((await client.list(`/v1/betaGroups/${expected.id}/builds?limit=200`)).length === 0, 'Excluded external group has builds.');
   }
   const all = await client.list(`/v1/betaTesters?filter[apps]=${p.appId}&limit=200`);
-  check(all.length === 1 && all[0].id === jim && isApprovedTester(all[0], p), 'App-level audience is not only the approved tester.');
-  return { appId: p.appId, internalTesters: 1, externalTesters: 0 };
+  check(all.length === p.testerEmailSha256s.length && approvedIds.size === all.length
+    && distinctApprovedTesters(all, p) && all.every(t => approvedIds.has(t.id)),
+    'App-level audience is not exactly the approved testers.');
+  return { appId: p.appId, internalTesters: all.length, externalTesters: 0 };
 }
 export async function iosBuilds(client, p = policy) {
   const trains = await client.list(`/v1/preReleaseVersions?filter[app]=${p.appId}&filter[platform]=IOS&limit=200`);
@@ -156,8 +168,9 @@ export async function verifyUploaded(client, build, sha, p = policy) {
   }
   check(groups.every(g => p.groups.some(e => e.internal && e.id === g.id)), 'Uploaded build has an unapproved group.');
   const testers = await client.list(`/v1/builds/${encodeURIComponent(b.id)}/individualTesters?limit=200`);
-  check(testers.length <= 1 && testers.every(t => isApprovedTester(t, p)), 'Uploaded build has an unapproved individual tester.');
-  if (!groups.some(g => g.id === p.groups.find(e => e.testers === 1).id)) return null;
+  check(testers.length <= p.testerEmailSha256s.length && distinctApprovedTesters(testers, p),
+    'Uploaded build has an unapproved individual tester.');
+  if (!p.groups.filter(e => e.testers > 0).every(e => groups.some(g => g.id === e.id))) return null;
   return { sha, build, appId: p.appId, processing: 'VALID', audience: 'INTERNAL_ONLY', approvedGroupAttached: true };
 }
 function arg(name) {

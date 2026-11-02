@@ -5,24 +5,25 @@ import { policy, digest, readClient, audience, preflight, verifyUploaded, valida
 const clone = value => structuredClone(value);
 function fixture() {
   const p = clone(policy);
-  p.testerEmailSha256 = digest('jim@example.invalid');
+  p.testerEmailSha256s = ['jim@example.invalid', 'rachel@example.invalid'].map(digest);
   const tester = { type: 'betaTesters', id: 'jim', attributes: { email: 'Jim@Example.Invalid', inviteType: 'EMAIL' } };
+  const rachel = { type: 'betaTesters', id: 'rachel', attributes: { email: ' Rachel@Example.Invalid ', inviteType: 'EMAIL' } };
   const routes = {
     [`/v1/apps/${p.appId}`]: { data: { type: 'apps', id: p.appId, attributes: { bundleId: p.bundleId } } },
     [`/v1/apps/${p.appId}/betaGroups?limit=200`]: { data: p.groups.map(g => ({ type: 'betaGroups', id: g.id, attributes: { name: g.name, isInternalGroup: g.internal, publicLinkEnabled: false, hasAccessToAllBuilds: g.automatic } })) },
-    [`/v1/betaTesters?filter[apps]=${p.appId}&limit=200`]: { data: [tester] },
+    [`/v1/betaTesters?filter[apps]=${p.appId}&limit=200`]: { data: [tester, rachel] },
     [`/v1/preReleaseVersions?filter[app]=${p.appId}&filter[platform]=IOS&limit=200`]: { data: [{ type: 'preReleaseVersions', id: 'ios-train', attributes: { platform: 'IOS', version: p.marketingVersion } }] },
     '/v1/preReleaseVersions/ios-train/builds?limit=200': { data: [{ type: 'builds', id: 'previous', attributes: { version: '1' } }] },
   };
   for (const group of p.groups) {
-    routes[`/v1/betaGroups/${group.id}/betaTesters?limit=200`] = { data: group.testers ? [clone(tester)] : [] };
+    routes[`/v1/betaGroups/${group.id}/betaTesters?limit=200`] = { data: group.testers ? [clone(tester), clone(rachel)] : [] };
     routes[`/v1/betaGroups/${group.id}/builds?limit=200`] = { data: [] };
   }
   const client = {
     async get(path) { assert.ok(routes[path], `Unexpected API path: ${path}`); return clone(routes[path]); },
     async list(path) { return (await this.get(path)).data; },
   };
-  return { p, routes, client, tester };
+  return { p, routes, client, tester, rachel };
 }
 test('Apple client permits only same-origin GET and refuses redirects', async () => {
   const requests = [];
@@ -57,7 +58,30 @@ test('API errors do not emit private response contents', async () => {
   await assert.rejects(() => client.get('/v1/apps'), error => error.message.includes('401') && !error.message.includes('private-response'));
 });
 test('approved app-specific audience passes', async () => {
-  const f = fixture(); assert.equal((await audience(f.client, f.p)).internalTesters, 1);
+  const f = fixture(); assert.equal((await audience(f.client, f.p)).internalTesters, 2);
+});
+test('Family and app totals must contain both distinct pinned identities', async () => {
+  for (const target of ['group', 'app']) {
+    for (const change of ['missing-rachel', 'replacement', 'duplicate-email', 'duplicate-id', 'public-invite', 'different-app-id']) {
+      const f = fixture();
+      const path = target === 'group' ? `/v1/betaGroups/${f.p.groups[0].id}/betaTesters?limit=200`
+        : `/v1/betaTesters?filter[apps]=${f.p.appId}&limit=200`;
+      const testers = f.routes[path].data;
+      if (change === 'missing-rachel') testers.pop();
+      if (change === 'replacement') testers[1].attributes.email = 'someone@example.invalid';
+      if (change === 'duplicate-email') testers[1].attributes.email = testers[0].attributes.email;
+      if (change === 'duplicate-id') testers[1].id = testers[0].id;
+      if (change === 'public-invite') testers[1].attributes.inviteType = 'PUBLIC_LINK';
+      if (change === 'different-app-id') testers[1].id = 'another-rachel';
+      await assert.rejects(() => audience(f.client, f.p), `${target}: ${change}`);
+    }
+  }
+});
+test('malformed or duplicate identity pins fail closed', async () => {
+  for (const pins of [undefined, [], ['x'], [digest('jim@example.invalid'), digest('jim@example.invalid')]]) {
+    const f = fixture(); f.p.testerEmailSha256s = pins;
+    await assert.rejects(() => audience(f.client, f.p), /two pinned/);
+  }
 });
 for (const change of ['app', 'group-id', 'extra-group', 'public', 'automatic', 'tester-count', 'tester-identity', 'app-tester']) {
   test(`audience fails closed on ${change}`, async () => {
@@ -128,6 +152,25 @@ test('processing success requires intended version, internal-only audience and a
   assert.equal(await verifyUploaded(f.client, '3', 'a'.repeat(40), f.p), null);
   f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data[0].attributes.buildAudienceType = 'APP_STORE_ELIGIBLE';
   await assert.rejects(() => verifyUploaded(f.client, '3', 'a'.repeat(40), f.p));
+});
+test('build individual testers may only be a distinct subset of Jim and Rachel', async () => {
+  const f = fixture(), id = 'uploaded';
+  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data = [{ type: 'builds', id, attributes: { version: '3', processingState: 'VALID', expired: false, buildAudienceType: 'INTERNAL_ONLY' } }];
+  f.routes[`/v1/betaGroups/${f.p.groups[0].id}/builds?limit=200`].data = [{ id, type: 'builds' }];
+  const path = `/v1/builds/${id}/individualTesters?limit=200`;
+  for (const testers of [[], [f.tester], [f.rachel], [f.tester, f.rachel]]) {
+    f.routes[path] = { data: testers };
+    assert.equal((await verifyUploaded(f.client, '3', 'a'.repeat(40), f.p)).approvedGroupAttached, true);
+  }
+  for (const testers of [
+    [f.tester, f.rachel, { ...f.tester, id: 'third' }],
+    [{ ...f.rachel, attributes: { email: 'someone@example.invalid', inviteType: 'EMAIL' } }],
+    [f.tester, { ...f.tester, id: 'duplicate-email' }],
+    [f.tester, { ...f.rachel, id: f.tester.id }],
+  ]) {
+    f.routes[path] = { data: testers };
+    await assert.rejects(() => verifyUploaded(f.client, '3', 'a'.repeat(40), f.p), /individual tester/);
+  }
 });
 
 test('iOS profiles may belong to universal app IDs with optional seed metadata', () => {

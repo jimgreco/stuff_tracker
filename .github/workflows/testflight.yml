@@ -234,7 +234,7 @@ jobs:
         CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
         CERT_PWD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
         KC_PWD: ${{ secrets.KEYCHAIN_PASSWORD }}
-    - name: Check current app, Jim-only audience and iOS build number
+    - name: Check current app, Jim and Rachel audience and iOS build number
       run: |
         set -euo pipefail
         node .github/scripts/asc-readonly.mjs preflight --sha "$GITHUB_SHA" --build "$IOS_BUILD_NUMBER"
