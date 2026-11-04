@@ -207,9 +207,9 @@ class ArtifactTests(unittest.TestCase):
                 archive.writestr('Payload/Example.app/Watch/Other.app/Info.plist',plistlib.dumps({}))
             with self.assertRaises(ValueError):v.inspect_package(path,self.sha,self.build,self.p)
 
-    def test_internal_only_manual_export(self):
+    def test_app_store_eligible_manual_export(self):
         options=v.export_options(self.p)
-        self.assertIs(options['testFlightInternalTestingOnly'],True)
+        self.assertIs(options['testFlightInternalTestingOnly'],False)
         self.assertIs(options['manageAppVersionAndBuildNumber'],False)
         self.assertEqual(options['destination'],'export')
         self.assertEqual(options['signingStyle'],'manual')

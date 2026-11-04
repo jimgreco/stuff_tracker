@@ -110,9 +110,13 @@ test('empty external/additional groups cannot silently acquire testers or builds
 });
 test('build check accepts advancing iOS commit count only', async () => {
   const f = fixture(); assert.equal((await preflight(f.client, '3', 'a'.repeat(40), f.p)).build, '3');
-  for (const version of ['3', '4', '1.2', 'unknown']) {
+  for (const version of ['3', '4', '3.1', '1..2', '1.2.3.4', 'unknown']) {
     f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data[0].attributes.version = version;
     await assert.rejects(() => preflight(f.client, '3', 'a'.repeat(40), f.p));
+  }
+  for (const version of ['2.1', '1.2.3']) {
+    f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data[0].attributes.version = version;
+    assert.equal((await preflight(f.client, '3', 'a'.repeat(40), f.p)).build, '3');
   }
 });
 test('compares builds within the pinned iOS marketing version', async () => {
@@ -142,20 +146,20 @@ test('certificate uses pinned public bytes and rejects expired/inactive/wrong ty
     const changed = clone(resource); changed.attributes[key] = value; assert.throws(() => validateCertificate(changed, der, now, p));
   }
 });
-test('processing success requires intended version, internal-only audience and approved group', async () => {
+test('processing success requires intended version, App Store eligible audience and approved group', async () => {
   const f = fixture(), id = 'uploaded';
-  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data = [{ type: 'builds', id, attributes: { version: '3', processingState: 'VALID', expired: false, buildAudienceType: 'INTERNAL_ONLY' } }];
+  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data = [{ type: 'builds', id, attributes: { version: '3', processingState: 'VALID', expired: false, buildAudienceType: 'APP_STORE_ELIGIBLE' } }];
   f.routes[`/v1/betaGroups/${f.p.groups[0].id}/builds?limit=200`] = { data: [{ id, type: 'builds' }] };
   f.routes[`/v1/builds/${id}/individualTesters?limit=200`] = { data: [] };
   assert.equal((await verifyUploaded(f.client, '3', 'a'.repeat(40), f.p)).approvedGroupAttached, true);
   f.routes[`/v1/betaGroups/${f.p.groups[0].id}/builds?limit=200`].data = [];
   assert.equal(await verifyUploaded(f.client, '3', 'a'.repeat(40), f.p), null);
-  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data[0].attributes.buildAudienceType = 'APP_STORE_ELIGIBLE';
+  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data[0].attributes.buildAudienceType = 'INTERNAL_ONLY';
   await assert.rejects(() => verifyUploaded(f.client, '3', 'a'.repeat(40), f.p));
 });
 test('build individual testers may only be a distinct subset of Jim and Rachel', async () => {
   const f = fixture(), id = 'uploaded';
-  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data = [{ type: 'builds', id, attributes: { version: '3', processingState: 'VALID', expired: false, buildAudienceType: 'INTERNAL_ONLY' } }];
+  f.routes['/v1/preReleaseVersions/ios-train/builds?limit=200'].data = [{ type: 'builds', id, attributes: { version: '3', processingState: 'VALID', expired: false, buildAudienceType: 'APP_STORE_ELIGIBLE' } }];
   f.routes[`/v1/betaGroups/${f.p.groups[0].id}/builds?limit=200`].data = [{ id, type: 'builds' }];
   const path = `/v1/builds/${id}/individualTesters?limit=200`;
   for (const testers of [[], [f.tester], [f.rachel], [f.tester, f.rachel]]) {

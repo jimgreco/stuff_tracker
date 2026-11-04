@@ -146,8 +146,10 @@ export async function preflight(client, build, sha, p = policy) {
   // Apple's build identity is scoped by app, platform and marketing-version train.
   // Historical 1.0 releases used eight-digit numbers; newer trains use Git counts.
   const builds = (await iosBuilds(client, p)).filter(b => b.marketingVersion === p.marketingVersion);
-  const rejected = builds.filter(b => b.type !== 'builds' || !/^[1-9][0-9]*$/.test(b.attributes?.version)
-    || BigInt(b.attributes.version) >= BigInt(build));
+  // A one-off local App Store archive may use a dotted build such as 240.1;
+  // its leading count still has to stay below this commit count.
+  const rejected = builds.filter(b => b.type !== 'builds' || !/^[1-9][0-9]*(\.[0-9]+){0,2}$/.test(b.attributes?.version)
+    || BigInt(b.attributes.version.split('.')[0]) >= BigInt(build));
   check(!rejected.length, 'iOS build preflight rejected existing metadata: ' + JSON.stringify(rejected.slice(0, 10).map(b => ({ type: b.type, build: b.attributes?.version, marketingVersion: b.marketingVersion }))) + `; total rejected=${rejected.length}.`);
   return { ...scope, sha, build: String(build), checkedAt: new Date().toISOString(), existingIOSBuilds: builds.length };
 }
@@ -158,7 +160,7 @@ export async function verifyUploaded(client, build, sha, p = policy) {
   if (!matches.length || matches[0].attributes.processingState === 'PROCESSING') return null;
   const b = matches[0];
   check(b.marketingVersion === p.marketingVersion && b.attributes.processingState === 'VALID'
-    && b.attributes.expired === false && b.attributes.buildAudienceType === 'INTERNAL_ONLY', 'Uploaded build failed processing or is not the intended internal-only iOS version.');
+    && b.attributes.expired === false && b.attributes.buildAudienceType === 'APP_STORE_ELIGIBLE', 'Uploaded build failed processing or is not the intended App Store eligible iOS version.');
   // Apple supports GET betaGroups/{id}/builds, not GET builds/{id}/betaGroups.
   // audience() above already proved the complete app group set is exactly pinned.
   const groups = [];
@@ -171,7 +173,7 @@ export async function verifyUploaded(client, build, sha, p = policy) {
   check(testers.length <= p.testerEmailSha256s.length && distinctApprovedTesters(testers, p),
     'Uploaded build has an unapproved individual tester.');
   if (!p.groups.filter(e => e.testers > 0).every(e => groups.some(g => g.id === e.id))) return null;
-  return { sha, build, appId: p.appId, processing: 'VALID', audience: 'INTERNAL_ONLY', approvedGroupAttached: true };
+  return { sha, build, appId: p.appId, processing: 'VALID', audience: 'APP_STORE_ELIGIBLE', approvedGroupAttached: true };
 }
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`); check(i >= 0 && process.argv[i + 1], `Missing --${name}.`); return process.argv[i + 1];
