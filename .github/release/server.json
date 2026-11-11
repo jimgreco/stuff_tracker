@@ -1,0 +1,13 @@
+{
+  "app": "stuff",
+  "image": "ghcr.io/jimgreco/stuff_tracker",
+  "images": [
+    { "context": ".", "dockerfile": "backend/Dockerfile" }
+  ],
+  "services": {
+    "stuff": {
+      "health": ["node", "-e", "const base='http://127.0.0.1:'+(process.env.PORT||3002);const get=p=>fetch(base+p).then(r=>r.ok?r.json():Promise.reject(new Error(p)));Promise.all([get('/health/live'),get('/health'),get('/auth/config')]).then(([live,health,auth])=>process.exit(live.ok===true&&health.ok===true&&health.db===true&&auth&&typeof auth==='object'?0:1)).catch(()=>process.exit(1))"]
+    }
+  },
+  "backup": { "database": "stuff", "require_table": "items", "keep": 20 }
+}

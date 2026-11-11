@@ -31,3 +31,9 @@
   `.github/workflows/deploy.yml`, `.github/workflows/testflight.yml`, and
   `backend/scripts/smoke-deploy.cjs`. Inspect current scripts before invoking
   operational checks, migrations, cleanup, or production writes.
+- Releases use the shared engines in `jimgreco/release-tools`, pinned by commit:
+  the backend via `server-release.yml` with `.github/release/server.json`
+  (exact-commit GHCR image, drift-guarded host release, DB backup, health and
+  automatic rollback); iOS via `ios/prepare`, `ios/upload` and `ios/cleanup`
+  with `.github/scripts/release-policy.json`. Bump the pin in every reference
+  together.

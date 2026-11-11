@@ -21,20 +21,25 @@ Protect `main` in GitHub and require these status checks before merge:
 - `verify`
 - `test`
 
-Keep direct pushes limited to maintainers. Pushes and pull requests run verification
-without deploying or uploading a native build. Deployment is a manual dispatch of
-`deploy.yml` on `main` with `deploy=true`, after exact-commit verification and
-shared-host release coordination. TestFlight archive/upload is a separate manual
-dispatch of `testflight.yml` on `main`.
+Keep direct pushes limited to maintainers. Pull requests run verification only.
+Deployment is a manual dispatch of `deploy.yml` on `main` with `deploy=true`;
+main pushes also run the TestFlight workflow, which uploads a build.
 
-Before deployment, retain the current Stuff image ID under an explicit rollback
-tag and record the effective running configuration without exposing credentials.
-Check that the current Compose configuration preserves that configuration before
-recreating the service. Deployment rebuilds only `stuff` with `--no-deps` and does
-not prune images or restart dependencies. Workflow concurrency only serializes
-this repository; the release coordinator must also serialize other apps using
-the host. Confirm the resulting container image/source commit, `/health/live`,
-`/health`, public shell, and smoke results before proceeding to the next app.
+Deployment calls the shared `server-release.yml` workflow from
+`jimgreco/release-tools`, pinned by commit, with `.github/release/server.json`.
+It builds the exact-commit ARM64 image `ghcr.io/jimgreco/stuff_tracker:<sha>`
+from the repository root with `backend/Dockerfile`, pushes it, and runs
+`release.py` on the host over pinned SSH. `release.py` takes the shared host
+release locks, refuses unless the live `stuff` container matches its recorded
+Compose files exactly, writes `~/deploy/releases/stuff-image-<sha>.json` (image
+only), tags the previous image `stuff-rollback:<time>-<container>`, takes a
+verified `pg_dump` of the `stuff` database into `~/deploy/backups/stuff/`, then
+recreates only `stuff` with `--no-deps --no-build`. The container still runs its
+migrations on start. The health gate runs inside the container and requires
+`/health/live`, `/health` with `db: true` and a JSON `/auth/config`; on failure
+the previous image is restored. A record of each release is kept in
+`~/deploy/release-records/stuff-<sha>.json`. No source is copied to the host and
+nothing is built there.
 
 ## Incident Response
 
@@ -75,11 +80,11 @@ Preferred rollback path is a revert or forward-fix through `main`, because the d
    `deploy=true` after coordinating the shared host.
 5. Confirm `/health` after deploy completion.
 
-If GitHub Actions is unavailable and production is down, manually deploy a clean checkout of the last known-good commit from a trusted machine using the same backend files and pinned SSH host key. Record that manual action and reconcile `main` afterward.
+A failed health check already restores the previous image automatically. If GitHub Actions is unavailable and production is down, recreate `stuff` on the host from its retained `stuff-rollback:*` image or a previous `~/deploy/releases/stuff-image-<sha>.json`, keeping the live Compose file chain. Record that manual action and reconcile `main` afterward.
 
 ## Post-Deploy Smoke Tests
 
-The deploy workflow runs `npm run smoke:deploy` inside the rebuilt production container after each backend deploy. The smoke test checks `/health/live`, `/health`, `/auth/config` shape, authenticated `/homes`, home creation/deletion, item creation/deletion, and attachment upload signing.
+The release health gate covers only the read-only part of the smoke test. Run `npm run smoke:deploy` inside the production container manually (`docker-compose exec -T stuff npm run smoke:deploy` with the live Compose file chain) when a write-path check is wanted. The smoke test checks `/health/live`, `/health`, `/auth/config` shape, authenticated `/homes`, home creation/deletion, item creation/deletion, and attachment upload signing.
 
 The smoke test creates a short-lived user and a temporary home/item, then deletes them before exiting. If cleanup fails, delete rows matching `deploy-smoke-%@stufftracker.local` after recording the failed run.
 

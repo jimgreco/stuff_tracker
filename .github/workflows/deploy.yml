@@ -70,7 +70,7 @@ jobs:
 
           printf '%s\n' "$changed_files"
 
-          if printf '%s\n' "$changed_files" | grep -Eq '^(backend/|web/|\.github/workflows/deploy\.yml$)'; then
+          if printf '%s\n' "$changed_files" | grep -Eq '^(backend/|web/|\.github/release/|\.github/workflows/deploy\.yml$)'; then
             echo "run_backend=true" >> "$GITHUB_OUTPUT"
             echo "run_deploy=true" >> "$GITHUB_OUTPUT"
           else
@@ -107,83 +107,25 @@ jobs:
         if: steps.changes.outputs.run_backend == 'true'
         run: npm audit --omit=dev
 
-  deploy:
+  release:
+    # Unchanged gate: only a manual dispatch on main with deploy=true releases.
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy && needs.verify.outputs.run_deploy == 'true'
     needs: verify
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Transfer stuff app to EC2
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "$EC2_SSH_KEY" > key.pem
-          chmod 600 key.pem
-          ssh-keygen -y -P '' -f key.pem > /dev/null
-          test -n "$EC2_SSH_KNOWN_HOSTS"
-          printf '%s\n' "$EC2_SSH_KNOWN_HOSTS" > known_hosts
-          chmod 600 known_hosts
-          test -s known_hosts
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
-            --exclude '.git' \
-            --exclude '.DS_Store' \
-            --exclude 'node_modules' \
-            --exclude '.env' \
-            backend/ "$EC2_USER@$EC2_HOST:~/stuff_tracker/backend/"
-          rsync -avz -e "ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts" \
-            --exclude '.DS_Store' \
-            web/ "$EC2_USER@$EC2_HOST:~/stuff_tracker/web/"
-
-      - name: Rebuild stuff container
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            "cd ~/deploy && docker-compose up -d --no-deps --build stuff"
-
-      - name: Wait for stuff service
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" '
-            set -eu
-            cd ~/deploy
-            for attempt in $(seq 1 60); do
-              if docker-compose exec -T stuff node -e "fetch(\"http://127.0.0.1:\" + (process.env.PORT || 3002) + \"/health/live\").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))" >/dev/null 2>&1; then
-                echo "stuff service is ready"
-                exit 0
-              fi
-
-              if [ "$attempt" = "60" ]; then
-                echo "stuff service did not become ready"
-                docker-compose ps stuff || true
-                docker-compose logs --tail=100 stuff || true
-                exit 1
-              fi
-
-              sleep 2
-            done
-          '
-
-      - name: Run post-deploy smoke tests
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-        run: |
-          ssh -i key.pem -o StrictHostKeyChecking=yes -o UserKnownHostsFile=known_hosts "$EC2_USER@$EC2_HOST" \
-            "cd ~/deploy && docker-compose exec -T stuff npm run smoke:deploy || (docker-compose ps stuff && docker-compose logs --tail=100 stuff && false)"
+    permissions:
+      contents: read
+      packages: write
+    uses: jimgreco/release-tools/.github/workflows/server-release.yml@ff61f1c6a6eb51ea982246473203bcc903ce8153
+    with:
+      tools_ref: ff61f1c6a6eb51ea982246473203bcc903ce8153
+    secrets:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_SSH_KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
 
   notify-failure:
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (needs.verify.result == 'failure' || needs.verify.result == 'cancelled' || needs.deploy.result == 'failure' || needs.deploy.result == 'cancelled') }}
-    needs: [verify, deploy]
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (needs.verify.result == 'failure' || needs.verify.result == 'cancelled' || needs.release.result == 'failure' || needs.release.result == 'cancelled') }}
+    needs: [verify, release]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -194,4 +136,4 @@ jobs:
         with:
           webhook-url: ${{ secrets.OPERATIONS_ALERT_WEBHOOK_URL }}
           title: Deploy to EC2 failed
-          summary: verify=${{ needs.verify.result }}, deploy=${{ needs.deploy.result }}
+          summary: verify=${{ needs.verify.result }}, release=${{ needs.release.result }}
