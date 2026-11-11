@@ -108,8 +108,9 @@ jobs:
         run: npm audit --omit=dev
 
   release:
-    # Unchanged gate: only a manual dispatch on main with deploy=true releases.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy && needs.verify.outputs.run_deploy == 'true'
+    # Like the other apps: every push to main that changes the backend releases;
+    # a manual dispatch on main releases when deploy=true.
+    if: github.ref == 'refs/heads/main' && needs.verify.outputs.run_deploy == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
     needs: verify
     permissions:
       contents: read

@@ -22,8 +22,9 @@ Protect `main` in GitHub and require these status checks before merge:
 - `test`
 
 Keep direct pushes limited to maintainers. Pull requests run verification only.
-Deployment is a manual dispatch of `deploy.yml` on `main` with `deploy=true`;
-main pushes also run the TestFlight workflow, which uploads a build.
+Every push to `main` that changes the backend, web app or release manifest
+deploys it (a manual dispatch with `deploy=true` redeploys); main pushes also
+run the TestFlight workflow, which uploads a build.
 
 Deployment calls the shared `server-release.yml` workflow from
 `jimgreco/release-tools`, pinned by commit, with `.github/release/server.json`.
@@ -76,8 +77,8 @@ Preferred rollback path is a revert or forward-fix through `main`, because the d
    npm audit --omit=dev
    ```
 
-4. Push to `main`, verify its checks, then manually dispatch `Deploy to EC2` with
-   `deploy=true` after coordinating the shared host.
+4. Push to `main`; `Deploy to EC2` verifies and releases it. The shared host
+   lock serializes it with other app releases.
 5. Confirm `/health` after deploy completion.
 
 A failed health check already restores the previous image automatically. If GitHub Actions is unavailable and production is down, recreate `stuff` on the host from its retained `stuff-rollback:*` image or a previous `~/deploy/releases/stuff-image-<sha>.json`, keeping the live Compose file chain. Record that manual action and reconcile `main` afterward.
