@@ -3,6 +3,19 @@ set -euo pipefail
 
 cd ~/deploy
 
+# Reuse the exact Compose file chain recorded on the running stuff container.
+# Releases pin the image in ~/deploy/releases/stuff-image-<sha>.json; a bare
+# `docker-compose up` would drop that file and revert to an old build.
+live_stuff="$(docker ps -q --filter label=com.docker.compose.project=deploy --filter label=com.docker.compose.service=stuff)"
+[ "$(printf '%s\n' "$live_stuff" | grep -c .)" = 1 ] || { echo 'Expected exactly one running stuff container.'; exit 1; }
+compose_files=()
+IFS=, read -r -a recorded_files <<< "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$live_stuff")"
+for file in "${recorded_files[@]}"; do
+  [ -f "$file" ] || { echo 'A Compose file recorded on the running stuff container is missing.'; exit 1; }
+  compose_files+=(-f "$file")
+done
+dc() { docker-compose -p deploy --project-directory "$HOME/deploy" "${compose_files[@]}" "$@"; }
+
 mode="${STUFF_DB_HARDENING_MODE:-validate}"
 db_name="${STUFF_DB_NAME:-stuff}"
 app_role="${STUFF_DB_APP_ROLE:-stuff_app}"
@@ -50,7 +63,7 @@ urlencode_password() {
 }
 
 psql_admin() {
-  docker-compose exec -T -e PGPASSWORD="$db_password" db psql -U admin -d "$db_name" -v ON_ERROR_STOP=1 "$@"
+  dc exec -T -e PGPASSWORD="$db_password" db psql -U admin -d "$db_name" -v ON_ERROR_STOP=1 "$@"
 }
 
 validate_role_posture() {
@@ -66,7 +79,7 @@ validate_role_posture() {
     exit 1
   fi
 
-  docker-compose exec -T -e DB_EXPECTED_APP_ROLE="$app_role" stuff npm run db:hardening:check
+  dc exec -T -e DB_EXPECTED_APP_ROLE="$app_role" stuff npm run db:hardening:check
 }
 
 db_password="$(read_env DB_PASSWORD)"
@@ -169,17 +182,17 @@ encoded_migration_password="$(urlencode_password "$migration_password")"
 write_env STUFF_DATABASE_URL "postgresql://${app_role}:${encoded_app_password}@db:5432/${db_name}?sslmode=disable"
 write_env STUFF_MIGRATION_DATABASE_URL "postgresql://${migration_role}:${encoded_migration_password}@db:5432/${db_name}?sslmode=disable"
 
-docker-compose up -d stuff
+dc up -d stuff
 
 for attempt in $(seq 1 60); do
-  if docker-compose exec -T stuff node -e 'fetch("http://127.0.0.1:" + (process.env.PORT || 3002) + "/health").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))' >/dev/null 2>&1; then
+  if dc exec -T stuff node -e 'fetch("http://127.0.0.1:" + (process.env.PORT || 3002) + "/health").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))' >/dev/null 2>&1; then
     echo "stuff service is healthy"
     break
   fi
 
   if [ "$attempt" = "60" ]; then
-    docker-compose ps stuff || true
-    docker-compose logs --tail=100 stuff || true
+    dc ps stuff || true
+    dc logs --tail=100 stuff || true
     echo "::error title=Database hardening failed::stuff service did not become healthy after DB role rotation"
     exit 1
   fi
@@ -188,5 +201,5 @@ for attempt in $(seq 1 60); do
 done
 
 validate_role_posture
-docker-compose exec -T stuff npm run smoke:deploy
+dc exec -T stuff npm run smoke:deploy
 echo "Database role hardening applied"
