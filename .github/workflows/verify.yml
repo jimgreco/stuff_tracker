@@ -1,0 +1,151 @@
+name: Verify
+
+# Every check that gates a merge or a release. Called by release.yml.
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: stuff_tracker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stuff_tracker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stuff_tracker_test
+      JWT_SECRET: ci-test-secret-that-is-long-enough-for-runtime
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      APPLE_BUNDLE_ID: com.jimgreco.stufftracker
+      NODE_ENV: test
+      RUN_DATABASE_INTEGRATION_TESTS: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          printf '%s\n' /Applications/Xcode*.app
+          selected_xcode=$(ruby <<'RUBY'
+            candidates = Dir.glob('/Applications/Xcode*.app').select do |path|
+              File.basename(path).match?(/\AXcode(?:[_-])?26(?:[._-]\d+)*\.app\z/)
+            end
+            candidates = Dir.glob('/Applications/Xcode*.app') if candidates.empty?
+
+            def version_key(path)
+              File.basename(path).scan(/\d+/).map(&:to_i)
+            end
+
+            selected = candidates.max_by { |path| version_key(path) }
+            abort('No Xcode installation found') unless selected
+            puts selected
+          RUBY
+          )
+          sudo xcode-select -s "$selected_xcode/Contents/Developer"
+          echo "Selected: $selected_xcode"
+          xcodebuild -version
+
+      - name: Prepare iOS simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+
+          simulator_sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "iPhoneSimulator SDK version: $simulator_sdk_version"
+          if ! xcrun simctl list runtimes | grep -q "iOS $simulator_sdk_version"; then
+            echo "Matching iOS simulator runtime is missing; downloading iOS platform."
+            sudo xcodebuild -downloadPlatform iOS
+          fi
+          export SIMULATOR_SDK_VERSION="$simulator_sdk_version"
+
+          runtime=$(xcrun simctl list runtimes --json | ruby -rjson -e '
+            def version_key(value)
+              value.to_s.scan(/\d+/).map(&:to_i)
+            end
+
+            runtimes = JSON.parse(STDIN.read).fetch("runtimes").select do |runtime|
+              runtime["isAvailable"] && runtime["platform"] == "iOS"
+            end
+            matching = runtimes.select { |runtime| runtime["version"].to_s == ENV.fetch("SIMULATOR_SDK_VERSION") }
+            selected = matching.max_by { |runtime| version_key(runtime["version"]) }
+            selected ||= runtimes.max_by { |runtime| version_key(runtime["version"]) }
+            abort("No available iOS simulator runtime found") unless selected
+            puts selected.fetch("identifier")
+          ')
+
+          device_type=$(xcrun simctl list devicetypes --json | ruby -rjson -e '
+            data = JSON.parse(STDIN.read)
+            types = data.fetch("devicetypes").select { |type| type["name"].to_s.include?("iPhone") }
+            preferred = [
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-16",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro",
+              "com.apple.CoreSimulator.SimDeviceType.iPhone-15"
+            ]
+            selected = preferred.filter_map { |identifier| types.find { |type| type["identifier"] == identifier } }.first
+            selected ||= types.reverse.find { |type| type["name"].to_s.include?("Pro") }
+            selected ||= types.last
+            abort("No iPhone simulator device type found") unless selected
+            puts selected.fetch("identifier")
+          ')
+
+          udid=$(xcrun simctl create "StuffTracker CI" "$device_type" "$runtime")
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          echo "destination=platform=iOS Simulator,id=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Run iOS tests
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project StuffTracker.xcodeproj \
+            -scheme StuffTracker \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination '${{ steps.simulator.outputs.destination }}' \
+            test

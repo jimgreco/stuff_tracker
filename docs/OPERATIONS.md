@@ -49,7 +49,7 @@ Use this runbook for production incidents, suspected credential exposure, failed
 Initial triage:
 
 - Identify the affected surface: iOS app, backend API, database, S3 attachments, CI/CD, or account auth.
-- Check the latest GitHub Actions runs for `Deploy to EC2` and `TestFlight`.
+- Check the latest GitHub Actions runs of the `Release` workflow (`verify`, `server` and `ios` jobs).
 - Check `/health/live` for process liveness and `/health` for database connectivity.
 - If the incident follows a deploy, compare the current commit against the last known-good commit.
 - Avoid destructive recovery commands until the impact, recovery point, and expected data loss are explicit.
@@ -77,7 +77,7 @@ Preferred rollback path is a revert or forward-fix through `main`, because the d
    npm audit --omit=dev
    ```
 
-4. Push to `main`; `Deploy to EC2` verifies and releases it. The shared host
+4. Push to `main`; the `Release` workflow verifies and releases it. The shared host
    lock serializes it with other app releases.
 5. Confirm `/health` after deploy completion.
 

@@ -31,20 +31,38 @@ test('TestFlight uploads through the pinned shared release engine', () => {
   assert.equal(policy.buildAudience, undefined, 'APP_STORE_ELIGIBLE is the engine default');
 });
 
-test('Backend release uses the pinned shared server release workflow', () => {
-  const workflow = readRepoFile('.github/workflows/deploy.yml');
+test('Release workflow is the standard release-tools template', () => {
+  const workflow = readRepoFile('.github/workflows/release.yml');
   const manifest = JSON.parse(readRepoFile('.github/release/server.json'));
 
+  assert.match(workflow, /^on:\n  pull_request:\n  push:\n    branches: \[main\]\n  workflow_dispatch:\n/m);
+  assert.match(workflow, /\n  verify:\n    uses: \.\/\.github\/workflows\/verify\.yml\n/);
+  assert.match(workflow, /\n  ios:\n    needs: verify\n[\s\S]*uses: \.\/\.github\/workflows\/testflight\.yml/);
   assert.ok(workflow.includes(`uses: jimgreco/release-tools/.github/workflows/server-release.yml@${RELEASE_TOOLS_SHA}`));
   assert.ok(workflow.includes(`tools_ref: ${RELEASE_TOOLS_SHA}`));
-  assert.doesNotMatch(workflow, /rsync|docker-compose up/);
+  assert.doesNotMatch(workflow, /rsync|docker-compose up|run_deploy|run_backend|notify-failure/);
   assert.equal(manifest.image, 'ghcr.io/jimgreco/stuff_tracker');
   assert.deepEqual(Object.keys(manifest.services), ['stuff']);
   assert.equal(manifest.migrate, undefined, 'the container migrates on start');
 });
 
-test('TestFlight workflow installs a missing matching iOS simulator runtime before testing', () => {
-  const workflow = readRepoFile('.github/workflows/testflight.yml');
+test('Verify and TestFlight are called workflows without change detection', () => {
+  const verify = readRepoFile('.github/workflows/verify.yml');
+  const testflight = readRepoFile('.github/workflows/testflight.yml');
+
+  for (const workflow of [verify, testflight]) {
+    assert.match(workflow, /^on:\n  workflow_call:\n\n/m);
+    assert.doesNotMatch(workflow, /pull_request|push:|workflow_dispatch|steps\.changes|run_tests|run_build|run_backend/);
+  }
+  assert.match(verify, /\n  verify:\n    runs-on: ubuntu-latest\n/);
+  assert.match(verify, /\n  test:\n    runs-on: macos-latest\n/);
+  assert.match(verify, /npm audit --omit=dev/);
+  assert.match(verify, /-scheme StuffTracker[\s\S]*\n            test\n/);
+  assert.doesNotMatch(testflight, /\n  test:\n|xcodebuild/);
+});
+
+test('Verify workflow installs a missing matching iOS simulator runtime before testing', () => {
+  const workflow = readRepoFile('.github/workflows/verify.yml');
 
   assert.ok(workflow.includes('simulator_sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)'));
   assert.ok(workflow.includes('if ! xcrun simctl list runtimes | grep -q "iOS $simulator_sdk_version"; then'));
@@ -52,18 +70,18 @@ test('TestFlight workflow installs a missing matching iOS simulator runtime befo
 });
 
 test('iOS workflows select the newest available Xcode 26 installation', () => {
-  const testFlightWorkflow = readRepoFile('.github/workflows/testflight.yml');
+  const verifyWorkflow = readRepoFile('.github/workflows/verify.yml');
   const screenshotsWorkflow = readRepoFile('.github/workflows/app-store-screenshots.yml');
 
-  for (const workflow of [testFlightWorkflow, screenshotsWorkflow]) {
+  for (const workflow of [verifyWorkflow, screenshotsWorkflow]) {
     assert.match(workflow, /Dir\.glob\('\/Applications\/Xcode\*\.app'\)/);
     assert.match(workflow, /version_key\(path\)/);
     assert.doesNotMatch(workflow, /\/Applications\/Xcode_26\.0\.app \/Applications\/Xcode_26\.1\.app/);
   }
 });
 
-test('TestFlight workflow uses a simulator runtime matching the selected Xcode SDK', () => {
-  const workflow = readRepoFile('.github/workflows/testflight.yml');
+test('Verify workflow uses a simulator runtime matching the selected Xcode SDK', () => {
+  const workflow = readRepoFile('.github/workflows/verify.yml');
 
   assert.match(workflow, /xcrun --sdk iphonesimulator --show-sdk-version/);
   assert.match(workflow, /SIMULATOR_SDK_VERSION/);
