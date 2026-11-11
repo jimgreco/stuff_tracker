@@ -27,7 +27,6 @@ for (const [name, step] of [
   ['ops-checks.yml', 'Prepare SSH'],
   ['production-restore-drill.yml', 'Prepare SSH'],
   ['production-db-hardening.yml', 'Prepare SSH'],
-  ['deploy.yml', 'Transfer stuff app to EC2'],
 ]) {
   test(`${name} parses synthetic keys with or without a final newline and rejects invalid keys`, () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'workflow-key-'));

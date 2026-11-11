@@ -28,6 +28,14 @@
 - Keep API request/response changes aligned with both clients and preserve
   account/home authorization and the existing subscription behavior.
 - Operations and release checks: `docs/OPERATIONS.md`,
-  `.github/workflows/deploy.yml`, `.github/workflows/testflight.yml`, and
+  `.github/workflows/release.yml` (standard release-tools template; PRs verify,
+  pushes to `main` verify and release), `.github/workflows/verify.yml` (all
+  merge/release checks), `.github/workflows/testflight.yml` (upload only), and
   `backend/scripts/smoke-deploy.cjs`. Inspect current scripts before invoking
   operational checks, migrations, cleanup, or production writes.
+- Releases use the shared engines in `jimgreco/release-tools`, pinned by commit:
+  the backend via `server-release.yml` with `.github/release/server.json`
+  (exact-commit GHCR image, drift-guarded host release, DB backup, health and
+  automatic rollback); iOS via `ios/prepare`, `ios/upload` and `ios/cleanup`
+  with `.github/scripts/release-policy.json`. Bump the pin in every reference
+  together.

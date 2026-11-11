@@ -2,20 +2,24 @@
 
 This path uploads only the iOS app and its approved extensions to the existing App Store Connect record. `release-policy.json` pins the existing profile UUIDs and public certificate fingerprint, app identity, production origin, marketing version, and exactly Jim and Rachel in the existing internal Family group, approved on 2026-11-02 (Friends stays empty). Empty existing groups are allowed only as explicitly listed. Every Apple preflight request is GET. Missing or changed signing assets, audience, build history, or authentication stop the release; they never trigger account repair.
 
-The workflow imports this repository's existing signing identity into a temporary runner keychain. It downloads the pinned existing profiles, verifies live certificate/profile resources and decoded entitlements, preserves any cached profile with the same UUID, and signs/exports manually without provisioning-update flags. Export is restricted to internal TestFlight, preserves the exact Git-count build number, and embeds the full source SHA. The exported app and all approved extensions must match the expected source, build, version, platform, signing identity, profiles, and required entitlements. Current signing state, audience, and build availability are rechecked immediately before the sole binary upload.
+The workflow imports this repository's existing signing identity into a temporary runner keychain. It downloads the pinned existing profiles, verifies live certificate/profile resources and decoded entitlements, preserves any cached profile with the same UUID, and signs/exports manually without provisioning-update flags. Export is App Store eligible (the engine default), preserves the exact Git-count build number, and embeds the full source SHA. The exported app and all approved extensions must match the expected source, build, version, platform, signing identity, profiles, and required entitlements. Current signing state, audience, and build availability are rechecked immediately before the sole binary upload.
 
-Ownership was cleared on 2026-10-03. Main pushes automatically run the guarded iOS upload path. Any new commit changes the source SHA and Git-count build, and the workflow rechecks current signing state, approved audience, and build availability before upload. Manual dispatch is also available with the existing upload input.
+Ownership was cleared on 2026-10-03. Main pushes automatically run the guarded iOS upload path. Any new commit changes the source SHA and Git-count build, and the workflow rechecks current signing state, approved audience, and build availability before upload. A manual `Release` run on `main` uploads when its `ios` checkbox is selected.
+
+## Shared engine
+
+The guards and upload path live in `jimgreco/release-tools/ios` and are pinned by commit in `testflight.yml` and `verify-testflight.yml`: `ios/prepare`, then `ios/upload` (with `APP_STORE_PROFILE=@PROFILE_UUID:app@`), then `ios/cleanup` with `if: always()`. This repository keeps only `.github/scripts/release-policy.json`. The policy sets `allowDottedBuildHistory` (the 1.x train holds one-off builds such as `240.1`) and `allowApprovedIndividualTesters`; the audience is the engine default, `APP_STORE_ELIGIBLE`.
 
 ## Local checks
 
 ```sh
-node --test .github/scripts/release-guard-tests.mjs
-PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_release.py
+node <release-tools>/ios/scripts/asc-readonly.mjs validate-policy --policy .github/scripts/release-policy.json
+python3 <release-tools>/ios/scripts/verify-release.py validate-policy --policy .github/scripts/release-policy.json
 actionlint .github/workflows/testflight.yml
 git diff --check
 ```
 
-Tests use synthetic in-memory responses and temporary files. They neither read real private keys nor contact Apple. Passing these tests does not prove current Apple validity, accepted version-train status, successful signing, successful upload, tester availability, or device acceptance. The actual authenticated GET checks and final artifact verification must pass during release. A successful uploader response is followed by a separate processing/internal-group availability check; if that times out, inspect the existing Apple build before retrying.
+The engine's own tests run in release-tools CI. Tests use synthetic in-memory responses and temporary files. They neither read real private keys nor contact Apple. Passing these tests does not prove current Apple validity, accepted version-train status, successful signing, successful upload, tester availability, or device acceptance. The actual authenticated GET checks and final artifact verification must pass during release. A successful uploader response is followed by a separate processing/internal-group availability check; if that times out, inspect the existing Apple build before retrying.
 
 ## Authentication and scope
 
