@@ -163,38 +163,25 @@ The tracked workflow selects `OPERATIONS_ALERT_MODE: github-email`. GitHub manag
 
 Treat a failing scheduled health run as an availability incident and follow the incident response runbook above.
 
-## Production Ops Checks
+## Scheduled Housekeeping
 
-The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host, runs the checks below, and applies the activity-history retention policy:
+A nightly host timer in `jimgreco/consolidated-deploy` (`scripts/app-jobs/stuff-cleanup.timer`, 03:40 UTC) runs, inside the `stuff` container:
 
 ```sh
-npm run storage:s3:check
-npm run db:hardening:check
 npm run storage:cleanup:deleted-homes
 npm run activity:cleanup
 ```
 
-Backup freshness is checked by the shared hourly backup freshness workflow in `jimgreco/consolidated-deploy`, not here.
+Check it on the host with `systemctl list-timers stuff-cleanup.timer` and `journalctl -u stuff-cleanup.service`. A failure is logged there only; nothing emails.
 
-Manual runs default to `check_only=true`: S3 hardening and
-database runtime hardening are checked, while both deleted-home attachment
-cleanup and activity-history deletion are skipped. The log records the mode and
-the skipped deletion commands. For an authorized verification without deletion:
+The S3 and database hardening checks are no longer scheduled. Run them by hand after changing the bucket or database roles:
 
 ```sh
-gh workflow run ops-checks.yml --ref main -f check_only=true
+docker-compose exec -T stuff npm run storage:s3:check
+docker-compose exec -T -e DB_EXPECTED_APP_ROLE=stuff_app stuff npm run db:hardening:check
 ```
 
-Scheduled runs retain normal cleanup behavior. A manual run with
-`check_only=false` also enables cleanup and requires authorization for deletion.
-Both hardening checks run even if one fails; any failed check prevents cleanup.
-Successful workflow status alone does not prove checks ran: verify the SSH and
-remote check steps executed, since missing SSH configuration skips them.
-Health probes remain unverified until `PRODUCTION_BASE_URL` is configured and
-an actual probe step passes. Workflow notification policy is documented below;
-a successful policy step does not prove email delivery.
-
-Treat a failing scheduled ops check as an operational incident. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
+S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS. Database hardening failures mean production may no longer be running through the least-privilege app role.
 
 Shared-home activity is append-only and retained for 365 days by default. Set `ACTIVITY_RETENTION_DAYS` to a value of at least 30 to change the window. The daily cleanup permanently removes only events older than that window; deleting a home, location, item, or member does not cascade-delete retained activity rows.
 
@@ -208,7 +195,7 @@ Set `OPERATIONS_ALERT_WEBHOOK_URL` to post unhandled production backend errors t
 
 The backend also posts `http_error_rate` alerts when production 5xx responses cross the rolling threshold. Defaults are `ERROR_RATE_ALERT_WINDOW_MS=300000`, `ERROR_RATE_ALERT_MIN_REQUESTS=20`, `ERROR_RATE_ALERT_MIN_5XX=5`, `ERROR_RATE_ALERT_5XX_PERCENT=20`, and `ERROR_RATE_ALERT_COOLDOWN_MS=900000`. Tune these values if normal low-traffic behavior creates noise.
 
-Workflow failure notifications are separate from that backend runtime configuration. The shared action explicitly defaults to `github-email` for deploy, health, backup, ops checks and restore drills. It preserves the original failed job/workflow, makes zero provider requests, and records that receipt is not verified. The helper rejects missing or unknown mode values; the action supplies its explicit default, with no automatic fallback. Existing GitHub mail received for the October 6 17:25:16 UTC Production Ops Checks failure confirms the current owner account route has worked, without inducing a failure or sending a test alert. It does not prove future receipt, missing-run detection or runtime coverage.
+Workflow failures (release, TestFlight) are reported by GitHub's own failure emails; uptime and backup freshness alerts come from the shared workflows in `jimgreco/consolidated-deploy`.
 
 Keep the existing account failure-email settings and schedule ownership. GitHub documents [who receives scheduled workflow notifications](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs): the creator, last cron editor or person who re-enables the schedule. Changing those can change the recipient. An explicitly reviewed future `webhook` mode would require an approved HTTPS destination in `OPERATIONS_ALERT_WEBHOOK_URL`; it rejects redirects, has a 10-second timeout, does not retry, and reports fixed errors without URL/provider-body leakage. `--check` validates configuration without sending in either mode.
 
