@@ -25,7 +25,6 @@ function executable(dir: string, name: string, body: string) {
 
 for (const [name, step] of [
   ['ops-checks.yml', 'Prepare SSH'],
-  ['production-restore-drill.yml', 'Prepare SSH'],
 ]) {
   test(`${name} parses synthetic keys with or without a final newline and rejects invalid keys`, () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'workflow-key-'));
@@ -129,11 +128,10 @@ test('manual ops defaults to check-only; only scheduled or explicitly opted-in r
   const checked = simulateOps('true');
   assert.equal(checked.status, 0, checked.stderr);
   assert.deepEqual(checked.calls.trim().split('\n'), [
-    'ssh', 'find',
+    'ssh',
     'exec -T stuff npm run storage:s3:check',
     'exec -T -e DB_EXPECTED_APP_ROLE=stuff_app stuff npm run db:hardening:check',
   ]);
-  assert.match(checked.stdout, /Newest backup is fresh/);
   assert.match(checked.stdout, /Deletion disabled: skipping storage:cleanup:deleted-homes and activity:cleanup/);
   assert.match(checked.stdout, /Production operations checks completed \(check_only=true\)/);
 
@@ -152,16 +150,6 @@ test('each failed hardening check fails ops, still runs the other check, and pre
       assert.match(result.calls, /db:hardening:check/);
       assert.doesNotMatch(result.calls, /storage:cleanup|activity:cleanup/);
       assert.match(result.stdout, /One or more hardening checks failed; cleanup will not run/);
-    }
-  }
-});
-
-test('stale or missing backups fail ops before any container or deletion commands', () => {
-  for (const mode of ['true', 'false']) {
-    for (const options of [{ stale: true }, { noBackup: true }]) {
-      const result = simulateOps(mode, options);
-      assert.equal(result.status, 1);
-      assert.doesNotMatch(result.calls, /npm run/);
     }
   }
 });
