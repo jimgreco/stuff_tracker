@@ -168,16 +168,15 @@ Treat a failing scheduled health run as an availability incident and follow the 
 The `Production Ops Checks` GitHub Actions workflow runs daily and can also be started manually. When `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, and `EC2_SSH_KNOWN_HOSTS` are configured, it SSHes to the production host, runs the checks below, and applies the activity-history retention policy:
 
 ```sh
-# Host backup freshness check against ~/deploy/backups/stuff by default.
 npm run storage:s3:check
 npm run db:hardening:check
 npm run storage:cleanup:deleted-homes
 npm run activity:cleanup
 ```
 
-The backup freshness check reads host backups from `~/deploy/backups/stuff` by default. Override that path on the production host with `STUFF_DB_BACKUP_DIR` in `~/deploy/.env`. Freshness failures should be treated as incidents.
+Backup freshness is checked by the shared hourly backup freshness workflow in `jimgreco/consolidated-deploy`, not here.
 
-Manual runs default to `check_only=true`: backup freshness, S3 hardening, and
+Manual runs default to `check_only=true`: S3 hardening and
 database runtime hardening are checked, while both deleted-home attachment
 cleanup and activity-history deletion are skipped. The log records the mode and
 the skipped deletion commands. For an authorized verification without deletion:
@@ -195,7 +194,7 @@ Health probes remain unverified until `PRODUCTION_BASE_URL` is configured and
 an actual probe step passes. Workflow notification policy is documented below;
 a successful policy step does not prove email delivery.
 
-Treat a failing scheduled ops check as an operational incident. Backup freshness failures mean the backup job, backup directory, durable copy, or `DB_BACKUP_MAX_AGE_HOURS` needs review. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
+Treat a failing scheduled ops check as an operational incident. S3 hardening failures mean public access block, policy status, default encryption, or lifecycle configuration needs review in AWS before the app should be considered production-hardened. Database hardening failures mean production may no longer be running through the least-privilege app role and should be investigated before the app is considered production-hardened.
 
 Shared-home activity is append-only and retained for 365 days by default. Set `ACTIVITY_RETENTION_DAYS` to a value of at least 30 to change the window. The daily cleanup permanently removes only events older than that window; deleting a home, location, item, or member does not cascade-delete retained activity rows.
 
@@ -327,13 +326,7 @@ DB_EXPECTED_APP_ROLE=stuff_app npm run db:hardening:check
 
 ## Database Backups
 
-The `Production Backup` GitHub Actions workflow runs daily and can also be started manually. It SSHes to the production host, runs `pg_dump` from the Postgres container, writes a gzipped backup to `~/deploy/backups/stuff`, and deletes backups older than `STUFF_DB_BACKUP_RETENTION_DAYS` days. The default retention is 30 days.
-
-Production backup host settings:
-
-- `STUFF_DB_BACKUP_DIR`: optional host backup directory, defaulting to `~/deploy/backups/stuff`.
-- `STUFF_DB_BACKUP_RETENTION_DAYS`: optional retention window, defaulting to `30`.
-- `DB_BACKUP_MAX_AGE_HOURS`: freshness threshold used by `Production Ops Checks`, defaulting to `26`.
+Production backups are taken nightly by the shared off-server backup in `jimgreco/consolidated-deploy` (`scripts/backup-pilot`, timer `backup-pilot-stuff` at 02:50 UTC). Each run takes a verified `pg_dump` and uploads it to the versioned S3 backup bucket under `stuff/`; an hourly workflow there alerts if a backup is missing or stale.
 
 The backend image also includes `pg_dump` and `gzip`, so the app backup script can be used in environments where `DB_BACKUP_DIR` points at durable storage. The script writes a gzipped `pg_dump` to `DB_BACKUP_DIR`.
 
@@ -355,17 +348,7 @@ npm run db:backup:check
 
 Backups created by `npm run db:backup` are gzipped plain SQL dumps. Restore into a new database first, verify the result, then decide whether to promote it. Do not restore directly over production unless you have explicitly accepted the data-loss window.
 
-The `Production Restore Drill` GitHub Actions workflow can be started manually. It finds the newest production backup, restores it into a temporary database inside the production Postgres container, checks key table counts, reports elapsed time, and drops the temporary database on exit.
-
-Latest recorded restore drill:
-
-- Date: 2026-05-25 17:22 UTC.
-- Backup: `stuff-tracker-2026-05-25T11-18-51Z.sql.gz`.
-- Workflow run: `Production Restore Drill` run `26412147708`.
-- Restore target: temporary production-host database `stuff_restore_drill_20260525172220`, dropped automatically.
-- Verification: `schema_migrations=4`, `users=2`, `homes=2`, `items=62`.
-- Restore elapsed time: 1 second.
-- Observed recovery point: backup was about 6 hours old at restore time.
+There is no scheduled restore drill. To test a restore, download the newest dump from S3 (`stuff/manifests/latest.json` names it) and restore it into a disposable database as below. The last drill with the old workflow was on 2026-05-25 (run `26412147708`).
 
 Prerequisites:
 
@@ -472,7 +455,7 @@ Publication and the public URL variable await the parent's bundled approval.
 Release as a reviewed workflow-only PR based on `5854a24`, preserving the native
 lane. Use the established merge `[skip ci]` convention to avoid TestFlight's
 main-push upload; then allow a scheduled or separately approved manual
-`production-health.yml` run. Existing deploy, backup, restore and ops notification
+health run (since replaced by the shared uptime check in `jimgreco/consolidated-deploy`). Existing deploy, backup, restore and ops notification
 callers inherit the shared action's explicit email default. No backup, cleanup,
 DB-hardening, restore, native upload or deployment dispatch is included.
 
