@@ -11,7 +11,7 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-const RELEASE_TOOLS_SHA = '082f38d35995b50526c43da11fa6a9e73300fd4d';
+const RELEASE_TOOLS_SHA = 'bfd9d14bb12907b74bceaa28b7c0382fb3549ea6';
 
 test('TestFlight uploads through the pinned shared release engine', () => {
   const workflow = readRepoFile('.github/workflows/testflight.yml');
