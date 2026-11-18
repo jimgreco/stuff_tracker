@@ -511,6 +511,10 @@ final class NativeAccountBoundaryTests: XCTestCase {
         try f.signIn(f.accountA)
         var calls = 0
         AccountBoundaryURLProtocol.handler = { request in
+            guard request.request.url!.path == "/account/plan" else {
+                request.respond(503, "{}")
+                return
+            }
             calls += 1
             Task { @MainActor in
                 f.auth.signOut()
@@ -521,6 +525,29 @@ final class NativeAccountBoundaryTests: XCTestCase {
         await subscription.refresh()
         XCTAssertEqual(calls, 1)
         XCTAssertNil(subscription.plan)
+        XCTAssertNil(subscription.errorMessage)
+        XCTAssertFalse(subscription.productsUnavailable)
+        XCTAssertFalse(subscription.isLoading)
+    }
+    @MainActor
+    func testProductIdFailureFallsBackWithoutError() async throws {
+        let f = Fixture(); defer { f.cleanup() }
+        let subscription = SubscriptionStore(api: f.api, local: f.local, listenForUpdates: false)
+        try f.signIn(f.accountA)
+        AccountBoundaryURLProtocol.handler = { request in
+            switch request.request.url!.path {
+            case "/account/plan":
+                request.respond(200, "{\"tier\":\"free\",\"is_paid\":false,\"limits\":{\"homes\":1,\"total_containers_and_items\":10,\"images\":10,\"documents\":10},\"usage\":{\"homes\":1,\"containers\":1,\"items\":1,\"total_containers_and_items\":2,\"images\":1,\"documents\":1},\"remaining\":{}}")
+            default:
+                request.respond(503, "{}")
+            }
+        }
+        await subscription.refresh()
+        // The product-ID endpoint fails; StoreKit may or may not return the
+        // fallback products depending on the simulator's App Store account.
+        // Either way the screen must show products or a retry, never an error.
+        XCTAssertNotNil(subscription.plan)
+        XCTAssertEqual(subscription.productsUnavailable, subscription.products.isEmpty)
         XCTAssertNil(subscription.errorMessage)
         XCTAssertFalse(subscription.isLoading)
     }
