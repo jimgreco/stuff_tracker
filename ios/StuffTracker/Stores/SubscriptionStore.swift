@@ -10,6 +10,10 @@ final class SubscriptionStore: ObservableObject {
     @Published private(set) var products: [Product] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    /// True once a product request finished without any purchasable products
+    /// (StoreKit unavailable, agreements pending, network loss). The UI offers
+    /// a retry instead of showing a raw error.
+    @Published private(set) var productsUnavailable = false
 
     private let api: APIClient
     private var accountObserver: AnyCancellable?
@@ -24,6 +28,7 @@ final class SubscriptionStore: ObservableObject {
         accountObserver = (local ?? .shared).$storeGeneration.sink { [weak self] _ in
             self?.plan = nil
             self?.errorMessage = nil
+            self?.productsUnavailable = false
             self?.isLoading = false
         }
         if listenForUpdates { transactionUpdatesTask = Task { await listenForTransactionUpdates() } }
@@ -37,6 +42,7 @@ final class SubscriptionStore: ObservableObject {
         guard api.hasToken, api.localAccountID != nil else {
             plan = nil
             products = []
+            productsUnavailable = false
             return
         }
 
@@ -44,18 +50,24 @@ final class SubscriptionStore: ObservableObject {
         isLoading = true
         defer { if (try? api.requireCurrentSession(generation)) != nil { isLoading = false } }
 
+        errorMessage = nil
+        // Products load independently of the plan so a slow or failing plan
+        // request never hides the purchase options, and vice versa.
+        async let productsLoaded: Void = loadProducts(generation: generation)
+
         do {
-            errorMessage = nil
             let nextPlan = try await api.getAccountPlan()
             try api.requireCurrentSession(generation)
             plan = nextPlan
-            try await loadProducts()
-            try api.requireCurrentSession(generation)
-            await syncCurrentEntitlements()
         } catch {
-            guard (try? api.requireCurrentSession(generation)) != nil else { return }
-            errorMessage = error.localizedDescription
+            if (try? api.requireCurrentSession(generation)) != nil {
+                errorMessage = "Couldn't load your plan. Check your connection and try again."
+            }
         }
+
+        await productsLoaded
+        guard (try? api.requireCurrentSession(generation)) != nil else { return }
+        await syncCurrentEntitlements()
     }
 
     func purchase(_ product: Product, userId: String) async {
@@ -71,18 +83,25 @@ final class SubscriptionStore: ObservableObject {
             switch result {
             case .success(let verification):
                 let transaction = try verifiedTransaction(from: verification)
-                let nextPlan = try await api.syncAppStoreTransaction(signedTransactionInfo: verification.jwsRepresentation)
-                try api.requireCurrentSession(generation)
-                plan = nextPlan
-                await transaction.finish()
+                do {
+                    let nextPlan = try await api.syncAppStoreTransaction(signedTransactionInfo: verification.jwsRepresentation)
+                    try api.requireCurrentSession(generation)
+                    plan = nextPlan
+                    await transaction.finish()
+                } catch {
+                    // StoreKit charged the user; leave the transaction unfinished so
+                    // Transaction.updates and the next refresh deliver it again.
+                    guard (try? api.requireCurrentSession(generation)) != nil else { return }
+                    errorMessage = "Your purchase went through, but CubbyLog couldn't confirm it yet. It will update automatically, or tap Restore Purchases."
+                }
             case .pending, .userCancelled:
                 return
             @unknown default:
                 return
             }
         } catch {
-            guard (try? api.requireCurrentSession(generation)) != nil else { return }
-            errorMessage = error.localizedDescription
+            guard (try? api.requireCurrentSession(generation)) != nil, !Self.isUserCancellation(error) else { return }
+            errorMessage = "The purchase couldn't be completed. Please try again."
         }
     }
 
@@ -102,30 +121,35 @@ final class SubscriptionStore: ObservableObject {
             try api.requireCurrentSession(generation)
             plan = nextPlan
         } catch {
-            guard (try? api.requireCurrentSession(generation)) != nil else { return }
-            errorMessage = error.localizedDescription
+            guard (try? api.requireCurrentSession(generation)) != nil, !Self.isUserCancellation(error) else { return }
+            errorMessage = "Couldn't restore purchases. Check your connection and try again."
         }
     }
 
-    private func loadProducts() async throws {
-        let generation = api.sessionGeneration
-        let productIds: [String]
-        do {
-            productIds = try await api.getSubscriptionProductIds()
-        } catch {
-            try api.requireCurrentSession(generation)
-            productIds = fallbackProductIds
-        }
+    nonisolated static func isUserCancellation(_ error: Error) -> Bool {
+        if case StoreKitError.userCancelled = error { return true }
+        return error is CancellationError
+    }
 
-        let nextProducts = try await Product.products(for: productIds)
-            .sorted { lhs, rhs in
+    private func loadProducts(generation: UUID) async {
+        var productIds = (try? await api.getSubscriptionProductIds()) ?? []
+        if productIds.isEmpty { productIds = fallbackProductIds }
+
+        var nextProducts = (try? await Product.products(for: productIds)) ?? []
+        if nextProducts.isEmpty, Set(productIds) != Set(fallbackProductIds) {
+            nextProducts = (try? await Product.products(for: fallbackProductIds)) ?? []
+        }
+        guard (try? api.requireCurrentSession(generation)) != nil else { return }
+
+        if !nextProducts.isEmpty || products.isEmpty {
+            products = nextProducts.sorted { lhs, rhs in
                 if lhs.subscription?.subscriptionPeriod.unit == rhs.subscription?.subscriptionPeriod.unit {
                     return lhs.price < rhs.price
                 }
                 return subscriptionSortRank(lhs) < subscriptionSortRank(rhs)
             }
-        try api.requireCurrentSession(generation)
-        products = nextProducts
+        }
+        productsUnavailable = products.isEmpty
     }
 
     private func syncCurrentEntitlements() async {
@@ -144,8 +168,9 @@ final class SubscriptionStore: ObservableObject {
                 plan = nextPlan
             }
         } catch {
-            guard (try? api.requireCurrentSession(generation)) != nil else { return }
-            errorMessage = error.localizedDescription
+            // Background entitlement sync is retried on the next refresh and by
+            // Transaction.updates; it must not surface an error on the
+            // subscription screen the user did not act on.
         }
     }
 
@@ -164,8 +189,8 @@ final class SubscriptionStore: ObservableObject {
                 plan = nextPlan
                 await transaction.finish()
             } catch {
-                guard (try? api.requireCurrentSession(generation)) != nil else { continue }
-                errorMessage = error.localizedDescription
+                // Left unfinished so StoreKit redelivers it; retried silently.
+                continue
             }
         }
     }

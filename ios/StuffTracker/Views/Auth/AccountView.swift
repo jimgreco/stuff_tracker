@@ -490,9 +490,26 @@ struct AccountView: View {
                     quotaRow(title: "Documents", used: plan.usage.documents, limit: plan.limits.documents)
 
                     if subscriptionStore.products.isEmpty {
-                        Text("Subscription products are not available.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        if subscriptionStore.productsUnavailable && !subscriptionStore.isLoading {
+                            Text("Subscription options couldn't be loaded from the App Store.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                Task { await subscriptionStore.refresh() }
+                            } label: {
+                                HStack {
+                                    Spacer()
+                                    Text("Try Again")
+                                    Spacer()
+                                }
+                            }
+                        } else {
+                            HStack {
+                                ProgressView()
+                                Text("Loading subscription options...")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     } else {
                         ForEach(subscriptionStore.products, id: \.id) { product in
                             subscriptionProductButton(product)
