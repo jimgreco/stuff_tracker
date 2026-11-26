@@ -265,7 +265,8 @@ Current repository security setting review from GitHub API:
 
 Review cadence:
 
-- Check GitHub security alerts weekly when Dependabot opens updates.
+- Dependabot version updates are off (no `.github/dependabot.yml`), matching the other apps; update dependencies by hand.
+- Check GitHub security alerts weekly.
 - Treat secret scanning alerts as incidents until the exposed credential is rotated or proven invalid.
 - Consider enabling non-provider patterns and validity checks if alert volume is acceptable.
 - Consider enabling Dependabot security updates if automated vulnerability PRs are preferred over manual review.
