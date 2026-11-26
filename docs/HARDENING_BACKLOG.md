@@ -20,7 +20,7 @@ This is the working checklist for security, reliability, and operations hardenin
 - [x] Move GitHub Actions checkout and Node setup actions to Node 24-ready major versions.
 - [x] Document database restore steps, verification checks, and provisional recovery targets.
 - [x] Add an operational runbook for incident triage, failed deploy rollback, and credential rotation.
-- [x] Add Dependabot automation for backend npm packages and GitHub Actions.
+- [x] Add Dependabot automation for backend npm packages and GitHub Actions. (Removed 2026-11-26: no other app used it and its PRs went unreviewed.)
 - [x] Add CodeQL code scanning for backend JavaScript/TypeScript.
 - [x] Review GitHub secret scanning settings and document alert handling.
 - [x] Make JWT lifetime configurable and document production session-token guidance.
